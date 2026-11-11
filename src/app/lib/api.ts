@@ -31,9 +31,22 @@
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60).
  * POST /api/build       BuildRequest    -> BuildResponse
- *        mode 'auto' | 'fill' -> { deck, cards }; mode 'swaps' | 'improve' -> { proposals, cards }.
+ *        mode 'auto' | 'fill' -> { deck, cards }; mode 'swaps' | 'improve' | 'add' -> { proposals, cards }.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
- *        `swaps` proposals each stand alone.
+ *        `swaps` and `add` proposals each stand alone.
+ *        'improve' takes `options.goals` (ImproveGoals) for a directed run: `maxSwaps` (1-40, a hard
+ *        cap), `targetBracket` (improve toward another bracket than the deck's; set it on the deck
+ *        when the proposals are applied), `emphasizeRoles` (add more of these roles) and
+ *        `emphasizeAxes` (lean into these theme axes). Reasons name the goal a swap serves.
+ *        'add' takes `options.role` ('land' or a role with a band: ramp, draw, spot-removal,
+ *        counterspell, wipe, protection, recursion, tutor, win-condition, graveyard-hate) and returns
+ *        up to `count` (default 5, max 10) ways to add one such card: `in` with the card to cut as
+ *        `out`, or `out: ''` (a plain add) while the deck is under 100 cards.
+ *        The engine dissents instead of refusing: a proposal it thinks is not an improvement still
+ *        comes back, with `agrees: false` and an `objection` in plain words. Illegal cards are never
+ *        proposed.
+ *        `deck.roleTargets` (role -> wanted count, 'land' for lands) overrides the bracket's band for
+ *        that role (band n..n+2) in analyze, cards and build alike.
  * POST /api/import      {text, name?, targetBracket?} -> ImportResponse
  *        Parses a plain-text decklist. Lines that name no known card come back in `unresolved`
  *        (1-based line numbers), sideboard/maybeboard lines in `ignored`. Nothing is saved.
@@ -41,6 +54,10 @@
  * GET  /api/collection                  -> CollectionResponse
  * POST /api/collection  {text}          -> CollectionImportResponse   replaces the collection (CSV or text;
  *        empty text clears it).
+ * GET  /api/proxies                     -> ProxyListResponse   the saved list of cards to print as playtest proxies.
+ * PUT  /api/proxies     {items}         -> ProxyListResponse   replaces the list ([] clears it).
+ * POST /api/proxies     {items}         -> ProxyListResponse   adds cards; quantities of a card already listed add up.
+ *        items: [{ oracleId, qty }], qty 1..99, at most 500 different cards. An unknown oracle id is a 400.
  * GET  /api/settings                    -> Settings
  * PUT  /api/settings    Partial<Settings> -> Settings   merges the given keys.
  * POST /api/edhrec      {commanders, bracket} -> EdhrecResponse
@@ -56,8 +73,10 @@
  *        (browsers still draw it in an <img>); a malformed name answers 400.
  */
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, Role, SwapProposal, Targets,
+  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
+
+export type { ImproveGoals };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -195,7 +214,7 @@ export interface CardsRequest {
 }
 export interface CardsResponse { total: number; page: number; pageSize: number; cards: ScoredCard[] }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   maxPriceUsd?: number | null;
@@ -203,6 +222,10 @@ export interface BuildRequestOptions {
   seed?: number;
   /** Number of proposals wanted for 'swaps' (default 5) and 'improve' (default 15). */
   count?: number;
+  /** 'improve' only: what the run should aim for. */
+  goals?: ImproveGoals;
+  /** 'add' only (required there): the kind of card to add one of. */
+  role?: Role;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse { deck: Deck; seed: number; cards: CardLookup }
@@ -219,6 +242,9 @@ export interface ExportResponse { text: string }
 
 export interface CollectionResponse { count: number; totalQty: number; cards: (ClientCard & { qty: number })[] }
 export interface CollectionImportResponse { count: number; totalQty: number; unresolved: TextLine[] }
+
+export interface ProxyItem { oracleId: string; qty: number }
+export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantities. */ total: number; cards: CardLookup }
 
 export interface EdhrecResponse { status: EdhrecStatus; commanderDecks: number; cards: number }
 
@@ -290,7 +316,7 @@ export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeRes
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
-export function buildDeck(deck: Deck, mode: 'swaps' | 'improve', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
+export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }
@@ -300,6 +326,10 @@ export const exportDeck = (deck: Deck) => call<ExportResponse>('POST', '/api/exp
 
 export const getCollection = (signal?: AbortSignal) => call<CollectionResponse>('GET', '/api/collection', undefined, signal);
 export const replaceCollection = (text: string) => call<CollectionImportResponse>('POST', '/api/collection', { text });
+
+export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET', '/api/proxies', undefined, signal);
+export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
+export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);
