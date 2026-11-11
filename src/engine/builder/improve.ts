@@ -73,17 +73,19 @@ export function swapOne(deck: Deck, out: string, into: string): Deck {
   return addCard(removeCard(deck, out), into);
 }
 
-/** Applies swaps in order. A swap whose `out` card is no longer in the main deck is skipped. */
+/** Applies swaps in order. A swap whose `out` card is no longer in the main deck is skipped; one with no `out` adds its card. */
 export function applySwaps(deck: Deck, swaps: SwapProposal[]): Deck {
   let d = deck;
   for (const s of swaps) {
+    // A plain add (no card to cut): the deck had open slots when it was proposed.
+    if (s.out === '') { d = addCard(d, s.in); continue; }
     if (!d.main.some((e) => e.oracleId === s.out && qtyOf(e) >= 1)) continue;
     d = swapOne(d, s.out, s.in);
   }
   return d;
 }
 
-function basicCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
+export function basicCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
   const out: Candidate[] = [];
   for (const k of [...COLORS, 'C'] as (Color | 'C')[]) {
     const card = pool.basics[k];
@@ -118,7 +120,7 @@ export const isGraveyardHate = (oracleText: string): boolean => GRAVEYARD_HATE.t
 /** Cards that win on a condition of their own (Laboratory Maniac, Approach of the Second Sun). */
 const ALT_WIN = /\byou win the game\b/i;
 
-function matches(c: Candidate, filter: Filter): boolean {
+export function matches(c: Candidate, filter: Filter): boolean {
   const { f, card, land } = c;
   if (filter.role === 'graveyard-hate' && !GRAVEYARD_HATE.test(card.oracleText)) return false;
   if (filter.land && !land) return false;
@@ -141,7 +143,7 @@ function matches(c: Candidate, filter: Filter): boolean {
 }
 
 /** Best-scoring candidates for the deck that pass `pred` and are not already in it (basics may repeat). */
-function bestOf(cands: Iterable<Candidate>, scorer: Scorer, have: Set<string>, n: number, pred: (c: Candidate) => boolean): { c: Candidate; score: number }[] {
+export function bestOf(cands: Iterable<Candidate>, scorer: Scorer, have: Set<string>, n: number, pred: (c: Candidate) => boolean): { c: Candidate; score: number }[] {
   const top: { c: Candidate; score: number }[] = [];
   for (const c of cands) {
     if ((have.has(c.card.oracleId) && !isBasicLand(c.card)) || !pred(c)) continue;
@@ -158,7 +160,7 @@ function bestOf(cands: Iterable<Candidate>, scorer: Scorer, have: Set<string>, n
 }
 
 /** Rules the plan puts on what may come in: a typal deck at its cap of any-type typal cards takes no more. */
-function planFilter(deck: Deck, ctx: EngineContext, pool: Pool): (c: Candidate) => boolean {
+export function planFilter(deck: Deck, ctx: EngineContext, pool: Pool): (c: Candidate) => boolean {
   const tally = tallyDeck(deck, ctx, pool.plan);
   const full = tally.generic >= pool.plan.genericTypalCap;
   const tutors = tally.tutors >= pool.plan.tutorCap;
@@ -301,11 +303,11 @@ interface ClimbOptions {
   thorough?: boolean;
 }
 
-interface Out { id: string; name: string; score: number; land: boolean; basic: boolean; cmc: number; qty: number; themed: boolean }
+export interface Out { id: string; name: string; score: number; land: boolean; basic: boolean; cmc: number; qty: number; themed: boolean }
 interface Trial { into: Candidate; out: string; reason: string; minGain: number; generic?: true }
 
 /** Sources of each colour the deck's most demanding spell needs (Karsten), and what it holds. */
-function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { need: number; have: number }> {
+export function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { need: number; have: number }> {
   const out = Object.fromEntries(COLORS.map((c) => [c, { need: 0, have: 0 }])) as Record<Color, { need: number; have: number }>;
   const { cards } = deckCards(deck, ctx.db);
   for (const { card, features, qty } of cards) {
@@ -321,7 +323,7 @@ function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { need: nu
 const deckQty = (deck: Deck, id: string): number =>
   (deck.commanders.includes(id) ? 1 : 0) + deck.main.reduce((n, e) => n + (e.oracleId === id ? qtyOf(e) : 0), 0);
 
-const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
+export const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
 
 /**
  * The cards a deck may give up, weakest first, and the ones it may not: locked and kept cards,
@@ -330,7 +332,7 @@ const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R
  * count of theme cards, the weakest of the surplus are offered after all, marked `themed`: cutting
  * one of those has to earn a full rating point.
  */
-function cuttable(deck: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>, combo: Set<string>, scorer: Scorer): Out[] {
+export function cuttable(deck: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>, combo: Set<string>, scorer: Scorer): Out[] {
   const { db } = ctx;
   const side = sideThemes(deck, ctx);
   const outs: Out[] = [];

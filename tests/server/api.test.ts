@@ -16,6 +16,7 @@ import * as exportRoute from '@/app/api/export/route';
 import * as imgRoute from '@/app/api/img/[size]/[file]/route';
 import * as importRoute from '@/app/api/import/route';
 import * as partnersRoute from '@/app/api/partners/route';
+import * as proxiesRoute from '@/app/api/proxies/route';
 import * as settingsRoute from '@/app/api/settings/route';
 import * as statusRoute from '@/app/api/status/route';
 import * as syncRoute from '@/app/api/sync/route';
@@ -37,7 +38,7 @@ const ROUTES: [RegExp, RouteModule][] = [
   [/^\/api\/partners$/, partnersRoute], [/^\/api\/decks$/, decksRoute], [/^\/api\/decks\/(?<id>[^/]+)$/, deckRoute],
   [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
   [/^\/api\/import$/, importRoute], [/^\/api\/export$/, exportRoute], [/^\/api\/collection$/, collectionRoute],
-  [/^\/api\/settings$/, settingsRoute], [/^\/api\/edhrec$/, edhrecRoute],
+  [/^\/api\/settings$/, settingsRoute], [/^\/api\/edhrec$/, edhrecRoute], [/^\/api\/proxies$/, proxiesRoute],
   [/^\/api\/img\/(?<size>[^/]+)\/(?<file>[^/]+)$/, imgRoute],
 ];
 
@@ -428,11 +429,81 @@ describe('POST /api/build', () => {
     }
   });
 
+  it('runs a directed improve: goals are honoured, capped, and every proposal carries a verdict', async () => {
+    const deck = await imported('precon');
+    const goals = { maxSwaps: 4, targetBracket: 3, emphasizeRoles: ['win-condition'] };
+    const r = await call<api.BuildProposalsResponse>('POST', '/api/build', { deck, mode: 'improve', options: { seed: 1, goals } });
+    expect(r.proposals.length).toBeGreaterThan(0);
+    expect(r.proposals.length).toBeLessThanOrEqual(4);
+    for (const p of r.proposals) {
+      expect(r.cards[p.in]).toBeDefined();
+      expect(typeof p.agrees).toBe('boolean');
+      if (p.agrees === false) expect(p.objection).toBeTruthy();
+    }
+    expect(r.proposals.some((p) => /goal: more win conditions/.test(p.reason))).toBe(true);
+    for (const bad of [{ maxSwaps: 'many' }, { targetBracket: 9 }, { emphasizeRoles: ['vibes'] }, { emphasizeAxes: 'tokens' }]) {
+      expect((await request('POST', '/api/build', { deck, mode: 'improve', options: { goals: bad } })).status).toBe(400);
+    }
+  });
+
+  it("mode 'add' suggests one more card of a role, with a cut, and needs a known role", async () => {
+    const deck = await imported('precon');
+    const cdb = getCardDb();
+    const r = await call<api.BuildProposalsResponse>('POST', '/api/build', { deck, mode: 'add', options: { seed: 1, role: 'win-condition', count: 3 } });
+    expect(r.proposals.length).toBeGreaterThan(0);
+    expect(r.proposals.length).toBeLessThanOrEqual(3);
+    for (const p of r.proposals) {
+      expect(cdb.features(p.in)?.roles).toContain('win-condition');
+      expect(r.cards[p.in]).toBeDefined();
+      expect(r.cards[p.out]).toBeDefined();
+      expect(typeof p.agrees).toBe('boolean');
+    }
+    expect((await request('POST', '/api/build', { deck, mode: 'add', options: {} })).status).toBe(400);
+    expect((await request('POST', '/api/build', { deck, mode: 'add', options: { role: 'stax' } })).status).toBe(400);
+  });
+
   it('answers 400 for a bad mode, bad options or no commander', async () => {
     const deck = shell(['Krenko, Mob Boss']);
     expect((await request('POST', '/api/build', { deck, mode: 'explode' })).status).toBe(400);
     expect((await request('POST', '/api/build', { deck, mode: 'auto', options: { maxPriceUsd: 'cheap' } })).status).toBe(400);
     expect((await request('POST', '/api/build', { deck: { ...deck, commanders: [] }, mode: 'auto' })).status).toBe(400);
+  });
+});
+
+describe('proxy list', () => {
+  it('starts empty, adds, merges quantities, replaces and clears', async () => {
+    const cdb = getCardDb();
+    const id = (name: string) => cdb.byName(name)!.oracleId;
+    expect(await call<api.ProxyListResponse>('GET', '/api/proxies')).toEqual({ items: [], total: 0, cards: {} });
+    const dfc = id('Bala Ged Recovery');
+    let r = await call<api.ProxyListResponse>('POST', '/api/proxies', { items: [{ oracleId: id('Sol Ring'), qty: 1 }, { oracleId: dfc, qty: 2 }] });
+    expect(r.items).toEqual([{ oracleId: id('Sol Ring'), qty: 1 }, { oracleId: dfc, qty: 2 }]);
+    expect(r.total).toBe(3);
+    expect(r.cards[dfc].imageFaces).toBe(2);
+    r = await call<api.ProxyListResponse>('POST', '/api/proxies', { items: [{ oracleId: id('Sol Ring') }, { oracleId: id('Counterspell'), qty: 1 }] });
+    expect(r.items).toEqual([{ oracleId: id('Sol Ring'), qty: 2 }, { oracleId: dfc, qty: 2 }, { oracleId: id('Counterspell'), qty: 1 }]);
+    // PUT replaces: cards left out go, cards kept stay in their place.
+    r = await call<api.ProxyListResponse>('PUT', '/api/proxies', { items: [{ oracleId: id('Counterspell'), qty: 4 }, { oracleId: id('Sol Ring'), qty: 1 }] });
+    expect(r.items).toEqual([{ oracleId: id('Sol Ring'), qty: 1 }, { oracleId: id('Counterspell'), qty: 4 }]);
+    expect((await call<api.ProxyListResponse>('GET', '/api/proxies')).total).toBe(5);
+    expect((await request('PUT', '/api/proxies', { items: [{ oracleId: 'nope', qty: 1 }] })).status).toBe(400);
+    expect((await request('PUT', '/api/proxies', { items: 'all of them' })).status).toBe(400);
+    expect((await call<api.ProxyListResponse>('GET', '/api/proxies')).total).toBe(5);
+    expect((await call<api.ProxyListResponse>('PUT', '/api/proxies', { items: [] })).items).toEqual([]);
+  });
+});
+
+describe('wanted counts on a deck', () => {
+  it('roleTargets survives a save and moves the targets analyze reports', async () => {
+    const deck = { ...(await imported('precon')), roleTargets: { 'win-condition': 8, land: 36, nonsense: 3 } };
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    expect(a.targets.roles['win-condition']).toEqual({ lo: 8, hi: 10 });
+    expect(a.targets.lands).toBe(36);
+    const saved = await call<DeckResponse>('POST', '/api/decks', { deck });
+    expect(saved.deck.roleTargets).toEqual({ 'win-condition': 8, land: 36 });
+    await call('DELETE', `/api/decks/${saved.deck.id}`);
+    const plain = await call<AnalyzeResponse>('POST', '/api/analyze', { deck: { ...deck, roleTargets: undefined } });
+    expect(plain.targets.roles['win-condition']?.lo).toBe(4);
   });
 });
 
