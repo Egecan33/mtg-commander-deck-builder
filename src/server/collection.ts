@@ -1,5 +1,6 @@
 import { parseCollection } from '@/engine/text';
 import type { UnresolvedLine } from '@/engine/text';
+import { findPrinting } from './printings';
 import { cacheSlot, serverState } from './state';
 import { getCardDb, getDb } from './store';
 
@@ -20,7 +21,7 @@ export function ownedSet(): Set<string> {
 
 /** Replaces the whole collection with the cards named in a CSV or plain-text list. */
 export function replaceCollection(text: string): { count: number; totalQty: number; unresolved: UnresolvedLine[] } {
-  const parsed = parseCollection(text, getCardDb());
+  const parsed = parseCollection(text, getCardDb(), findPrinting);
   const db = getDb();
   db.transaction(() => {
     db.exec('DELETE FROM collection');
@@ -33,4 +34,20 @@ export function replaceCollection(text: string): { count: number; totalQty: numb
   let totalQty = 0;
   for (const q of ownedQuantities().values()) totalQty += q;
   return { count: ownedQuantities().size, totalQty, unresolved: parsed.unresolved };
+}
+
+/** Adds `delta` copies of one card (negative takes copies away; the row goes at zero). Returns the card's new quantity. */
+export function adjustCollection(oracleId: string, delta: number): { count: number; totalQty: number; qty: number } {
+  const db = getDb();
+  const row = db.prepare('SELECT qty FROM collection WHERE oracle_id = ?').get(oracleId) as { qty: number } | undefined;
+  const qty = Math.min(9999, Math.max(0, (row?.qty ?? 0) + Math.trunc(delta)));
+  if (qty === 0) db.prepare('DELETE FROM collection WHERE oracle_id = ?').run(oracleId);
+  else db.prepare('INSERT INTO collection(oracle_id, qty) VALUES (?, ?) ON CONFLICT(oracle_id) DO UPDATE SET qty = excluded.qty').run(oracleId, qty);
+  const caches = serverState().caches;
+  caches.delete('collection');
+  caches.delete('collection-set');
+  caches.delete('deck-tiles');
+  let totalQty = 0;
+  for (const q of ownedQuantities().values()) totalQty += q;
+  return { count: ownedQuantities().size, totalQty, qty };
 }

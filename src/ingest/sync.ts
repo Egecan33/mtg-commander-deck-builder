@@ -4,9 +4,10 @@ import { openDb, type Db } from '@/server/db';
 import { syncCards, type Log } from './cards';
 import { syncCombos } from './combos';
 import { syncImages } from './images';
+import { syncPrintings } from './printings';
 import { syncTags } from './tags';
 
-export const STEPS = ['cards', 'tags', 'combos', 'features', 'images'] as const;
+export const STEPS = ['cards', 'printings', 'tags', 'combos', 'features', 'images'] as const;
 export type Step = (typeof STEPS)[number];
 
 interface Flags { limit?: number; match?: string; keepRaw: boolean }
@@ -31,6 +32,7 @@ async function runFeatures(db: Db, log: Log): Promise<void> {
 export async function runStep(step: Step, db: Db, log: Log, flags: Flags = { keepRaw: false }): Promise<void> {
   switch (step) {
     case 'cards': await syncCards(db, log); break;
+    case 'printings': await syncPrintings(db, log); break;
     case 'tags': await syncTags(db, log); break;
     case 'combos': await syncCombos(db, log, { keepRaw: flags.keepRaw }); break;
     case 'features': await runFeatures(db, log); break;

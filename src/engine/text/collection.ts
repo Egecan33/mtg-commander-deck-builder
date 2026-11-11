@@ -1,5 +1,6 @@
 import type { CardDb } from '../types';
 import { MAX_LINE_QTY, parseCardLine, resolveCardName, type UnresolvedLine } from './decklist';
+import { parsePrintCode } from './printcode';
 
 export interface ParsedCollection {
   owned: { oracleId: string; qty: number }[];
@@ -80,10 +81,11 @@ function detectCsv(text: string): { delimiter: string; nameCol: number; qtyCol: 
 /**
  * Reads a collection: a CSV with a header row (name and quantity columns found by header text, so
  * Moxfield, Archidekt and ManaBox exports work; no quantity column means one copy per row) or a
- * plain "<qty> <name>" list. Rows for the same card add up. Rows naming no known card are
+ * plain "<qty> <name>" list, whose lines may also be a set code and collector number as printed on
+ * the card when `findPrinting` is given. Rows for the same card add up. Rows naming no known card are
  * returned in `unresolved` with the 1-based line they start on.
  */
-export function parseCollection(text: string, db: CardDb): ParsedCollection {
+export function parseCollection(text: string, db: CardDb, findPrinting?: (set: string, number: string) => string | undefined): ParsedCollection {
   // Drop a byte-order mark and blank out Excel's "sep=," hint line (kept as an empty line so numbering holds).
   const body = text.replace(/^\uFEFF/, '').replace(/^sep=.?[ \t]*(?=\r|\n)/i, '');
   const owned = new Map<string, number>();
@@ -109,7 +111,11 @@ export function parseCollection(text: string, db: CardDb): ParsedCollection {
       const line = raw.trim();
       if (!line || /^(\/\/|#)/.test(line)) return;
       const parsed = parseCardLine(line, db);
-      if (parsed) add(parsed.card.oracleId, parsed.qty);
+      if (parsed) { add(parsed.card.oracleId, parsed.qty); return; }
+      // A set code and collector number as printed on the card ("tdm 123", "3 TDM 045").
+      const code = findPrinting ? parsePrintCode(line) : null;
+      const printed = code && findPrinting ? findPrinting(code.set, code.number) : undefined;
+      if (code && printed) add(printed, code.qty);
       else {
         // Bare section words ("Deck", "Sideboard:") in a pasted list are not cards and not errors.
         const key = line.replace(/[\s:]*(\(\d+\))?[\s:]*$/, '').toLowerCase();

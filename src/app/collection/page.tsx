@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/card';
 import { useNotify, useStatus } from '../components/Shell';
 import { VirtualGrid } from '../components/VirtualGrid';
-import { getCollection, replaceCollection, type CollectionResponse, type TextLine } from '../lib/api';
+import { adjustCollection, getCollection, lookupPrinting, replaceCollection, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
 import { fmtInt } from '../lib/ui';
 
 type Owned = CollectionResponse['cards'][number];
@@ -46,6 +46,45 @@ export default function CollectionPage() {
     }
   };
 
+  // ---- quick add: the code printed at the bottom of a card, or a name
+  const [quick, setQuick] = useState('');
+  const [found, setFound] = useState<PrintingResponse | null>(null);
+  const [recent, setRecent] = useState<{ key: number; card: ClientCard; qty: number }[]>([]);
+  const quickRef = useRef<HTMLInputElement>(null);
+  const recentKey = useRef(1);
+  useEffect(() => {
+    const text = quick.trim();
+    if (!text) return setFound(null);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => lookupPrinting(text, ctrl.signal).then(setFound, () => {}), 120);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [quick]);
+  const quickAdd = async (card: ClientCard | null | undefined, qty: number) => {
+    if (!card) return;
+    try {
+      await adjustCollection(card.oracleId, qty);
+      setRecent((r) => [{ key: recentKey.current++, card, qty }, ...r].slice(0, 8));
+      setQuick('');
+      setFound(null);
+      quickRef.current?.focus();
+      await load();
+    } catch (e) {
+      notify.error(e);
+    }
+  };
+  const undo = async (item: { key: number; card: ClientCard; qty: number }) => {
+    try {
+      await adjustCollection(item.card.oracleId, -item.qty);
+      setRecent((r) => r.filter((x) => x.key !== item.key));
+      await load();
+    } catch (e) {
+      notify.error(e);
+    }
+  };
+
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const cards = collection?.cards ?? [];
@@ -69,11 +108,70 @@ export default function CollectionPage() {
           </div>
         </div>
 
+        <div data-testid="quick-add">
+          <h2 className="text-[1.1rem]">Add cards one by one</h2>
+          <p className="mt-1 text-[0.88rem] text-ash">
+            Type the set code and number printed at the bottom of the card (“TDM 123”, “123 tdm”) or its name. Enter adds one; Shift+Enter adds four; “3 tdm 123” adds three.
+          </p>
+          <input
+            ref={quickRef}
+            className="field mt-2 w-full"
+            value={quick}
+            onChange={(e) => setQuick(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || !found?.card) return;
+              e.preventDefault();
+              void quickAdd(found.card, e.shiftKey ? Math.max(4, found.qty) : found.qty);
+            }}
+            placeholder="TDM 123, or a card name"
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="Set code and collector number, or a card name"
+            data-testid="quick-input"
+          />
+          {found && found.printings === 0 && (
+            <p className="mt-1.5 text-[0.8rem] text-band-mid" data-testid="quick-hint">Set codes are not loaded yet, so only names work. Run <code>pnpm sync printings</code> once (or sync “Printings” under Card data).</p>
+          )}
+          {found && quick.trim() && (
+            found.card ? (
+              <div className="mt-2 flex gap-3" data-testid="quick-match" data-name={found.card.name}>
+                <div className="card w-[7.5rem] shrink-0"><CardImage id={found.card.oracleId} name={found.card.frontName} /></div>
+                <div className="min-w-0 flex-1 text-[0.88rem]">
+                  <div className="font-medium">{found.card.name}</div>
+                  <div className="text-ash">{found.via === 'code' ? 'Matched by set and number' : 'Matched by name'}{found.ownedQty ? `, you have ${found.ownedQty}` : ''}</div>
+                  <div className="mt-1 text-smoke">Enter adds {found.qty}</div>
+                  {found.via === 'name' && found.suggestions.length > 1 && (
+                    <ul className="mt-1.5 grid gap-0.5" data-testid="quick-suggestions">
+                      {found.suggestions.filter((s) => s.oracleId !== found.card?.oracleId).slice(0, 5).map((s) => (
+                        <li key={s.oracleId}>
+                          <button type="button" className="truncate text-left text-brass hover:underline" onClick={() => void quickAdd(s, found.qty)}>{s.name}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-[0.88rem] text-ash" data-testid="quick-none">No card matches that yet.</p>
+            )
+          )}
+          {recent.length > 0 && (
+            <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="quick-recent">
+              {recent.map((r) => (
+                <li key={r.key} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate"><span className="text-smoke">+{r.qty}</span> {r.card.name}</span>
+                  <button type="button" className="text-brass hover:underline" onClick={() => void undo(r)} data-testid="quick-undo">Undo</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div>
           <h2 className="text-[1.1rem]">Replace the collection</h2>
           <p className="mt-1 text-[0.88rem] text-ash">
             Paste a CSV export from Moxfield, Archidekt or ManaBox (the name and quantity columns are found automatically), or plain lines like
-            “2 Sol Ring”. This replaces what is saved now.
+            “2 Sol Ring” or “3 tdm 123”. This replaces what is saved now.
           </p>
           <textarea
             className="field mt-2 h-56 w-full"

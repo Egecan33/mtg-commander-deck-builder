@@ -12,6 +12,7 @@ const STEPS: { id: SyncStep; name: string; what: string }[] = [
   { id: 'tags', name: 'Tags', what: 'Scryfall’s community tags (ramp, removal, card draw and thousands more), used to understand what a card does.' },
   { id: 'combos', name: 'Combos', what: 'Known combos from Commander Spellbook, used for bracket checks and win conditions.' },
   { id: 'features', name: 'Card features', what: 'Worked out on this machine from the three above: roles, themes, mana sources. No download.' },
+  { id: 'printings', name: 'Printings', what: 'Set code and collector number of every paper printing, so cards can be added to the collection by the code printed at the bottom.' },
   { id: 'images', name: 'Card images', what: 'Two sizes of every card face, saved to disk so the app works offline. The long one: tens of thousands of files.' },
 ];
 
@@ -223,6 +224,7 @@ export default function DataPage() {
   const imagesOnDisk = c.images.display + c.images.grid;
   const countOf: Record<SyncStep, string> = {
     cards: `${fmtInt(c.legal)} legal, ${fmtInt(c.banned)} banned`,
+    printings: `${fmtInt(Number((status.steps.printings?.info as { printings?: number } | undefined)?.printings ?? 0))} printings`,
     tags: `${fmtInt(c.tags)} tags`,
     combos: `${fmtInt(c.combos)} combos`,
     features: `${fmtInt(c.features)} cards understood`,

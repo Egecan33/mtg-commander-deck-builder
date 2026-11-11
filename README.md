@@ -28,7 +28,8 @@ It runs on your machine. Card data and about 66,000 card images are downloaded o
 - **Bracket-aware.** Computes the minimum bracket the official rules force (Game Changers, mass land denial, extra turns, two-card combos), shows what "plays like" a higher bracket, and never suggests a card that breaks your target.
 - **Themes from the commander's own text.** Tokens, counters, sacrifice, spellslinger, landfall, typal for any creature type and more, with sliders when you disagree.
 - **Combos.** What your deck already contains and what is one card away.
-- **Your collection.** Import a CSV or list, mark what you own, build from owned cards only.
+- **Your collection.** Import a CSV or list, or add cards one by one by the set code and number printed at the bottom of the card (`TDM 123`) or by name; mark what you own, build from owned cards only.
+- **Best from collection.** Ranks the commanders you own by the deck your own cards can build at a bracket, and shows how much better each gets with 5, 10, 15 or 20 purchases, with the buy list, its price, and one click to create the deck or proxy the buys.
 - **Directed improve.** Tell an improve run what you want: change at most N cards, aim for another bracket, more win conditions, removal, card draw or ramp, or lean into one theme. Each swap says which goal it serves. "Add one" buttons suggest a single card of a kind with the card to cut for it, and each deck can set its own wanted counts (win conditions default to 4–6). When the engine thinks a change is not an improvement it still offers it, marked with its objection.
 - **Proxies.** Put any card, the cards an improve run proposes, or the cards of a deck you do not own on a proxy list, then print true-size playtest sheets (63 × 88 mm, nine per A4 or US Letter page, cut marks, optional back faces and a "not for sale" label) or download the images as a zip.
 
@@ -58,11 +59,12 @@ pnpm start
 
 Open <http://localhost:3210>.
 
-`pnpm sync all` runs five steps. Rough numbers from a home connection:
+`pnpm sync all` runs six steps. Rough numbers from a home connection:
 
 | Step | What it fetches | Size | Time |
 |---|---|---|---|
 | `cards` | Scryfall oracle cards (one row per card) | 25 MB | seconds |
+| `printings` | Scryfall default cards: set code and collector number of every paper printing | 81 MB | under a minute |
 | `tags` | Scryfall Tagger function tags | 6 MB | seconds |
 | `combos` | Commander Spellbook combo export | 32 MB | ~3 min |
 | `features` | computed locally: roles, themes, mana info | — | seconds |

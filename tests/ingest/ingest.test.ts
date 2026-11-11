@@ -109,8 +109,8 @@ describe('combos', () => {
 describe('sync arguments', () => {
   it('orders steps, defaults to all, and reads flags', () => {
     expect(parseArgs(['combos', 'cards', 'tags']).steps).toEqual(['cards', 'tags', 'combos']);
-    expect(parseArgs([]).steps).toEqual(['cards', 'tags', 'combos', 'features', 'images']);
-    expect(parseArgs(['all']).steps).toHaveLength(5);
+    expect(parseArgs([]).steps).toEqual(['cards', 'printings', 'tags', 'combos', 'features', 'images']);
+    expect(parseArgs(['all']).steps).toHaveLength(6);
     expect(parseArgs(['images', '--limit', '20', '--match', 'tergrid'])).toEqual({ steps: ['images'], flags: { keepRaw: false, limit: 20, match: 'tergrid' } });
     expect(() => parseArgs(['bogus'])).toThrow(/unknown argument/);
     expect(() => parseArgs(['images', '--limit', 'x'])).toThrow(/--limit/);

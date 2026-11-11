@@ -9,7 +9,7 @@
  * GET  /api/status                      -> StatusResponse
  *        Never fails, also on a missing or empty database (first run): counts are 0, `ready` false.
  * GET  /api/sync?since=N                -> SyncState   (progress lines from index N on)
- * POST /api/sync        {step}          -> SyncState   step: 'cards'|'tags'|'combos'|'features'|'images'|'all';
+ * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'all';
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active.
  * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
  *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
@@ -54,6 +54,16 @@
  * GET  /api/collection                  -> CollectionResponse
  * POST /api/collection  {text}          -> CollectionImportResponse   replaces the collection (CSV or text;
  *        empty text clears it).
+ * PATCH /api/collection {oracleId, delta} -> { count, totalQty, qty }   adds (or, negative, takes away) copies of one card.
+ * GET  /api/printing?q=TEXT             -> PrintingResponse
+ *        Quick entry for the collection. `q` is a set code and collector number as printed at the
+ *        bottom of a card ("TDM 123", "tdm-123", "123 TDM", "123/281 TDM", "0123 tdm"; rarity,
+ *        language and foil marks are ignored; "3 tdm 123" means three copies) or a card name
+ *        ("3 Sol Ring" works too). `?set=tdm&cn=123` asks for one printing directly. `card` is the
+ *        match (for a name: the exact card, else the best suggestion), `suggestions` up to 8 name
+ *        matches. `printings` is the size of the printings table: 0 means `pnpm sync printings`
+ *        has not run and only names work. The bulk import (POST /api/collection) accepts the same
+ *        code lines.
  * GET  /api/proxies                     -> ProxyListResponse   the saved list of cards to print as playtest proxies.
  * PUT  /api/proxies     {items}         -> ProxyListResponse   replaces the list ([] clears it).
  * POST /api/proxies     {items}         -> ProxyListResponse   adds cards; quantities of a card already listed add up.
@@ -102,7 +112,7 @@ export type ClientCard = Pick<
 export type ScoredCard = ClientCard & { score: CardScore };
 export type CardLookup = Record<string, ClientCard>;
 
-export type SyncStep = 'cards' | 'tags' | 'combos' | 'features' | 'images';
+export type SyncStep = 'cards' | 'printings' | 'tags' | 'combos' | 'features' | 'images';
 export type ImageSize = 'display' | 'grid';
 export type ColorLetter = Color | 'C';
 export type ColorMode = 'includes' | 'exact' | 'within';
@@ -288,6 +298,18 @@ export interface DiscoverState {
 }
 export interface DiscoverTiersResponse { tiers: DiscoverTier[]; cards: CardLookup }
 
+export interface PrintingResponse {
+  card: ClientCard | null;
+  /** Copies asked for by a quantity in front of the text (1 without one). */
+  qty: number;
+  via: 'code' | 'name' | null;
+  /** Copies of `card` already in the collection. */
+  ownedQty: number;
+  suggestions: ClientCard[];
+  /** Rows in the printings table; 0 until `pnpm sync printings` has run. */
+  printings: number;
+}
+
 export interface EdhrecResponse { status: EdhrecStatus; commanderDecks: number; cards: number }
 
 // ---------------------------------------------------------------------------------------------
@@ -368,6 +390,10 @@ export const exportDeck = (deck: Deck) => call<ExportResponse>('POST', '/api/exp
 
 export const getCollection = (signal?: AbortSignal) => call<CollectionResponse>('GET', '/api/collection', undefined, signal);
 export const replaceCollection = (text: string) => call<CollectionImportResponse>('POST', '/api/collection', { text });
+
+export const adjustCollection = (oracleId: string, delta: number) =>
+  call<{ count: number; totalQty: number; qty: number }>('PATCH', '/api/collection', { oracleId, delta });
+export const lookupPrinting = (q: string, signal?: AbortSignal) => call<PrintingResponse>('GET', `/api/printing${query({ q })}`, undefined, signal);
 
 export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET', '/api/proxies', undefined, signal);
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });

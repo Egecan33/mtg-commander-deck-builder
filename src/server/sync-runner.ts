@@ -4,7 +4,7 @@ import type { SyncState, SyncStep } from '@/app/lib/api';
 import { HttpError } from './http';
 import { onCardDataChanged } from './store';
 
-export const SYNC_STEPS: readonly SyncStep[] = ['cards', 'tags', 'combos', 'features', 'images'];
+export const SYNC_STEPS: readonly SyncStep[] = ['cards', 'printings', 'tags', 'combos', 'features', 'images'];
 /** Progress lines kept in memory; older ones are dropped, `lineCount` keeps counting. */
 export const MAX_LINES = 2000;
 
