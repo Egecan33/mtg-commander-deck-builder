@@ -1,0 +1,296 @@
+@import 'tailwindcss';
+/* The repo ignores data/ (the card database), which would also hide the Card data page from Tailwind. */
+@source './data';
+
+/*
+ * Commander Forge: a workbench in a dark room. Warm soot surfaces so card art is the only
+ * saturated thing on screen; brass for what you can act on; four tempering colours for score.
+ */
+@theme {
+  --color-soot: #13100c;
+  --color-anvil: #1c1813;
+  --color-iron: #27221b;
+  --color-slag: #3b3429;
+  --color-ash: #a79d8b;
+  --color-smoke: #7d7566;
+  --color-bone: #efe7d7;
+  --color-brass: #d6ab52;
+  --color-brass-deep: #8f6f2c;
+  --color-ember: #e0683f;
+
+  --color-band-top: #5fcaa5;
+  --color-band-good: #dab64e;
+  --color-band-mid: #dc8a4c;
+  --color-band-low: #c2594f;
+  --color-band-gated: #6f685c;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --font-sans: 'Avenir Next', Avenir, 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-soot);
+  color: var(--color-bone);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  font-feature-settings: 'tnum' 1;
+}
+
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brass-deep);
+  color: var(--color-bone);
+}
+
+/* Scrollbars that stay out of the way of the art. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slag) transparent;
+}
+
+@layer components {
+  /* A Magic card: 63 x 88 mm with 3 mm corners. */
+  .card {
+    position: relative;
+    aspect-ratio: 63 / 88;
+    container-type: inline-size;
+    border-radius: 5.2% / 3.75%;
+    overflow: hidden;
+    background: #0a0806;
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 6px 14px -8px rgb(0 0 0 / 0.9);
+  }
+  .card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .card-missing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    width: 100%;
+    height: 100%;
+    padding: 10%;
+    text-align: center;
+    background: repeating-linear-gradient(135deg, var(--color-iron) 0 10px, var(--color-anvil) 10px 20px);
+    border: 1px dashed var(--color-smoke);
+    border-radius: inherit;
+    font-family: var(--font-display);
+    color: var(--color-bone);
+    line-height: 1.2;
+    overflow: hidden;
+  }
+  .card-missing small {
+    font-family: var(--font-sans);
+    color: var(--color-ash);
+    font-size: 0.72em;
+  }
+  .gated img {
+    filter: grayscale(1) brightness(0.5);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    height: 2rem;
+    padding: 0 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-slag);
+    background: var(--color-iron);
+    color: var(--color-bone);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--color-slag);
+    border-color: var(--color-smoke);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .btn-primary {
+    background: var(--color-brass);
+    border-color: var(--color-brass);
+    color: #1a1407;
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #e4bd69;
+    border-color: #e4bd69;
+  }
+  .btn-quiet {
+    background: transparent;
+    border-color: transparent;
+    color: var(--color-ash);
+  }
+  .btn-quiet:hover:not(:disabled) {
+    color: var(--color-bone);
+    background: var(--color-iron);
+    border-color: transparent;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: #4a1f1a;
+    border-color: var(--color-band-low);
+  }
+  .btn-sm {
+    height: 1.625rem;
+    padding: 0 0.55rem;
+    font-size: 0.8125rem;
+  }
+
+  .field {
+    height: 2rem;
+    padding: 0 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-slag);
+    background: var(--color-soot);
+    color: var(--color-bone);
+    font-size: 0.875rem;
+    min-width: 0;
+  }
+  .field::placeholder {
+    color: var(--color-smoke);
+  }
+  textarea.field {
+    height: auto;
+    padding: 0.6rem 0.7rem;
+    line-height: 1.5;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 0.8125rem;
+    resize: vertical;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    height: 1.5rem;
+    padding: 0 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-slag);
+    background: var(--color-anvil);
+    color: var(--color-ash);
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--color-slag);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .seg > button {
+    height: 1.75rem;
+    padding: 0 0.65rem;
+    font-size: 0.8125rem;
+    color: var(--color-ash);
+    background: var(--color-soot);
+    cursor: pointer;
+  }
+  .seg > button + button {
+    border-left: 1px solid var(--color-slag);
+  }
+  .seg > button:hover {
+    color: var(--color-bone);
+  }
+  .seg > button[aria-pressed='true'] {
+    background: var(--color-slag);
+    color: var(--color-bone);
+  }
+
+  /* Round controls that sit on a card image. */
+  .tile-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.55rem;
+    height: 1.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-smoke);
+    background: rgb(19 16 12 / 0.92);
+    color: var(--color-bone);
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .tile-btn:hover {
+    border-color: var(--color-bone);
+  }
+  .tile-btn-add {
+    background: var(--color-brass);
+    border-color: var(--color-brass);
+    color: #1a1407;
+  }
+  .tile-btn-on {
+    background: var(--color-brass);
+    border-color: var(--color-brass);
+    color: #1a1407;
+  }
+  .tile-hover {
+    opacity: 0;
+  }
+  .group:hover .tile-hover,
+  .tile-hover:focus-visible {
+    opacity: 1;
+  }
+
+  .skeleton {
+    background: linear-gradient(100deg, var(--color-anvil) 30%, var(--color-iron) 50%, var(--color-anvil) 70%);
+    background-size: 300% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+input[type='range'],
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--color-brass);
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -300% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  * {
+    transition: none !important;
+  }
+}

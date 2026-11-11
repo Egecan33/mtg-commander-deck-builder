@@ -1,0 +1,5383 @@
+{
+ "cards": [
+  {
+   "oracleId": "043f869d-b11c-4c0d-9591-2bf0df7bde55",
+   "scryfallId": "0a4e707f-b760-434d-ba97-a0fe651f3f6a",
+   "name": "Cryptolith Rite",
+   "frontName": "Cryptolith Rite",
+   "layout": "normal",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Creatures you control have \"{T}: Add one mana of any color.\"",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 652,
+   "priceUsd": 13.2,
+   "faces": [
+    {
+     "name": "Cryptolith Rite",
+     "manaCost": "{1}{G}",
+     "typeLine": "Enchantment",
+     "oracleText": "Creatures you control have \"{T}: Add one mana of any color.\"",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "913e6182-706a-4872-8c8a-e146b0ae0738",
+   "scryfallId": "a16fabbe-4557-4067-b882-f2e5dbd8b458",
+   "name": "Sword of Hearth and Home",
+   "frontName": "Sword of Hearth and Home",
+   "layout": "normal",
+   "manaCost": "{3}",
+   "cmc": 3,
+   "typeLine": "Artifact — Equipment",
+   "frontTypeLine": "Artifact — Equipment",
+   "oracleText": "Equipped creature gets +2/+2 and has protection from green and from white.\nWhenever equipped creature deals combat damage to a player, exile up to one target creature you own, then search your library for a basic land card. Put both cards onto the battlefield under your control, then shuffle.\nEquip {2}",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Equip"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 918,
+   "priceUsd": 17.32,
+   "faces": [
+    {
+     "name": "Sword of Hearth and Home",
+     "manaCost": "{3}",
+     "typeLine": "Artifact — Equipment",
+     "oracleText": "Equipped creature gets +2/+2 and has protection from green and from white.\nWhenever equipped creature deals combat damage to a player, exile up to one target creature you own, then search your library for a basic land card. Put both cards onto the battlefield under your control, then shuffle.\nEquip {2}",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0aeeb0d7-15a3-4722-ad67-8fc7fe89220d",
+   "scryfallId": "feb7ad1b-4466-48f7-b46d-cc83d4e22b51",
+   "name": "Jaheira, Friend of the Forest",
+   "frontName": "Jaheira, Friend of the Forest",
+   "layout": "normal",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Human Elf Druid",
+   "frontTypeLine": "Legendary Creature — Human Elf Druid",
+   "oracleText": "Tokens you control have \"{T}: Add {G}.\"\nChoose a Background (You can have a Background as a second commander.)",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [
+    "Choose a background"
+   ],
+   "power": "2",
+   "producedMana": [
+    "G"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 946,
+   "priceUsd": 9.44,
+   "faces": [
+    {
+     "name": "Jaheira, Friend of the Forest",
+     "manaCost": "{2}{G}",
+     "typeLine": "Legendary Creature — Human Elf Druid",
+     "oracleText": "Tokens you control have \"{T}: Add {G}.\"\nChoose a Background (You can have a Background as a second commander.)",
+     "power": "2",
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "50aa7aff-1f01-4224-9a83-01f74d703ec2",
+   "scryfallId": "9dda7531-82a1-4f49-8858-601ddbc6e2bc",
+   "name": "Earthcraft",
+   "frontName": "Earthcraft",
+   "layout": "normal",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Tap an untapped creature you control: Untap target basic land.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4116,
+   "priceUsd": 296.53,
+   "faces": [
+    {
+     "name": "Earthcraft",
+     "manaCost": "{1}{G}",
+     "typeLine": "Enchantment",
+     "oracleText": "Tap an untapped creature you control: Untap target basic land.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0355249a-8e4e-41db-9cea-1b901faffbe6",
+   "scryfallId": "62061e7c-cf19-4f03-b8fa-2bdba62d6b0b",
+   "name": "Witch Enchanter // Witch-Blessed Meadow",
+   "frontName": "Witch Enchanter",
+   "layout": "modal_dfc",
+   "manaCost": "{3}{W}",
+   "cmc": 4,
+   "typeLine": "Creature — Human Warlock // Land",
+   "frontTypeLine": "Creature — Human Warlock",
+   "oracleText": "When this creature enters, destroy target artifact or enchantment an opponent controls.\n//\nAs this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {W}.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 289,
+   "priceUsd": 4.95,
+   "faces": [
+    {
+     "name": "Witch Enchanter",
+     "manaCost": "{3}{W}",
+     "typeLine": "Creature — Human Warlock",
+     "oracleText": "When this creature enters, destroy target artifact or enchantment an opponent controls.",
+     "power": "2",
+     "colors": [
+      "W"
+     ]
+    },
+    {
+     "name": "Witch-Blessed Meadow",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {W}.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "727f3201-1cfc-4ab2-9dfe-be4f7251f42f",
+   "scryfallId": "d0d484a6-5610-4f1d-95ec-eda273c255e4",
+   "name": "Boggart Trawler // Boggart Bog",
+   "frontName": "Boggart Trawler",
+   "layout": "modal_dfc",
+   "manaCost": "{2}{B}",
+   "cmc": 3,
+   "typeLine": "Creature — Goblin // Land",
+   "frontTypeLine": "Creature — Goblin",
+   "oracleText": "When this creature enters, exile target player's graveyard.\n//\nAs this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [
+    "B"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 627,
+   "priceUsd": 2.18,
+   "faces": [
+    {
+     "name": "Boggart Trawler",
+     "manaCost": "{2}{B}",
+     "typeLine": "Creature — Goblin",
+     "oracleText": "When this creature enters, exile target player's graveyard.",
+     "power": "3",
+     "colors": [
+      "B"
+     ]
+    },
+    {
+     "name": "Boggart Bog",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "db9ea3f9-c723-422f-98cc-a3ef7ca2c290",
+   "scryfallId": "66d9d524-3611-48d9-86c9-48e509e8ae70",
+   "name": "Path of Mettle // Metzali, Tower of Triumph",
+   "frontName": "Path of Mettle",
+   "layout": "transform",
+   "manaCost": "{R}{W}",
+   "cmc": 2,
+   "typeLine": "Legendary Enchantment // Legendary Land",
+   "frontTypeLine": "Legendary Enchantment",
+   "oracleText": "When Path of Mettle enters, it deals 1 damage to each creature that doesn't have first strike, double strike, vigilance, or haste.\nWhenever you attack with at least two creatures that have first strike, double strike, vigilance, and/or haste, transform Path of Mettle.\n//\n(Transforms from Path of Mettle.)\n{T}: Add one mana of any color.\n{1}{R}, {T}: Metzali deals 2 damage to each opponent.\n{2}{W}, {T}: Choose a creature at random that attacked this turn. Destroy that creature.",
+   "colors": [
+    "R",
+    "W"
+   ],
+   "colorIdentity": [
+    "R",
+    "W"
+   ],
+   "keywords": [
+    "Transform"
+   ],
+   "power": null,
+   "producedMana": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 17537,
+   "priceUsd": 0.36,
+   "faces": [
+    {
+     "name": "Path of Mettle",
+     "manaCost": "{R}{W}",
+     "typeLine": "Legendary Enchantment",
+     "oracleText": "When Path of Mettle enters, it deals 1 damage to each creature that doesn't have first strike, double strike, vigilance, or haste.\nWhenever you attack with at least two creatures that have first strike, double strike, vigilance, and/or haste, transform Path of Mettle.",
+     "power": null,
+     "colors": [
+      "R",
+      "W"
+     ]
+    },
+    {
+     "name": "Metzali, Tower of Triumph",
+     "manaCost": "",
+     "typeLine": "Legendary Land",
+     "oracleText": "(Transforms from Path of Mettle.)\n{T}: Add one mana of any color.\n{1}{R}, {T}: Metzali deals 2 damage to each opponent.\n{2}{W}, {T}: Choose a creature at random that attacked this turn. Destroy that creature.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "ea9c459a-6047-43aa-968f-a582be4000e8",
+   "scryfallId": "004524bf-b249-4dac-9c10-44d57143feb9",
+   "name": "Growing Rites of Itlimoc // Itlimoc, Cradle of the Sun",
+   "frontName": "Growing Rites of Itlimoc",
+   "layout": "transform",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Legendary Enchantment // Legendary Land",
+   "frontTypeLine": "Legendary Enchantment",
+   "oracleText": "When Growing Rites of Itlimoc enters, look at the top four cards of your library. You may reveal a creature card from among them and put it into your hand. Put the rest on the bottom of your library in any order.\nAt the beginning of your end step, if you control four or more creatures, transform Growing Rites of Itlimoc.\n//\n(Transforms from Growing Rites of Itlimoc.)\n{T}: Add {G}.\n{T}: Add {G} for each creature you control.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [
+    "Transform"
+   ],
+   "power": null,
+   "producedMana": [
+    "G"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 582,
+   "priceUsd": 7.36,
+   "faces": [
+    {
+     "name": "Growing Rites of Itlimoc",
+     "manaCost": "{2}{G}",
+     "typeLine": "Legendary Enchantment",
+     "oracleText": "When Growing Rites of Itlimoc enters, look at the top four cards of your library. You may reveal a creature card from among them and put it into your hand. Put the rest on the bottom of your library in any order.\nAt the beginning of your end step, if you control four or more creatures, transform Growing Rites of Itlimoc.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    },
+    {
+     "name": "Itlimoc, Cradle of the Sun",
+     "manaCost": "",
+     "typeLine": "Legendary Land",
+     "oracleText": "(Transforms from Growing Rites of Itlimoc.)\n{T}: Add {G}.\n{T}: Add {G} for each creature you control.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "8a2e53f9-8100-488f-8504-b59e9bd1cc29",
+   "scryfallId": "c062caf7-f0eb-44db-9f74-e6711a13fada",
+   "name": "Rite of Flame",
+   "frontName": "Rite of Flame",
+   "layout": "normal",
+   "manaCost": "{R}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "R"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 648,
+   "priceUsd": 6.23,
+   "faces": [
+    {
+     "name": "Rite of Flame",
+     "manaCost": "{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "4b977117-741c-4157-8fcf-719e475a8a4c",
+   "scryfallId": "43b5d46e-7054-44f8-9a14-b412f2f0ab86",
+   "name": "Battle Hymn",
+   "frontName": "Battle Hymn",
+   "layout": "normal",
+   "manaCost": "{1}{R}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Add {R} for each creature you control.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "R"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1659,
+   "priceUsd": 1.59,
+   "faces": [
+    {
+     "name": "Battle Hymn",
+     "manaCost": "{1}{R}",
+     "typeLine": "Instant",
+     "oracleText": "Add {R} for each creature you control.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "39419d29-47e7-4d71-953b-96a2e14ae964",
+   "scryfallId": "9133b267-295d-4987-b1d6-f32a85b66081",
+   "name": "Songs of the Damned",
+   "frontName": "Songs of the Damned",
+   "layout": "normal",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Add {B} for each creature card in your graveyard.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "B"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3124,
+   "priceUsd": 2.65,
+   "faces": [
+    {
+     "name": "Songs of the Damned",
+     "manaCost": "{B}",
+     "typeLine": "Instant",
+     "oracleText": "Add {B} for each creature card in your graveyard.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "437b2dab-15e0-4b9a-a204-58622d37a3b3",
+   "scryfallId": "eb1a25c5-1918-40f3-b54f-5d31cf6b4eb2",
+   "name": "Fact or Fiction",
+   "frontName": "Fact or Fiction",
+   "layout": "normal",
+   "manaCost": "{3}{U}",
+   "cmc": 4,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 700,
+   "priceUsd": 0.23,
+   "faces": [
+    {
+     "name": "Fact or Fiction",
+     "manaCost": "{3}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Reveal the top five cards of your library. An opponent separates those cards into two piles. Put one pile into your hand and the other into your graveyard.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "f8b17b89-26ce-4208-874a-9e1d66514640",
+   "scryfallId": "020939d6-72f0-4aa0-9ac2-d16cc896cd7f",
+   "name": "Dig Through Time",
+   "frontName": "Dig Through Time",
+   "layout": "normal",
+   "manaCost": "{6}{U}{U}",
+   "cmc": 8,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)\nLook at the top seven cards of your library. Put two of them into your hand and the rest on the bottom of your library in any order.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Delve"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 630,
+   "priceUsd": 0.28,
+   "faces": [
+    {
+     "name": "Dig Through Time",
+     "manaCost": "{6}{U}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Delve (Each card you exile from your graveyard while casting this spell pays for {1}.)\nLook at the top seven cards of your library. Put two of them into your hand and the rest on the bottom of your library in any order.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "981b0e21-e5e6-4a1e-bfde-679d56623f7f",
+   "scryfallId": "a9f2c53e-ff58-4aa8-89a6-4f45628cc571",
+   "name": "Ad Nauseam",
+   "frontName": "Ad Nauseam",
+   "layout": "normal",
+   "manaCost": "{3}{B}{B}",
+   "cmc": 5,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Reveal the top card of your library and put that card into your hand. You lose life equal to its mana value. You may repeat this process any number of times.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 1364,
+   "priceUsd": 9.3,
+   "faces": [
+    {
+     "name": "Ad Nauseam",
+     "manaCost": "{3}{B}{B}",
+     "typeLine": "Instant",
+     "oracleText": "Reveal the top card of your library and put that card into your hand. You lose life equal to its mana value. You may repeat this process any number of times.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e6555cca-e608-4c87-b835-9cd47fd1f543",
+   "scryfallId": "b0da1ea2-6a42-4551-a6ae-5a7ddb70b56b",
+   "name": "Tireless Tracker",
+   "frontName": "Tireless Tracker",
+   "layout": "normal",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Creature — Human Scout",
+   "frontTypeLine": "Creature — Human Scout",
+   "oracleText": "Landfall — Whenever a land you control enters, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")\nWhenever you sacrifice a Clue, put a +1/+1 counter on this creature.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [
+    "Investigate",
+    "Landfall"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 673,
+   "priceUsd": 0.44,
+   "faces": [
+    {
+     "name": "Tireless Tracker",
+     "manaCost": "{2}{G}",
+     "typeLine": "Creature — Human Scout",
+     "oracleText": "Landfall — Whenever a land you control enters, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")\nWhenever you sacrifice a Clue, put a +1/+1 counter on this creature.",
+     "power": "3",
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "994bc16d-fdc6-475c-96df-beeb4d5aa03e",
+   "scryfallId": "bc0de77a-c503-4000-9eb5-aa28a5e91082",
+   "name": "Mystic Forge",
+   "frontName": "Mystic Forge",
+   "layout": "normal",
+   "manaCost": "{4}",
+   "cmc": 4,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "You may look at the top card of your library any time.\nYou may cast artifact spells and colorless spells from the top of your library.\n{T}, Pay 1 life: Exile the top card of your library.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 416,
+   "priceUsd": 3.34,
+   "faces": [
+    {
+     "name": "Mystic Forge",
+     "manaCost": "{4}",
+     "typeLine": "Artifact",
+     "oracleText": "You may look at the top card of your library any time.\nYou may cast artifact spells and colorless spells from the top of your library.\n{T}, Pay 1 life: Exile the top card of your library.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "2bd111bb-ce02-414c-b5b7-e0e037d8d96b",
+   "scryfallId": "d2124603-d20e-40eb-97f0-a66323397ac2",
+   "name": "Bolas's Citadel",
+   "frontName": "Bolas's Citadel",
+   "layout": "normal",
+   "manaCost": "{3}{B}{B}{B}",
+   "cmc": 6,
+   "typeLine": "Legendary Artifact",
+   "frontTypeLine": "Legendary Artifact",
+   "oracleText": "You may look at the top card of your library any time.\nYou may play lands and cast spells from the top of your library. If you cast a spell this way, pay life equal to its mana value rather than pay its mana cost.\n{T}, Sacrifice ten nonland permanents: Each opponent loses 10 life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 279,
+   "priceUsd": 14.94,
+   "faces": [
+    {
+     "name": "Bolas's Citadel",
+     "manaCost": "{3}{B}{B}{B}",
+     "typeLine": "Legendary Artifact",
+     "oracleText": "You may look at the top card of your library any time.\nYou may play lands and cast spells from the top of your library. If you cast a spell this way, pay life equal to its mana value rather than pay its mana cost.\n{T}, Sacrifice ten nonland permanents: Each opponent loses 10 life.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0f3c3e5f-6af3-4af2-8703-4ccc8ed8f675",
+   "scryfallId": "e3bca51a-b9be-4be2-a256-b15853fde433",
+   "name": "Cathartic Reunion",
+   "frontName": "Cathartic Reunion",
+   "layout": "normal",
+   "manaCost": "{1}{R}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "As an additional cost to cast this spell, discard two cards.\nDraw three cards.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1127,
+   "priceUsd": 0.24,
+   "faces": [
+    {
+     "name": "Cathartic Reunion",
+     "manaCost": "{1}{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "As an additional cost to cast this spell, discard two cards.\nDraw three cards.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1cb0610b-a731-42c2-b93f-0a29f63cebf4",
+   "scryfallId": "ddb01913-ad41-4a20-bef0-cf8412cce39c",
+   "name": "Thrill of Possibility",
+   "frontName": "Thrill of Possibility",
+   "layout": "normal",
+   "manaCost": "{1}{R}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "As an additional cost to cast this spell, discard a card.\nDraw two cards.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 216,
+   "priceUsd": 0.33,
+   "faces": [
+    {
+     "name": "Thrill of Possibility",
+     "manaCost": "{1}{R}",
+     "typeLine": "Instant",
+     "oracleText": "As an additional cost to cast this spell, discard a card.\nDraw two cards.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0310dfdb-0498-488d-9f1a-279f8239e024",
+   "scryfallId": "508b1442-bf2c-4ad6-9bcf-bd894e081ab6",
+   "name": "Meren of Clan Nel Toth",
+   "frontName": "Meren of Clan Nel Toth",
+   "layout": "normal",
+   "manaCost": "{2}{B}{G}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Shaman",
+   "frontTypeLine": "Legendary Creature — Human Shaman",
+   "oracleText": "Whenever another creature you control dies, you get an experience counter.\nAt the beginning of your end step, choose target creature card in your graveyard. If that card's mana value is less than or equal to the number of experience counters you have, return it to the battlefield. Otherwise, put it into your hand.",
+   "colors": [
+    "B",
+    "G"
+   ],
+   "colorIdentity": [
+    "B",
+    "G"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1516,
+   "priceUsd": 2.86,
+   "faces": [
+    {
+     "name": "Meren of Clan Nel Toth",
+     "manaCost": "{2}{B}{G}",
+     "typeLine": "Legendary Creature — Human Shaman",
+     "oracleText": "Whenever another creature you control dies, you get an experience counter.\nAt the beginning of your end step, choose target creature card in your graveyard. If that card's mana value is less than or equal to the number of experience counters you have, return it to the battlefield. Otherwise, put it into your hand.",
+     "power": "3",
+     "colors": [
+      "B",
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0826cf7d-7ccc-459b-a92f-29dc169628f8",
+   "scryfallId": "e69d760c-48fb-4e7f-8611-547b0c22928c",
+   "name": "Muddle the Mixture",
+   "frontName": "Muddle the Mixture",
+   "layout": "normal",
+   "manaCost": "{U}{U}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Counter target instant or sorcery spell.\nTransmute {1}{U}{U} ({1}{U}{U}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.)",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Transmute"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 710,
+   "priceUsd": 3.19,
+   "faces": [
+    {
+     "name": "Muddle the Mixture",
+     "manaCost": "{U}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Counter target instant or sorcery spell.\nTransmute {1}{U}{U} ({1}{U}{U}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.)",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9a1412db-45ad-46ea-8f12-a85d203113d8",
+   "scryfallId": "1d779f19-3068-4976-b96b-8f93d156900b",
+   "name": "Demonic Consultation",
+   "frontName": "Demonic Consultation",
+   "layout": "normal",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Choose a card name. Exile the top six cards of your library, then reveal cards from the top of your library until you reveal a card with the chosen name. Put that card into your hand and exile all other cards revealed this way.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 930,
+   "priceUsd": null,
+   "faces": [
+    {
+     "name": "Demonic Consultation",
+     "manaCost": "{B}",
+     "typeLine": "Instant",
+     "oracleText": "Choose a card name. Exile the top six cards of your library, then reveal cards from the top of your library until you reveal a card with the chosen name. Put that card into your hand and exile all other cards revealed this way.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1a85ba2b-ae10-4917-954a-7709b75a9740",
+   "scryfallId": "c513f51b-a0db-4c08-8acc-1e91060b93b7",
+   "name": "Tainted Pact",
+   "frontName": "Tainted Pact",
+   "layout": "normal",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Exile the top card of your library. You may put that card into your hand unless it has the same name as another card exiled this way. Repeat this process until you put a card into your hand or you exile two cards with the same name, whichever comes first.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 903,
+   "priceUsd": 41.74,
+   "faces": [
+    {
+     "name": "Tainted Pact",
+     "manaCost": "{1}{B}",
+     "typeLine": "Instant",
+     "oracleText": "Exile the top card of your library. You may put that card into your hand unless it has the same name as another card exiled this way. Repeat this process until you put a card into your hand or you exile two cards with the same name, whichever comes first.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "28b46183-c62f-47b1-9fee-3ba148202cab",
+   "scryfallId": "523414cb-f8db-407a-808a-01454e03d8b9",
+   "name": "Crop Rotation",
+   "frontName": "Crop Rotation",
+   "layout": "normal",
+   "manaCost": "{G}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for a land card, put that card onto the battlefield, then shuffle.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 220,
+   "priceUsd": 3.53,
+   "faces": [
+    {
+     "name": "Crop Rotation",
+     "manaCost": "{G}",
+     "typeLine": "Instant",
+     "oracleText": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for a land card, put that card onto the battlefield, then shuffle.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "ee24bf27-484d-4e1c-998e-6a74e3d3f6c4",
+   "scryfallId": "d1b93087-e6a0-4ba9-83ba-a0ed2e396dc7",
+   "name": "Sylvan Scrying",
+   "frontName": "Sylvan Scrying",
+   "layout": "normal",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Search your library for a land card, reveal it, put it into your hand, then shuffle.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1317,
+   "priceUsd": 0.28,
+   "faces": [
+    {
+     "name": "Sylvan Scrying",
+     "manaCost": "{1}{G}",
+     "typeLine": "Sorcery",
+     "oracleText": "Search your library for a land card, reveal it, put it into your hand, then shuffle.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a75445d3-1303-4bb5-89ad-26ea93fecd48",
+   "scryfallId": "6e01ec28-d815-47a8-ab0f-d383a4736ebe",
+   "name": "Evolving Wilds",
+   "frontName": "Evolving Wilds",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Land",
+   "frontTypeLine": "Land",
+   "oracleText": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 19,
+   "priceUsd": 0.31,
+   "faces": [
+    {
+     "name": "Evolving Wilds",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "8539f295-5d58-4436-a73a-b9277c4c7795",
+   "scryfallId": "099c081d-06ae-4ca5-ab3b-f70d01509258",
+   "name": "Rampant Growth",
+   "frontName": "Rampant Growth",
+   "layout": "normal",
+   "manaCost": "{1}{G}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 28,
+   "priceUsd": 0.32,
+   "faces": [
+    {
+     "name": "Rampant Growth",
+     "manaCost": "{1}{G}",
+     "typeLine": "Sorcery",
+     "oracleText": "Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "d75b9c82-1b49-4c3e-a1b5-aeef57d6644b",
+   "scryfallId": "dfb7c4b9-f2f4-4d4e-baf2-86551c8150fe",
+   "name": "Cyclonic Rift",
+   "frontName": "Cyclonic Rift",
+   "layout": "normal",
+   "manaCost": "{1}{U}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Return target nonland permanent you don't control to its owner's hand.\nOverload {6}{U} (You may cast this spell for its overload cost. If you do, change \"target\" in its text to \"each.\")",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Overload"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 58,
+   "priceUsd": 38.41,
+   "faces": [
+    {
+     "name": "Cyclonic Rift",
+     "manaCost": "{1}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Return target nonland permanent you don't control to its owner's hand.\nOverload {6}{U} (You may cast this spell for its overload cost. If you do, change \"target\" in its text to \"each.\")",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3567c3c8-b3c7-45b7-935b-b1fdbc973720",
+   "scryfallId": "71067239-d46f-4201-a91c-6aa4c41fa8b1",
+   "name": "Vandalblast",
+   "frontName": "Vandalblast",
+   "layout": "normal",
+   "manaCost": "{R}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Destroy target artifact you don't control.\nOverload {4}{R} (You may cast this spell for its overload cost. If you do, change \"target\" in its text to \"each.\")",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [
+    "Overload"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 100,
+   "priceUsd": 2.59,
+   "faces": [
+    {
+     "name": "Vandalblast",
+     "manaCost": "{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "Destroy target artifact you don't control.\nOverload {4}{R} (You may cast this spell for its overload cost. If you do, change \"target\" in its text to \"each.\")",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "bf1341dd-41a3-49f6-87ec-63170dde4324",
+   "scryfallId": "2135ac5a-187b-4dc9-8f82-34e8d1603416",
+   "name": "Boseiju, Who Endures",
+   "frontName": "Boseiju, Who Endures",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Legendary Land",
+   "frontTypeLine": "Legendary Land",
+   "oracleText": "{T}: Add {G}.\nChannel — {1}{G}, Discard this card: Destroy target artifact, enchantment, or nonbasic land an opponent controls. That player may search their library for a land card with a basic land type, put it onto the battlefield, then shuffle. This ability costs {1} less to activate for each legendary creature you control.",
+   "colors": [],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [
+    "Channel"
+   ],
+   "power": null,
+   "producedMana": [
+    "G"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 78,
+   "priceUsd": 44.36,
+   "faces": [
+    {
+     "name": "Boseiju, Who Endures",
+     "manaCost": "",
+     "typeLine": "Legendary Land",
+     "oracleText": "{T}: Add {G}.\nChannel — {1}{G}, Discard this card: Destroy target artifact, enchantment, or nonbasic land an opponent controls. That player may search their library for a land card with a basic land type, put it onto the battlefield, then shuffle. This ability costs {1} less to activate for each legendary creature you control.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e9b6a394-691c-425a-9307-76d8edc7375e",
+   "scryfallId": "486d7edc-d983-41f0-8b78-c99aecd72996",
+   "name": "Otawara, Soaring City",
+   "frontName": "Otawara, Soaring City",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Legendary Land",
+   "frontTypeLine": "Legendary Land",
+   "oracleText": "{T}: Add {U}.\nChannel — {3}{U}, Discard this card: Return target artifact, creature, enchantment, or planeswalker to its owner's hand. This ability costs {1} less to activate for each legendary creature you control.",
+   "colors": [],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Channel"
+   ],
+   "power": null,
+   "producedMana": [
+    "U"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 90,
+   "priceUsd": 29.15,
+   "faces": [
+    {
+     "name": "Otawara, Soaring City",
+     "manaCost": "",
+     "typeLine": "Legendary Land",
+     "oracleText": "{T}: Add {U}.\nChannel — {3}{U}, Discard this card: Return target artifact, creature, enchantment, or planeswalker to its owner's hand. This ability costs {1} less to activate for each legendary creature you control.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "fa6e2a47-a8cb-4224-ae3e-f61c90477285",
+   "scryfallId": "132ccc20-cb42-4474-b747-7e41a661060e",
+   "name": "Tragic Slip",
+   "frontName": "Tragic Slip",
+   "layout": "normal",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Target creature gets -1/-1 until end of turn.\nMorbid — That creature gets -13/-13 until end of turn instead if a creature died this turn.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [
+    "Morbid"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 890,
+   "priceUsd": 0.36,
+   "faces": [
+    {
+     "name": "Tragic Slip",
+     "manaCost": "{B}",
+     "typeLine": "Instant",
+     "oracleText": "Target creature gets -1/-1 until end of turn.\nMorbid — That creature gets -13/-13 until end of turn instead if a creature died this turn.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "acf4d685-a718-42f7-9a7a-dee069ae8db2",
+   "scryfallId": "4005e82f-0b30-4165-87e2-51250c00adb0",
+   "name": "Council's Judgment",
+   "frontName": "Council's Judgment",
+   "layout": "normal",
+   "manaCost": "{1}{W}{W}",
+   "cmc": 3,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Will of the council — Starting with you, each player votes for a nonland permanent you don't control. Exile each permanent with the most votes or tied for most votes.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [
+    "Will of the council"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3575,
+   "priceUsd": 1.09,
+   "faces": [
+    {
+     "name": "Council's Judgment",
+     "manaCost": "{1}{W}{W}",
+     "typeLine": "Sorcery",
+     "oracleText": "Will of the council — Starting with you, each player votes for a nonland permanent you don't control. Exile each permanent with the most votes or tied for most votes.",
+     "power": null,
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "c753e9e3-9374-4e3c-8622-94576a8c1da3",
+   "scryfallId": "d4800a7d-c229-4ced-97ff-0e58645d58d6",
+   "name": "Oubliette",
+   "frontName": "Oubliette",
+   "layout": "normal",
+   "manaCost": "{1}{B}{B}",
+   "cmc": 3,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "When this enchantment enters, target creature phases out until this enchantment leaves the battlefield. Tap that creature as it phases in this way. (Auras and Equipment phase out with it. While permanents are phased out, they're treated as though they don't exist.)",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3968,
+   "priceUsd": 2.53,
+   "faces": [
+    {
+     "name": "Oubliette",
+     "manaCost": "{1}{B}{B}",
+     "typeLine": "Enchantment",
+     "oracleText": "When this enchantment enters, target creature phases out until this enchantment leaves the battlefield. Tap that creature as it phases in this way. (Auras and Equipment phase out with it. While permanents are phased out, they're treated as though they don't exist.)",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "48712d36-5c13-4ded-87a4-68106da4a5cd",
+   "scryfallId": "4f51140b-6254-431a-8810-94307bfdfbbe",
+   "name": "Mindbreak Trap",
+   "frontName": "Mindbreak Trap",
+   "layout": "normal",
+   "manaCost": "{2}{U}{U}",
+   "cmc": 4,
+   "typeLine": "Instant — Trap",
+   "frontTypeLine": "Instant — Trap",
+   "oracleText": "If an opponent cast three or more spells this turn, you may pay {0} rather than pay this spell's mana cost.\nExile any number of target spells.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 554,
+   "priceUsd": 15.65,
+   "faces": [
+    {
+     "name": "Mindbreak Trap",
+     "manaCost": "{2}{U}{U}",
+     "typeLine": "Instant — Trap",
+     "oracleText": "If an opponent cast three or more spells this turn, you may pay {0} rather than pay this spell's mana cost.\nExile any number of target spells.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "82506e51-3fe1-446f-83c9-69e67583cefc",
+   "scryfallId": "d9d9fbbb-ed6c-45f7-a1d8-f9d29ae7930f",
+   "name": "Slip Out the Back",
+   "frontName": "Slip Out the Back",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Put a +1/+1 counter on target creature. It phases out. (Treat it and anything attached to it as though they don't exist until its controller's next turn.)",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1085,
+   "priceUsd": 4.95,
+   "faces": [
+    {
+     "name": "Slip Out the Back",
+     "manaCost": "{U}",
+     "typeLine": "Instant",
+     "oracleText": "Put a +1/+1 counter on target creature. It phases out. (Treat it and anything attached to it as though they don't exist until its controller's next turn.)",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "b15c6203-6311-44eb-916d-a4c271960c74",
+   "scryfallId": "98f3be88-24e2-433f-9138-f0cb59d09a0f",
+   "name": "Kaya's Ghostform",
+   "frontName": "Kaya's Ghostform",
+   "layout": "normal",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Enchantment — Aura",
+   "frontTypeLine": "Enchantment — Aura",
+   "oracleText": "Enchant creature or planeswalker you control\nWhen enchanted permanent dies or is put into exile, return that card to the battlefield under your control.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 772,
+   "priceUsd": 1.43,
+   "faces": [
+    {
+     "name": "Kaya's Ghostform",
+     "manaCost": "{B}",
+     "typeLine": "Enchantment — Aura",
+     "oracleText": "Enchant creature or planeswalker you control\nWhen enchanted permanent dies or is put into exile, return that card to the battlefield under your control.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a731e87b-8d99-4b64-8ee3-8e540d652366",
+   "scryfallId": "609d3ecf-f88d-4268-a8d3-4bf2bcf5df60",
+   "name": "Malakir Rebirth // Malakir Mire",
+   "frontName": "Malakir Rebirth",
+   "layout": "modal_dfc",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Instant // Land",
+   "frontTypeLine": "Instant",
+   "oracleText": "Choose target creature. You lose 2 life. Until end of turn, that creature gains \"When this creature dies, return it to the battlefield tapped under its owner's control.\"\n//\nThis land enters tapped.\n{T}: Add {B}.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "B"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 233,
+   "priceUsd": 10.99,
+   "faces": [
+    {
+     "name": "Malakir Rebirth",
+     "manaCost": "{B}",
+     "typeLine": "Instant",
+     "oracleText": "Choose target creature. You lose 2 life. Until end of turn, that creature gains \"When this creature dies, return it to the battlefield tapped under its owner's control.\"",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    },
+    {
+     "name": "Malakir Mire",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "This land enters tapped.\n{T}: Add {B}.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e0aa6ce0-ca31-433b-ac6c-32b8675cdb71",
+   "scryfallId": "72204934-f5aa-4559-8f7e-7b0b223580d0",
+   "name": "Spellskite",
+   "frontName": "Spellskite",
+   "layout": "normal",
+   "manaCost": "{2}",
+   "cmc": 2,
+   "typeLine": "Artifact Creature — Phyrexian Horror",
+   "frontTypeLine": "Artifact Creature — Phyrexian Horror",
+   "oracleText": "{U/P}: Change a target of target spell or ability to this creature. ({U/P} can be paid with either {U} or 2 life.)",
+   "colors": [],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": "0",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1041,
+   "priceUsd": 7.43,
+   "faces": [
+    {
+     "name": "Spellskite",
+     "manaCost": "{2}",
+     "typeLine": "Artifact Creature — Phyrexian Horror",
+     "oracleText": "{U/P}: Change a target of target spell or ability to this creature. ({U/P} can be paid with either {U} or 2 life.)",
+     "power": "0",
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "d0e1904e-1a37-41f6-8582-b9ea794bb886",
+   "scryfallId": "63c82bef-50d6-4d25-bc3f-dda2826fc99c",
+   "name": "Abduction",
+   "frontName": "Abduction",
+   "layout": "normal",
+   "manaCost": "{2}{U}{U}",
+   "cmc": 4,
+   "typeLine": "Enchantment — Aura",
+   "frontTypeLine": "Enchantment — Aura",
+   "oracleText": "Enchant creature\nWhen this Aura enters, untap enchanted creature.\nYou control enchanted creature.\nWhen enchanted creature dies, return that card to the battlefield under its owner's control.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Enchant"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 18822,
+   "priceUsd": 0.39,
+   "faces": [
+    {
+     "name": "Abduction",
+     "manaCost": "{2}{U}{U}",
+     "typeLine": "Enchantment — Aura",
+     "oracleText": "Enchant creature\nWhen this Aura enters, untap enchanted creature.\nYou control enchanted creature.\nWhen enchanted creature dies, return that card to the battlefield under its owner's control.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "2bb2eda7-3b38-4c56-870f-c3218a1056f5",
+   "scryfallId": "22b36ad5-bf4d-436a-9c3c-fa4acd0052fe",
+   "name": "Snapcaster Mage",
+   "frontName": "Snapcaster Mage",
+   "layout": "normal",
+   "manaCost": "{1}{U}",
+   "cmc": 2,
+   "typeLine": "Creature — Human Wizard",
+   "frontTypeLine": "Creature — Human Wizard",
+   "oracleText": "Flash\nWhen this creature enters, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to its mana cost. (You may cast that card from your graveyard for its flashback cost. Then exile it.)",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Flash"
+   ],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1437,
+   "priceUsd": 16.53,
+   "faces": [
+    {
+     "name": "Snapcaster Mage",
+     "manaCost": "{1}{U}",
+     "typeLine": "Creature — Human Wizard",
+     "oracleText": "Flash\nWhen this creature enters, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to its mana cost. (You may cast that card from your graveyard for its flashback cost. Then exile it.)",
+     "power": "2",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "c3a68018-9eff-47e6-a612-182886d28fe3",
+   "scryfallId": "5ed398e7-9d2b-4bd2-9a4b-2885e4749003",
+   "name": "Mission Briefing",
+   "frontName": "Mission Briefing",
+   "layout": "normal",
+   "manaCost": "{U}{U}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Surveil 2, then choose an instant or sorcery card in your graveyard. You may cast it this turn. If that spell would be put into your graveyard, exile it instead. (To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Surveil"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4943,
+   "priceUsd": 0.36,
+   "faces": [
+    {
+     "name": "Mission Briefing",
+     "manaCost": "{U}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Surveil 2, then choose an instant or sorcery card in your graveyard. You may cast it this turn. If that spell would be put into your graveyard, exile it instead. (To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "5277a68e-1ceb-4b40-8e10-3d0564f5d7be",
+   "scryfallId": "6adb7d73-4482-4930-8497-cffd169b57e2",
+   "name": "Jace, Wielder of Mysteries",
+   "frontName": "Jace, Wielder of Mysteries",
+   "layout": "normal",
+   "manaCost": "{1}{U}{U}{U}",
+   "cmc": 4,
+   "typeLine": "Legendary Planeswalker — Jace",
+   "frontTypeLine": "Legendary Planeswalker — Jace",
+   "oracleText": "If you would draw a card while your library has no cards in it, you win the game instead.\n+1: Target player mills two cards. Draw a card.\n−8: Draw seven cards. Then if your library has no cards in it, you win the game.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Mill"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1081,
+   "priceUsd": 12.08,
+   "faces": [
+    {
+     "name": "Jace, Wielder of Mysteries",
+     "manaCost": "{1}{U}{U}{U}",
+     "typeLine": "Legendary Planeswalker — Jace",
+     "oracleText": "If you would draw a card while your library has no cards in it, you win the game instead.\n+1: Target player mills two cards. Draw a card.\n−8: Draw seven cards. Then if your library has no cards in it, you win the game.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e0cef79c-ad47-4cbc-9d73-a913e487ccb7",
+   "scryfallId": "abef512f-8f1d-4257-b16f-c0eed58670ec",
+   "name": "Garruk, Cursed Huntsman",
+   "frontName": "Garruk, Cursed Huntsman",
+   "layout": "normal",
+   "manaCost": "{4}{B}{G}",
+   "cmc": 6,
+   "typeLine": "Legendary Planeswalker — Garruk",
+   "frontTypeLine": "Legendary Planeswalker — Garruk",
+   "oracleText": "0: Create two 2/2 black and green Wolf creature tokens with \"When this token dies, put a loyalty counter on each Garruk you control.\"\n−3: Destroy target creature. Draw a card.\n−6: You get an emblem with \"Creatures you control get +3/+3 and have trample.\"",
+   "colors": [
+    "B",
+    "G"
+   ],
+   "colorIdentity": [
+    "B",
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3774,
+   "priceUsd": 2.1,
+   "faces": [
+    {
+     "name": "Garruk, Cursed Huntsman",
+     "manaCost": "{4}{B}{G}",
+     "typeLine": "Legendary Planeswalker — Garruk",
+     "oracleText": "0: Create two 2/2 black and green Wolf creature tokens with \"When this token dies, put a loyalty counter on each Garruk you control.\"\n−3: Destroy target creature. Draw a card.\n−6: You get an emblem with \"Creatures you control get +3/+3 and have trample.\"",
+     "power": null,
+     "colors": [
+      "B",
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a33f6070-590c-4be8-9180-b1ac2608cbc4",
+   "scryfallId": "0d0f827b-ebc3-45a4-8d12-c71a14478038",
+   "name": "Leonin Arbiter",
+   "frontName": "Leonin Arbiter",
+   "layout": "normal",
+   "manaCost": "{1}{W}",
+   "cmc": 2,
+   "typeLine": "Creature — Cat Cleric",
+   "frontTypeLine": "Creature — Cat Cleric",
+   "oracleText": "Players can't search libraries. Any player may pay {2} for that player to ignore this effect until end of turn.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 7309,
+   "priceUsd": 0.48,
+   "faces": [
+    {
+     "name": "Leonin Arbiter",
+     "manaCost": "{1}{W}",
+     "typeLine": "Creature — Cat Cleric",
+     "oracleText": "Players can't search libraries. Any player may pay {2} for that player to ignore this effect until end of turn.",
+     "power": "2",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "98dd6d43-cc56-4656-9e0c-240d0679b404",
+   "scryfallId": "f40cfba1-08b5-4241-bd36-8ae18e584557",
+   "name": "Gaddock Teeg",
+   "frontName": "Gaddock Teeg",
+   "layout": "normal",
+   "manaCost": "{G}{W}",
+   "cmc": 2,
+   "typeLine": "Legendary Creature — Kithkin Advisor",
+   "frontTypeLine": "Legendary Creature — Kithkin Advisor",
+   "oracleText": "Noncreature spells with mana value 4 or greater can't be cast.\nNoncreature spells with {X} in their mana costs can't be cast.",
+   "colors": [
+    "G",
+    "W"
+   ],
+   "colorIdentity": [
+    "G",
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 9635,
+   "priceUsd": 2.14,
+   "faces": [
+    {
+     "name": "Gaddock Teeg",
+     "manaCost": "{G}{W}",
+     "typeLine": "Legendary Creature — Kithkin Advisor",
+     "oracleText": "Noncreature spells with mana value 4 or greater can't be cast.\nNoncreature spells with {X} in their mana costs can't be cast.",
+     "power": "2",
+     "colors": [
+      "G",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "ab26fbe2-e808-48b9-8d0d-3fbb6c3d554f",
+   "scryfallId": "4e6e5c63-b6e5-4756-bf23-6c6f8669442d",
+   "name": "Narset, Parter of Veils",
+   "frontName": "Narset, Parter of Veils",
+   "layout": "normal",
+   "manaCost": "{1}{U}{U}",
+   "cmc": 3,
+   "typeLine": "Legendary Planeswalker — Narset",
+   "frontTypeLine": "Legendary Planeswalker — Narset",
+   "oracleText": "Each opponent can't draw more than one card each turn.\n−2: Look at the top four cards of your library. You may reveal a noncreature, nonland card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 988,
+   "priceUsd": 1.23,
+   "faces": [
+    {
+     "name": "Narset, Parter of Veils",
+     "manaCost": "{1}{U}{U}",
+     "typeLine": "Legendary Planeswalker — Narset",
+     "oracleText": "Each opponent can't draw more than one card each turn.\n−2: Look at the top four cards of your library. You may reveal a noncreature, nonland card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "ae7604bb-4818-45a3-960c-cf3d83f15964",
+   "scryfallId": "662fe50f-d75c-422c-8c6c-1f9b5c4ba21f",
+   "name": "Teferi, Time Raveler",
+   "frontName": "Teferi, Time Raveler",
+   "layout": "normal",
+   "manaCost": "{1}{W}{U}",
+   "cmc": 3,
+   "typeLine": "Legendary Planeswalker — Teferi",
+   "frontTypeLine": "Legendary Planeswalker — Teferi",
+   "oracleText": "Each opponent can cast spells only any time they could cast a sorcery.\n+1: Until your next turn, you may cast sorcery spells as though they had flash.\n−3: Return up to one target artifact, creature, or enchantment to its owner's hand. Draw a card.",
+   "colors": [
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "U",
+    "W"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1130,
+   "priceUsd": 7.6,
+   "faces": [
+    {
+     "name": "Teferi, Time Raveler",
+     "manaCost": "{1}{W}{U}",
+     "typeLine": "Legendary Planeswalker — Teferi",
+     "oracleText": "Each opponent can cast spells only any time they could cast a sorcery.\n+1: Until your next turn, you may cast sorcery spells as though they had flash.\n−3: Return up to one target artifact, creature, or enchantment to its owner's hand. Draw a card.",
+     "power": null,
+     "colors": [
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a20dd48d-d344-4db1-b0e9-a2b71c3cc9d1",
+   "scryfallId": "deb3721d-fba1-444f-8b31-1cd10c94c4a0",
+   "name": "Karn, the Great Creator",
+   "frontName": "Karn, the Great Creator",
+   "layout": "normal",
+   "manaCost": "{4}",
+   "cmc": 4,
+   "typeLine": "Legendary Planeswalker — Karn",
+   "frontTypeLine": "Legendary Planeswalker — Karn",
+   "oracleText": "Activated abilities of artifacts your opponents control can't be activated.\n+1: Until your next turn, up to one target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.\n−2: You may reveal an artifact card you own from outside the game or choose a face-up artifact card you own in exile. Put that card into your hand.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2174,
+   "priceUsd": 4.99,
+   "faces": [
+    {
+     "name": "Karn, the Great Creator",
+     "manaCost": "{4}",
+     "typeLine": "Legendary Planeswalker — Karn",
+     "oracleText": "Activated abilities of artifacts your opponents control can't be activated.\n+1: Until your next turn, up to one target noncreature artifact becomes an artifact creature with power and toughness each equal to its mana value.\n−2: You may reveal an artifact card you own from outside the game or choose a face-up artifact card you own in exile. Put that card into your hand.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "27ffa6e9-c161-4f53-8b41-7fae5f199f41",
+   "scryfallId": "4d84ac44-01d8-415e-af69-7c608ac8ae20",
+   "name": "Kataki, War's Wage",
+   "frontName": "Kataki, War's Wage",
+   "layout": "normal",
+   "manaCost": "{1}{W}",
+   "cmc": 2,
+   "typeLine": "Legendary Creature — Spirit",
+   "frontTypeLine": "Legendary Creature — Spirit",
+   "oracleText": "All artifacts have \"At the beginning of your upkeep, sacrifice this artifact unless you pay {1}.\"",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 9904,
+   "priceUsd": 1.51,
+   "faces": [
+    {
+     "name": "Kataki, War's Wage",
+     "manaCost": "{1}{W}",
+     "typeLine": "Legendary Creature — Spirit",
+     "oracleText": "All artifacts have \"At the beginning of your upkeep, sacrifice this artifact unless you pay {1}.\"",
+     "power": "2",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "5ba73182-30a7-4bad-9cb6-c0feecc2db33",
+   "scryfallId": "0a691664-9275-4b89-a8e3-b99c88717ffb",
+   "name": "Meekstone",
+   "frontName": "Meekstone",
+   "layout": "normal",
+   "manaCost": "{1}",
+   "cmc": 1,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "Creatures with power 3 or greater don't untap during their controllers' untap steps.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2848,
+   "priceUsd": 12.06,
+   "faces": [
+    {
+     "name": "Meekstone",
+     "manaCost": "{1}",
+     "typeLine": "Artifact",
+     "oracleText": "Creatures with power 3 or greater don't untap during their controllers' untap steps.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "53236dd7-845a-444c-96d5-f41ed7325d8f",
+   "scryfallId": "9f37c5b6-a59c-45cd-9a99-e9357fe9ea1b",
+   "name": "Rhystic Study",
+   "frontName": "Rhystic Study",
+   "layout": "normal",
+   "manaCost": "{2}{U}",
+   "cmc": 3,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 46,
+   "priceUsd": 67.49,
+   "faces": [
+    {
+     "name": "Rhystic Study",
+     "manaCost": "{2}{U}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "c749f23c-40c0-4159-b84c-a70cbb062c14",
+   "scryfallId": "ee793ed2-7d59-4640-8868-ad486600df2c",
+   "name": "Grand Abolisher",
+   "frontName": "Grand Abolisher",
+   "layout": "normal",
+   "manaCost": "{W}{W}",
+   "cmc": 2,
+   "typeLine": "Creature — Human Cleric",
+   "frontTypeLine": "Creature — Human Cleric",
+   "oracleText": "During your turn, your opponents can't cast spells or activate abilities of artifacts, creatures, or enchantments.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 255,
+   "priceUsd": 18.18,
+   "faces": [
+    {
+     "name": "Grand Abolisher",
+     "manaCost": "{W}{W}",
+     "typeLine": "Creature — Human Cleric",
+     "oracleText": "During your turn, your opponents can't cast spells or activate abilities of artifacts, creatures, or enchantments.",
+     "power": "2",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1a0770e6-b093-4439-baff-6889a50ba12e",
+   "scryfallId": "61e9c6df-1c84-4eab-9076-a4feb6347c10",
+   "name": "Mental Misstep",
+   "frontName": "Mental Misstep",
+   "layout": "normal",
+   "manaCost": "{U/P}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "({U/P} can be paid with either {U} or 2 life.)\nCounter target spell with mana value 1.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 476,
+   "priceUsd": 8.49,
+   "faces": [
+    {
+     "name": "Mental Misstep",
+     "manaCost": "{U/P}",
+     "typeLine": "Instant",
+     "oracleText": "({U/P} can be paid with either {U} or 2 life.)\nCounter target spell with mana value 1.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "dcb9c2a7-ae54-4ddc-a567-640bf4bf4366",
+   "scryfallId": "47a6234f-309f-4e03-9263-66da48b57153",
+   "name": "Solitude",
+   "frontName": "Solitude",
+   "layout": "normal",
+   "manaCost": "{3}{W}{W}",
+   "cmc": 5,
+   "typeLine": "Creature — Elemental Incarnation",
+   "frontTypeLine": "Creature — Elemental Incarnation",
+   "oracleText": "Flash\nLifelink\nWhen this creature enters, exile up to one other target creature. That creature's controller gains life equal to its power.\nEvoke—Exile a white card from your hand.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [
+    "Lifelink",
+    "Evoke",
+    "Flash"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1969,
+   "priceUsd": 35.7,
+   "faces": [
+    {
+     "name": "Solitude",
+     "manaCost": "{3}{W}{W}",
+     "typeLine": "Creature — Elemental Incarnation",
+     "oracleText": "Flash\nLifelink\nWhen this creature enters, exile up to one other target creature. That creature's controller gains life equal to its power.\nEvoke—Exile a white card from your hand.",
+     "power": "3",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3939fbe0-3be4-41ef-828d-c93f2cb33b4f",
+   "scryfallId": "b1eede29-17a4-437f-a5c2-e24cccbc6a33",
+   "name": "Living End",
+   "frontName": "Living End",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Suspend 3—{2}{B}{B}\nEach player exiles all creature cards from their graveyard, then sacrifices all creatures they control, then puts all cards they exiled this way onto the battlefield.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [
+    "Suspend"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 14507,
+   "priceUsd": 3,
+   "faces": [
+    {
+     "name": "Living End",
+     "manaCost": "",
+     "typeLine": "Sorcery",
+     "oracleText": "Suspend 3—{2}{B}{B}\nEach player exiles all creature cards from their graveyard, then sacrifices all creatures they control, then puts all cards they exiled this way onto the battlefield.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0923ad85-2ea4-4463-8f71-b7d0a162b486",
+   "scryfallId": "2b93e65e-8a10-444f-8b0a-9327dd30cce2",
+   "name": "Mogg Salvage",
+   "frontName": "Mogg Salvage",
+   "layout": "normal",
+   "manaCost": "{2}{R}",
+   "cmc": 3,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "If an opponent controls an Island and you control a Mountain, you may cast this spell without paying its mana cost.\nDestroy target artifact.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 6754,
+   "priceUsd": 0.26,
+   "faces": [
+    {
+     "name": "Mogg Salvage",
+     "manaCost": "{2}{R}",
+     "typeLine": "Instant",
+     "oracleText": "If an opponent controls an Island and you control a Mountain, you may cast this spell without paying its mana cost.\nDestroy target artifact.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "5f079a75-899e-467d-b443-3b87ce2fb548",
+   "scryfallId": "55a2f767-5928-44c5-91b7-2300bade458f",
+   "name": "Boros Reckoner",
+   "frontName": "Boros Reckoner",
+   "layout": "normal",
+   "manaCost": "{R/W}{R/W}{R/W}",
+   "cmc": 3,
+   "typeLine": "Creature — Minotaur Wizard",
+   "frontTypeLine": "Creature — Minotaur Wizard",
+   "oracleText": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn.",
+   "colors": [
+    "R",
+    "W"
+   ],
+   "colorIdentity": [
+    "R",
+    "W"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 6378,
+   "priceUsd": 0.35,
+   "faces": [
+    {
+     "name": "Boros Reckoner",
+     "manaCost": "{R/W}{R/W}{R/W}",
+     "typeLine": "Creature — Minotaur Wizard",
+     "oracleText": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn.",
+     "power": "3",
+     "colors": [
+      "R",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "5470dcfa-4eff-43da-abf7-19922841f719",
+   "scryfallId": "a844d537-df73-422d-a154-f1c6b92d0469",
+   "name": "Kitchen Finks",
+   "frontName": "Kitchen Finks",
+   "layout": "normal",
+   "manaCost": "{1}{G/W}{G/W}",
+   "cmc": 3,
+   "typeLine": "Creature — Ouphe",
+   "frontTypeLine": "Creature — Ouphe",
+   "oracleText": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+   "colors": [
+    "G",
+    "W"
+   ],
+   "colorIdentity": [
+    "G",
+    "W"
+   ],
+   "keywords": [
+    "Persist"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 14867,
+   "priceUsd": 0.34,
+   "faces": [
+    {
+     "name": "Kitchen Finks",
+     "manaCost": "{1}{G/W}{G/W}",
+     "typeLine": "Creature — Ouphe",
+     "oracleText": "When this creature enters, you gain 2 life.\nPersist (When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it.)",
+     "power": "3",
+     "colors": [
+      "G",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "fd74f8eb-0253-42dd-8277-186d4934da38",
+   "scryfallId": "3d286cf6-3e16-4941-9326-1818b1e06d69",
+   "name": "Dismember",
+   "frontName": "Dismember",
+   "layout": "normal",
+   "manaCost": "{1}{B/P}{B/P}",
+   "cmc": 3,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "({B/P} can be paid with either {B} or 2 life.)\nTarget creature gets -5/-5 until end of turn.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 922,
+   "priceUsd": 4.21,
+   "faces": [
+    {
+     "name": "Dismember",
+     "manaCost": "{1}{B/P}{B/P}",
+     "typeLine": "Instant",
+     "oracleText": "({B/P} can be paid with either {B} or 2 life.)\nTarget creature gets -5/-5 until end of turn.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "310f141c-7f37-4729-aed6-dd9c09db448d",
+   "scryfallId": "b5275d76-2947-4219-be21-614c7421614a",
+   "name": "Blood Artist",
+   "frontName": "Blood Artist",
+   "layout": "normal",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Creature — Vampire",
+   "frontTypeLine": "Creature — Vampire",
+   "oracleText": "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": "0",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 145,
+   "priceUsd": 3.47,
+   "faces": [
+    {
+     "name": "Blood Artist",
+     "manaCost": "{1}{B}",
+     "typeLine": "Creature — Vampire",
+     "oracleText": "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+     "power": "0",
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "76b003e0-15af-4f22-bdf2-1ade5430964a",
+   "scryfallId": "c43609fb-3cee-44e0-98d0-3ecaba1d5767",
+   "name": "Zulaport Cutthroat",
+   "frontName": "Zulaport Cutthroat",
+   "layout": "normal",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Creature — Human Rogue Ally",
+   "frontTypeLine": "Creature — Human Rogue Ally",
+   "oracleText": "Whenever this creature or another creature you control dies, each opponent loses 1 life and you gain 1 life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 235,
+   "priceUsd": 1.58,
+   "faces": [
+    {
+     "name": "Zulaport Cutthroat",
+     "manaCost": "{1}{B}",
+     "typeLine": "Creature — Human Rogue Ally",
+     "oracleText": "Whenever this creature or another creature you control dies, each opponent loses 1 life and you gain 1 life.",
+     "power": "1",
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3ee78cfc-0e9e-4737-a7e2-b42f94228040",
+   "scryfallId": "b3f8be99-a398-4664-beb6-3e98d6e62a32",
+   "name": "Cruel Celebrant",
+   "frontName": "Cruel Celebrant",
+   "layout": "normal",
+   "manaCost": "{W}{B}",
+   "cmc": 2,
+   "typeLine": "Creature — Vampire",
+   "frontTypeLine": "Creature — Vampire",
+   "oracleText": "Whenever this creature or another creature or planeswalker you control dies, each opponent loses 1 life and you gain 1 life.",
+   "colors": [
+    "B",
+    "W"
+   ],
+   "colorIdentity": [
+    "B",
+    "W"
+   ],
+   "keywords": [],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 986,
+   "priceUsd": 2.64,
+   "faces": [
+    {
+     "name": "Cruel Celebrant",
+     "manaCost": "{W}{B}",
+     "typeLine": "Creature — Vampire",
+     "oracleText": "Whenever this creature or another creature or planeswalker you control dies, each opponent loses 1 life and you gain 1 life.",
+     "power": "1",
+     "colors": [
+      "B",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "89ca686a-7c72-4d8f-9290-e89635624a83",
+   "scryfallId": "3aad15a2-8a1b-4460-9b06-e85863081878",
+   "name": "Cavern of Souls",
+   "frontName": "Cavern of Souls",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Land",
+   "frontTypeLine": "Land",
+   "oracleText": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "B",
+    "C",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 112,
+   "priceUsd": 48.8,
+   "faces": [
+    {
+     "name": "Cavern of Souls",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type, and that spell can't be countered.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "48e6d3d8-2f27-4017-acdd-40bce8cdbc02",
+   "scryfallId": "8ae6fc26-cfad-4da8-98d9-49c27c24d293",
+   "name": "Giada, Font of Hope",
+   "frontName": "Giada, Font of Hope",
+   "layout": "normal",
+   "manaCost": "{1}{W}",
+   "cmc": 2,
+   "typeLine": "Legendary Creature — Angel",
+   "frontTypeLine": "Legendary Creature — Angel",
+   "oracleText": "Flying, vigilance\nEach other Angel you control enters with an additional +1/+1 counter on it for each Angel you already control.\n{T}: Add {W}. Spend this mana only to cast an Angel spell.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [
+    "Flying",
+    "Vigilance"
+   ],
+   "power": "2",
+   "producedMana": [
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1602,
+   "priceUsd": 0.52,
+   "faces": [
+    {
+     "name": "Giada, Font of Hope",
+     "manaCost": "{1}{W}",
+     "typeLine": "Legendary Creature — Angel",
+     "oracleText": "Flying, vigilance\nEach other Angel you control enters with an additional +1/+1 counter on it for each Angel you already control.\n{T}: Add {W}. Spend this mana only to cast an Angel spell.",
+     "power": "2",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "986ae327-f433-4c58-93dc-afc544b9bfcb",
+   "scryfallId": "7601fbf2-916f-44b2-837a-201fd8304613",
+   "name": "Steel Overseer",
+   "frontName": "Steel Overseer",
+   "layout": "normal",
+   "manaCost": "{2}",
+   "cmc": 2,
+   "typeLine": "Artifact Creature — Construct",
+   "frontTypeLine": "Artifact Creature — Construct",
+   "oracleText": "{T}: Put a +1/+1 counter on each artifact creature you control.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 784,
+   "priceUsd": 0.37,
+   "faces": [
+    {
+     "name": "Steel Overseer",
+     "manaCost": "{2}",
+     "typeLine": "Artifact Creature — Construct",
+     "oracleText": "{T}: Put a +1/+1 counter on each artifact creature you control.",
+     "power": "1",
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "4fdfa41a-75a5-4b36-8c9e-083e26d137e2",
+   "scryfallId": "39e20660-c7f6-4326-928d-cc71cc72a20c",
+   "name": "Chief of the Foundry",
+   "frontName": "Chief of the Foundry",
+   "layout": "normal",
+   "manaCost": "{3}",
+   "cmc": 3,
+   "typeLine": "Artifact Creature — Construct",
+   "frontTypeLine": "Artifact Creature — Construct",
+   "oracleText": "Other artifact creatures you control get +1/+1.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2792,
+   "priceUsd": 0.31,
+   "faces": [
+    {
+     "name": "Chief of the Foundry",
+     "manaCost": "{3}",
+     "typeLine": "Artifact Creature — Construct",
+     "oracleText": "Other artifact creatures you control get +1/+1.",
+     "power": "2",
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3d6fa57a-aa53-4b5c-b8af-a7612c823117",
+   "scryfallId": "fc019ffa-4461-4f3d-ab8d-e4d20e77ca0c",
+   "name": "Faithless Looting",
+   "frontName": "Faithless Looting",
+   "layout": "normal",
+   "manaCost": "{R}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Draw two cards, then discard two cards.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [
+    "Flashback"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 99,
+   "priceUsd": 0.48,
+   "faces": [
+    {
+     "name": "Faithless Looting",
+     "manaCost": "{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "Draw two cards, then discard two cards.\nFlashback {2}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "32e9aa23-fc0a-4b82-82f9-1659c304428c",
+   "scryfallId": "dea15b53-2940-40e7-8d48-8ec11341da83",
+   "name": "Careful Study",
+   "frontName": "Careful Study",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Draw two cards, then discard two cards.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2628,
+   "priceUsd": 7.28,
+   "faces": [
+    {
+     "name": "Careful Study",
+     "manaCost": "{U}",
+     "typeLine": "Sorcery",
+     "oracleText": "Draw two cards, then discard two cards.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "232284f7-c623-4895-9ab9-8b1a39926830",
+   "scryfallId": "567abd78-d4a3-4a33-9b5b-b5ca361059cc",
+   "name": "Wonder",
+   "frontName": "Wonder",
+   "layout": "normal",
+   "manaCost": "{3}{U}",
+   "cmc": 4,
+   "typeLine": "Creature — Incarnation",
+   "frontTypeLine": "Creature — Incarnation",
+   "oracleText": "Flying\nAs long as this card is in your graveyard and you control an Island, creatures you control have flying.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 839,
+   "priceUsd": 3.84,
+   "faces": [
+    {
+     "name": "Wonder",
+     "manaCost": "{3}{U}",
+     "typeLine": "Creature — Incarnation",
+     "oracleText": "Flying\nAs long as this card is in your graveyard and you control an Island, creatures you control have flying.",
+     "power": "2",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a5e54d2b-aad8-4ddd-af4b-13668913762b",
+   "scryfallId": "40489e28-878d-44a2-847f-07beef1aa0f8",
+   "name": "The Gitrog Monster",
+   "frontName": "The Gitrog Monster",
+   "layout": "normal",
+   "manaCost": "{3}{B}{G}",
+   "cmc": 5,
+   "typeLine": "Legendary Creature — Frog Horror",
+   "frontTypeLine": "Legendary Creature — Frog Horror",
+   "oracleText": "Deathtouch\nAt the beginning of your upkeep, sacrifice The Gitrog Monster unless you sacrifice a land.\nYou may play an additional land on each of your turns.\nWhenever one or more land cards are put into your graveyard from anywhere, draw a card.",
+   "colors": [
+    "B",
+    "G"
+   ],
+   "colorIdentity": [
+    "B",
+    "G"
+   ],
+   "keywords": [
+    "Deathtouch"
+   ],
+   "power": "6",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 913,
+   "priceUsd": 0.56,
+   "faces": [
+    {
+     "name": "The Gitrog Monster",
+     "manaCost": "{3}{B}{G}",
+     "typeLine": "Legendary Creature — Frog Horror",
+     "oracleText": "Deathtouch\nAt the beginning of your upkeep, sacrifice The Gitrog Monster unless you sacrifice a land.\nYou may play an additional land on each of your turns.\nWhenever one or more land cards are put into your graveyard from anywhere, draw a card.",
+     "power": "6",
+     "colors": [
+      "B",
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "b2e950fb-cb7e-40a0-a311-5bbdd0477b29",
+   "scryfallId": "f03f6cab-3800-4b90-921a-01f384cef35f",
+   "name": "Sun Titan",
+   "frontName": "Sun Titan",
+   "layout": "normal",
+   "manaCost": "{4}{W}{W}",
+   "cmc": 6,
+   "typeLine": "Creature — Giant",
+   "frontTypeLine": "Creature — Giant",
+   "oracleText": "Vigilance\nWhenever this creature enters or attacks, you may return target permanent card with mana value 3 or less from your graveyard to the battlefield.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [
+    "Vigilance"
+   ],
+   "power": "6",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 316,
+   "priceUsd": 0.38,
+   "faces": [
+    {
+     "name": "Sun Titan",
+     "manaCost": "{4}{W}{W}",
+     "typeLine": "Creature — Giant",
+     "oracleText": "Vigilance\nWhenever this creature enters or attacks, you may return target permanent card with mana value 3 or less from your graveyard to the battlefield.",
+     "power": "6",
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "2ae71e86-4400-4a30-9077-4d57a43e7395",
+   "scryfallId": "715ad2ff-7eae-42f1-bb3c-a3afc2c9b82a",
+   "name": "Risen Reef",
+   "frontName": "Risen Reef",
+   "layout": "normal",
+   "manaCost": "{1}{G}{U}",
+   "cmc": 3,
+   "typeLine": "Creature — Elemental",
+   "frontTypeLine": "Creature — Elemental",
+   "oracleText": "Whenever this creature or another Elemental you control enters, look at the top card of your library. If it's a land card, you may put it onto the battlefield tapped. If you don't put the card onto the battlefield, put it into your hand.",
+   "colors": [
+    "G",
+    "U"
+   ],
+   "colorIdentity": [
+    "G",
+    "U"
+   ],
+   "keywords": [],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2180,
+   "priceUsd": 0.3,
+   "faces": [
+    {
+     "name": "Risen Reef",
+     "manaCost": "{1}{G}{U}",
+     "typeLine": "Creature — Elemental",
+     "oracleText": "Whenever this creature or another Elemental you control enters, look at the top card of your library. If it's a land card, you may put it onto the battlefield tapped. If you don't put the card onto the battlefield, put it into your hand.",
+     "power": "1",
+     "colors": [
+      "G",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9ad4f730-a18e-4a7c-a468-a926c718c741",
+   "scryfallId": "a3f31ac4-09ca-4712-a311-50d28824bfad",
+   "name": "Whispersilk Cloak",
+   "frontName": "Whispersilk Cloak",
+   "layout": "normal",
+   "manaCost": "{3}",
+   "cmc": 3,
+   "typeLine": "Artifact — Equipment",
+   "frontTypeLine": "Artifact — Equipment",
+   "oracleText": "Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)\nEquip {2}",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Equip"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 333,
+   "priceUsd": 2.11,
+   "faces": [
+    {
+     "name": "Whispersilk Cloak",
+     "manaCost": "{3}",
+     "typeLine": "Artifact — Equipment",
+     "oracleText": "Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)\nEquip {2}",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3635e4e5-e655-45f4-a444-39756f55129a",
+   "scryfallId": "33965c48-a7ce-4a04-8251-8eeb2d908c0b",
+   "name": "Eldrazi Conscription",
+   "frontName": "Eldrazi Conscription",
+   "layout": "normal",
+   "manaCost": "{8}",
+   "cmc": 8,
+   "typeLine": "Kindred Enchantment — Eldrazi Aura",
+   "frontTypeLine": "Kindred Enchantment — Eldrazi Aura",
+   "oracleText": "Enchant creature\nEnchanted creature gets +10/+10 and has trample and annihilator 2. (Whenever it attacks, defending player sacrifices two permanents of their choice.)",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Enchant"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1589,
+   "priceUsd": 1.53,
+   "faces": [
+    {
+     "name": "Eldrazi Conscription",
+     "manaCost": "{8}",
+     "typeLine": "Kindred Enchantment — Eldrazi Aura",
+     "oracleText": "Enchant creature\nEnchanted creature gets +10/+10 and has trample and annihilator 2. (Whenever it attacks, defending player sacrifices two permanents of their choice.)",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9242cd3e-1a71-4700-8182-9c1005616033",
+   "scryfallId": "d0b7cecf-b51b-4d30-b7e9-cd7976271e07",
+   "name": "Impact Tremors",
+   "frontName": "Impact Tremors",
+   "layout": "normal",
+   "manaCost": "{1}{R}",
+   "cmc": 2,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 204,
+   "priceUsd": 2.74,
+   "faces": [
+    {
+     "name": "Impact Tremors",
+     "manaCost": "{1}{R}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "cc65ac73-5bef-4ecb-ad8e-39199084c027",
+   "scryfallId": "5296e353-2efc-4d72-a877-7957eff630b9",
+   "name": "Cathars' Crusade",
+   "frontName": "Cathars' Crusade",
+   "layout": "normal",
+   "manaCost": "{3}{W}{W}",
+   "cmc": 5,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever a creature you control enters, put a +1/+1 counter on each creature you control.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 557,
+   "priceUsd": 8.16,
+   "faces": [
+    {
+     "name": "Cathars' Crusade",
+     "manaCost": "{3}{W}{W}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever a creature you control enters, put a +1/+1 counter on each creature you control.",
+     "power": null,
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9b2cdbed-c733-409b-b0e4-2c8960c25111",
+   "scryfallId": "1246c42d-57c0-4cba-959a-15ad89d8a50b",
+   "name": "Maskwood Nexus",
+   "frontName": "Maskwood Nexus",
+   "layout": "normal",
+   "manaCost": "{4}",
+   "cmc": 4,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "Creatures you control are every creature type. The same is true for creature spells you control and creature cards you own that aren't on the battlefield.\n{3}, {T}: Create a 2/2 blue Shapeshifter creature token with changeling. (It is every creature type.)",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 492,
+   "priceUsd": 2.8,
+   "faces": [
+    {
+     "name": "Maskwood Nexus",
+     "manaCost": "{4}",
+     "typeLine": "Artifact",
+     "oracleText": "Creatures you control are every creature type. The same is true for creature spells you control and creature cards you own that aren't on the battlefield.\n{3}, {T}: Create a 2/2 blue Shapeshifter creature token with changeling. (It is every creature type.)",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "c5229c17-b7be-4b05-b683-f2277edc4849",
+   "scryfallId": "1c9675fb-1a89-420f-aea8-50e0642f549c",
+   "name": "Enlightened Tutor",
+   "frontName": "Enlightened Tutor",
+   "layout": "normal",
+   "manaCost": "{W}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 125,
+   "priceUsd": 37.66,
+   "faces": [
+    {
+     "name": "Enlightened Tutor",
+     "manaCost": "{W}",
+     "typeLine": "Instant",
+     "oracleText": "Search your library for an artifact or enchantment card, reveal it, then shuffle and put that card on top.",
+     "power": null,
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "d460a9e2-5a7d-4562-880e-45174be19a9d",
+   "scryfallId": "8bf3929c-957f-4ea2-a27d-7d53979844af",
+   "name": "Breya, Etherium Shaper",
+   "frontName": "Breya, Etherium Shaper",
+   "layout": "normal",
+   "manaCost": "{W}{U}{B}{R}",
+   "cmc": 4,
+   "typeLine": "Legendary Artifact Creature — Human",
+   "frontTypeLine": "Legendary Artifact Creature — Human",
+   "oracleText": "When Breya enters, create two 1/1 blue Thopter artifact creature tokens with flying.\n{2}, Sacrifice two artifacts: Choose one —\n• Breya deals 3 damage to target player or planeswalker.\n• Target creature gets -4/-4 until end of turn.\n• You gain 5 life.",
+   "colors": [
+    "B",
+    "R",
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "B",
+    "R",
+    "U",
+    "W"
+   ],
+   "keywords": [],
+   "power": "4",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 5839,
+   "priceUsd": 0.37,
+   "faces": [
+    {
+     "name": "Breya, Etherium Shaper",
+     "manaCost": "{W}{U}{B}{R}",
+     "typeLine": "Legendary Artifact Creature — Human",
+     "oracleText": "When Breya enters, create two 1/1 blue Thopter artifact creature tokens with flying.\n{2}, Sacrifice two artifacts: Choose one —\n• Breya deals 3 damage to target player or planeswalker.\n• Target creature gets -4/-4 until end of turn.\n• You gain 5 life.",
+     "power": "4",
+     "colors": [
+      "B",
+      "R",
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "f5092c14-eec4-472c-999c-ba96c36b2fbb",
+   "scryfallId": "e83e6d7a-3af0-4955-8004-2310f051e306",
+   "name": "Kess, Dissident Mage",
+   "frontName": "Kess, Dissident Mage",
+   "layout": "normal",
+   "manaCost": "{1}{U}{B}{R}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Wizard",
+   "frontTypeLine": "Legendary Creature — Human Wizard",
+   "oracleText": "Flying\nOnce during each of your turns, you may cast an instant or sorcery spell from your graveyard. If a spell cast this way would be put into your graveyard, exile it instead.",
+   "colors": [
+    "B",
+    "R",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "R",
+    "U"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3233,
+   "priceUsd": 3.74,
+   "faces": [
+    {
+     "name": "Kess, Dissident Mage",
+     "manaCost": "{1}{U}{B}{R}",
+     "typeLine": "Legendary Creature — Human Wizard",
+     "oracleText": "Flying\nOnce during each of your turns, you may cast an instant or sorcery spell from your graveyard. If a spell cast this way would be put into your graveyard, exile it instead.",
+     "power": "3",
+     "colors": [
+      "B",
+      "R",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "33666a98-812f-4892-9f8d-33e0cbecc340",
+   "scryfallId": "86c5c337-d25f-4c3e-9762-09ed0c2d36d7",
+   "name": "Niv-Mizzet, Parun",
+   "frontName": "Niv-Mizzet, Parun",
+   "layout": "normal",
+   "manaCost": "{U}{U}{U}{R}{R}{R}",
+   "cmc": 6,
+   "typeLine": "Legendary Creature — Dragon Wizard",
+   "frontTypeLine": "Legendary Creature — Dragon Wizard",
+   "oracleText": "This spell can't be countered.\nFlying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\nWhenever a player casts an instant or sorcery spell, you draw a card.",
+   "colors": [
+    "R",
+    "U"
+   ],
+   "colorIdentity": [
+    "R",
+    "U"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "5",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 811,
+   "priceUsd": 5.53,
+   "faces": [
+    {
+     "name": "Niv-Mizzet, Parun",
+     "manaCost": "{U}{U}{U}{R}{R}{R}",
+     "typeLine": "Legendary Creature — Dragon Wizard",
+     "oracleText": "This spell can't be countered.\nFlying\nWhenever you draw a card, Niv-Mizzet deals 1 damage to any target.\nWhenever a player casts an instant or sorcery spell, you draw a card.",
+     "power": "5",
+     "colors": [
+      "R",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "55123455-d435-46d4-b0cd-0c1614343be2",
+   "scryfallId": "998b86f3-e53f-4ebb-b111-6f14577fded1",
+   "name": "The Mimeoplasm",
+   "frontName": "The Mimeoplasm",
+   "layout": "normal",
+   "manaCost": "{2}{B}{G}{U}",
+   "cmc": 5,
+   "typeLine": "Legendary Creature — Ooze",
+   "frontTypeLine": "Legendary Creature — Ooze",
+   "oracleText": "As The Mimeoplasm enters, you may exile two creature cards from graveyards. If you do, it enters as a copy of one of those cards with a number of additional +1/+1 counters on it equal to the power of the other card.",
+   "colors": [
+    "B",
+    "G",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "G",
+    "U"
+   ],
+   "keywords": [],
+   "power": "0",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 7485,
+   "priceUsd": 0.33,
+   "faces": [
+    {
+     "name": "The Mimeoplasm",
+     "manaCost": "{2}{B}{G}{U}",
+     "typeLine": "Legendary Creature — Ooze",
+     "oracleText": "As The Mimeoplasm enters, you may exile two creature cards from graveyards. If you do, it enters as a copy of one of those cards with a number of additional +1/+1 counters on it equal to the power of the other card.",
+     "power": "0",
+     "colors": [
+      "B",
+      "G",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "17a59d3d-9e01-48cd-bb4a-3eaaa077751c",
+   "scryfallId": "3242a9f0-2ba3-4852-ac8f-366772ac1c62",
+   "name": "Marchesa, the Black Rose",
+   "frontName": "Marchesa, the Black Rose",
+   "layout": "normal",
+   "manaCost": "{1}{U}{B}{R}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Wizard",
+   "frontTypeLine": "Legendary Creature — Human Wizard",
+   "oracleText": "Dethrone (Whenever this creature attacks the player with the most life or tied for most life, put a +1/+1 counter on it.)\nOther creatures you control have dethrone.\nWhenever a creature you control with a +1/+1 counter on it dies, return that card to the battlefield under your control at the beginning of the next end step.",
+   "colors": [
+    "B",
+    "R",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "R",
+    "U"
+   ],
+   "keywords": [
+    "Dethrone"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4959,
+   "priceUsd": 3.05,
+   "faces": [
+    {
+     "name": "Marchesa, the Black Rose",
+     "manaCost": "{1}{U}{B}{R}",
+     "typeLine": "Legendary Creature — Human Wizard",
+     "oracleText": "Dethrone (Whenever this creature attacks the player with the most life or tied for most life, put a +1/+1 counter on it.)\nOther creatures you control have dethrone.\nWhenever a creature you control with a +1/+1 counter on it dies, return that card to the battlefield under your control at the beginning of the next end step.",
+     "power": "3",
+     "colors": [
+      "B",
+      "R",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "c803b788-4213-4fab-b841-7e5bbf66088e",
+   "scryfallId": "776f490a-2f75-4c18-8164-56bd65bb09c6",
+   "name": "Jhoira, Weatherlight Captain",
+   "frontName": "Jhoira, Weatherlight Captain",
+   "layout": "normal",
+   "manaCost": "{2}{U}{R}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Artificer",
+   "frontTypeLine": "Legendary Creature — Human Artificer",
+   "oracleText": "Whenever you cast a historic spell, draw a card. (Artifacts, legendaries, and Sagas are historic.)",
+   "colors": [
+    "R",
+    "U"
+   ],
+   "colorIdentity": [
+    "R",
+    "U"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1061,
+   "priceUsd": 0.47,
+   "faces": [
+    {
+     "name": "Jhoira, Weatherlight Captain",
+     "manaCost": "{2}{U}{R}",
+     "typeLine": "Legendary Creature — Human Artificer",
+     "oracleText": "Whenever you cast a historic spell, draw a card. (Artifacts, legendaries, and Sagas are historic.)",
+     "power": "3",
+     "colors": [
+      "R",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "d7950018-d744-48a8-81aa-0d8384703f48",
+   "scryfallId": "561cfc04-65ea-49a4-8638-b4631a7cf828",
+   "name": "Zur the Enchanter",
+   "frontName": "Zur the Enchanter",
+   "layout": "normal",
+   "manaCost": "{1}{W}{U}{B}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Wizard",
+   "frontTypeLine": "Legendary Creature — Human Wizard",
+   "oracleText": "Flying\nWhenever Zur attacks, you may search your library for an enchantment card with mana value 3 or less, put it onto the battlefield, then shuffle.",
+   "colors": [
+    "B",
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "B",
+    "U",
+    "W"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2943,
+   "priceUsd": 1.3,
+   "faces": [
+    {
+     "name": "Zur the Enchanter",
+     "manaCost": "{1}{W}{U}{B}",
+     "typeLine": "Legendary Creature — Human Wizard",
+     "oracleText": "Flying\nWhenever Zur attacks, you may search your library for an enchantment card with mana value 3 or less, put it onto the battlefield, then shuffle.",
+     "power": "1",
+     "colors": [
+      "B",
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "956381ba-6d37-4a8a-846c-bad79222dbee",
+   "scryfallId": "89f612d6-7c59-4a7b-a87d-45f789e88ba5",
+   "name": "Force of Will",
+   "frontName": "Force of Will",
+   "layout": "normal",
+   "manaCost": "{3}{U}{U}",
+   "cmc": 5,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "You may pay 1 life and exile a blue card from your hand rather than pay this spell's mana cost.\nCounter target spell.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 205,
+   "priceUsd": 54.82,
+   "faces": [
+    {
+     "name": "Force of Will",
+     "manaCost": "{3}{U}{U}",
+     "typeLine": "Instant",
+     "oracleText": "You may pay 1 life and exile a blue card from your hand rather than pay this spell's mana cost.\nCounter target spell.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "34515b16-c9a4-4f98-8c77-416a7a523407",
+   "scryfallId": "1eac116d-bc78-4585-8b97-2775c3d0bdb4",
+   "name": "Wrath of God",
+   "frontName": "Wrath of God",
+   "layout": "normal",
+   "manaCost": "{2}{W}{W}",
+   "cmc": 4,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Destroy all creatures. They can't be regenerated.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 689,
+   "priceUsd": 2.1,
+   "faces": [
+    {
+     "name": "Wrath of God",
+     "manaCost": "{2}{W}{W}",
+     "typeLine": "Sorcery",
+     "oracleText": "Destroy all creatures. They can't be regenerated.",
+     "power": null,
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "bccb06f1-8839-4104-9ffa-c79a817f8378",
+   "scryfallId": "d423365c-a32c-4060-b178-3221e3200387",
+   "name": "Jet Medallion",
+   "frontName": "Jet Medallion",
+   "layout": "normal",
+   "manaCost": "{2}",
+   "cmc": 2,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "Black spells you cast cost {1} less to cast.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 273,
+   "priceUsd": 15.37,
+   "faces": [
+    {
+     "name": "Jet Medallion",
+     "manaCost": "{2}",
+     "typeLine": "Artifact",
+     "oracleText": "Black spells you cast cost {1} less to cast.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "bcc6eece-75ea-494c-b33a-d4477d504e0b",
+   "scryfallId": "5358b87a-1a29-426d-b165-40c97da2c14d",
+   "name": "Sink into Stupor // Soporific Springs",
+   "frontName": "Sink into Stupor",
+   "layout": "modal_dfc",
+   "manaCost": "{1}{U}{U}",
+   "cmc": 3,
+   "typeLine": "Instant // Land",
+   "frontTypeLine": "Instant",
+   "oracleText": "Return target spell or nonland permanent an opponent controls to its owner's hand.\n//\nAs this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {U}.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "U"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 167,
+   "priceUsd": 10.24,
+   "faces": [
+    {
+     "name": "Sink into Stupor",
+     "manaCost": "{1}{U}{U}",
+     "typeLine": "Instant",
+     "oracleText": "Return target spell or nonland permanent an opponent controls to its owner's hand.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    },
+    {
+     "name": "Soporific Springs",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "As this land enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {U}.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 2,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "d683d985-9888-4d21-8b5f-69e69ce4a03b",
+   "scryfallId": "cba7cf86-a9e7-4022-bb46-d9b0f136f3ca",
+   "name": "Path to Exile",
+   "frontName": "Path to Exile",
+   "layout": "normal",
+   "manaCost": "{W}",
+   "cmc": 1,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+   "colors": [
+    "W"
+   ],
+   "colorIdentity": [
+    "W"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 15,
+   "priceUsd": 1.69,
+   "faces": [
+    {
+     "name": "Path to Exile",
+     "manaCost": "{W}",
+     "typeLine": "Instant",
+     "oracleText": "Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle.",
+     "power": null,
+     "colors": [
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "7735eeba-693b-47e2-bd51-414379cf1016",
+   "scryfallId": "1929cf4b-0d18-4f7d-a631-621a378ff015",
+   "name": "Beast Within",
+   "frontName": "Beast Within",
+   "layout": "normal",
+   "manaCost": "{2}{G}",
+   "cmc": 3,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Destroy target permanent. Its controller creates a 3/3 green Beast creature token.",
+   "colors": [
+    "G"
+   ],
+   "colorIdentity": [
+    "G"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 25,
+   "priceUsd": 0.46,
+   "faces": [
+    {
+     "name": "Beast Within",
+     "manaCost": "{2}{G}",
+     "typeLine": "Instant",
+     "oracleText": "Destroy target permanent. Its controller creates a 3/3 green Beast creature token.",
+     "power": null,
+     "colors": [
+      "G"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "cfd60d1f-9832-4408-b84e-0fd3018b015b",
+   "scryfallId": "17db644c-1acf-477d-9c20-f72221f1108a",
+   "name": "Forbidden Orchard",
+   "frontName": "Forbidden Orchard",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Land",
+   "frontTypeLine": "Land",
+   "oracleText": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 745,
+   "priceUsd": 10.42,
+   "faces": [
+    {
+     "name": "Forbidden Orchard",
+     "manaCost": "",
+     "typeLine": "Land",
+     "oracleText": "{T}: Add one mana of any color.\nWhenever you tap this land for mana, target opponent creates a 1/1 colorless Spirit creature token.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "3469463e-ed4d-44bb-81f3-42bbe09d34ad",
+   "scryfallId": "02f74866-d0ea-42ce-bc44-500219fb73d4",
+   "name": "Hunted Horror",
+   "frontName": "Hunted Horror",
+   "layout": "normal",
+   "manaCost": "{B}{B}",
+   "cmc": 2,
+   "typeLine": "Creature — Horror",
+   "frontTypeLine": "Creature — Horror",
+   "oracleText": "Trample\nWhen this creature enters, target opponent creates two 3/3 green Centaur creature tokens with protection from black.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": "7",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4637,
+   "priceUsd": 4.65,
+   "faces": [
+    {
+     "name": "Hunted Horror",
+     "manaCost": "{B}{B}",
+     "typeLine": "Creature — Horror",
+     "oracleText": "Trample\nWhen this creature enters, target opponent creates two 3/3 green Centaur creature tokens with protection from black.",
+     "power": "7",
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9cfe86ae-eebe-44aa-a956-4b3e9e621105",
+   "scryfallId": "699295ea-edf4-46f4-972e-82359c80bb2e",
+   "name": "Krenko's Command",
+   "frontName": "Krenko's Command",
+   "layout": "normal",
+   "manaCost": "{1}{R}",
+   "cmc": 2,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Create two 1/1 red Goblin creature tokens.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2036,
+   "priceUsd": 0.4,
+   "faces": [
+    {
+     "name": "Krenko's Command",
+     "manaCost": "{1}{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "Create two 1/1 red Goblin creature tokens.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "fb868840-09fa-49b1-85cb-b08ad065e972",
+   "scryfallId": "b9640cbf-b016-410e-9eff-e8924883517b",
+   "name": "Bitterblossom",
+   "frontName": "Bitterblossom",
+   "layout": "normal",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Kindred Enchantment — Faerie",
+   "frontTypeLine": "Kindred Enchantment — Faerie",
+   "oracleText": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 612,
+   "priceUsd": 33.24,
+   "faces": [
+    {
+     "name": "Bitterblossom",
+     "manaCost": "{1}{B}",
+     "typeLine": "Kindred Enchantment — Faerie",
+     "oracleText": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1f8d4d5f-e82f-45f3-823e-1bb6b536eb18",
+   "scryfallId": "f43748ea-1d65-4ee8-9c66-221412a284c0",
+   "name": "Grand Arbiter Augustin IV",
+   "frontName": "Grand Arbiter Augustin IV",
+   "layout": "normal",
+   "manaCost": "{2}{W}{U}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Human Advisor",
+   "frontTypeLine": "Legendary Creature — Human Advisor",
+   "oracleText": "White spells you cast cost {1} less to cast.\nBlue spells you cast cost {1} less to cast.\nSpells your opponents cast cost {1} more to cast.",
+   "colors": [
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "U",
+    "W"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": true,
+   "edhrecRank": 1813,
+   "priceUsd": 17.52,
+   "faces": [
+    {
+     "name": "Grand Arbiter Augustin IV",
+     "manaCost": "{2}{W}{U}",
+     "typeLine": "Legendary Creature — Human Advisor",
+     "oracleText": "White spells you cast cost {1} less to cast.\nBlue spells you cast cost {1} less to cast.\nSpells your opponents cast cost {1} more to cast.",
+     "power": "2",
+     "colors": [
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  }
+ ],
+ "tags": {
+  "043f869d-b11c-4c0d-9591-2bf0df7bde55": [
+   "gives-mana-ability",
+   "gives-tap-ability",
+   "ramp",
+   "tap-fuel-creature",
+   "tap-outlet"
+  ],
+  "913e6182-706a-4872-8c8a-e146b0ae0738": [
+   "activated-ability",
+   "alliteration",
+   "card-names",
+   "combat-ramp",
+   "flicker",
+   "flicker-creature",
+   "gives-evasion",
+   "gives-protection",
+   "hate",
+   "hate-color",
+   "hate-green",
+   "hate-theft",
+   "hate-white",
+   "homeward-effect",
+   "land-ramp",
+   "mini-refund",
+   "protection",
+   "ramp",
+   "refund",
+   "repeated-effect",
+   "repeated-keyword",
+   "saboteur",
+   "sword-of-x-and-y",
+   "triggered-ability",
+   "tutor",
+   "tutor-land",
+   "tutor-land-basic",
+   "tutor-land-to-battlefield",
+   "tutor-to",
+   "tutor-to-battlefield",
+   "virtual-legendary"
+  ],
+  "0aeeb0d7-15a3-4722-ad67-8fc7fe89220d": [
+   "alliteration",
+   "card-names",
+   "dnd",
+   "dnd-character",
+   "gives-mana-ability",
+   "gives-tap-ability",
+   "multiple-species-types",
+   "pair-commander",
+   "ramp",
+   "synergy-token",
+   "tap-fuel-token",
+   "tap-outlet"
+  ],
+  "50aa7aff-1f01-4224-9a83-01f74d703ec2": [
+   "activated-ability",
+   "ramp",
+   "refund",
+   "repeatable-crime",
+   "synergy-basic",
+   "tap-fuel-creature",
+   "tap-outlet",
+   "untapper",
+   "untapper-land"
+  ],
+  "0355249a-8e4e-41db-9cea-1b901faffbe6": [
+   "activated-ability",
+   "boltland",
+   "card-names",
+   "cheaper-than-mv",
+   "conditional-tapland",
+   "disenchant-naturalize",
+   "flavors-of-vanilla",
+   "life-payment",
+   "naturalize-with-set-mechanic",
+   "punny-name",
+   "removal",
+   "removal-artifact",
+   "removal-destroy",
+   "removal-enchantment",
+   "spot-removal",
+   "staple-with-set-s-mechanic",
+   "triggered-ability",
+   "utility-land",
+   "virtual-vanilla"
+  ],
+  "727f3201-1cfc-4ab2-9dfe-be4f7251f42f": [
+   "activated-ability",
+   "alliteration",
+   "boltland",
+   "card-names",
+   "cheaper-than-mv",
+   "conditional-tapland",
+   "flavors-of-vanilla",
+   "hate",
+   "hate-graveyard",
+   "life-payment",
+   "sweeper-graveyard",
+   "triggered-ability",
+   "utility-land",
+   "virtual-vanilla"
+  ],
+  "db9ea3f9-c723-422f-98cc-a3ef7ca2c290": [
+   "activated-ability",
+   "alliteration",
+   "attack-trigger",
+   "attacking-matters",
+   "burn",
+   "burn-creature",
+   "burn-player",
+   "card-names",
+   "group-slug",
+   "hate",
+   "hate-attacker",
+   "land-ramp",
+   "pinger",
+   "rainbow-land",
+   "ramp",
+   "removal",
+   "removal-burn",
+   "removal-creature",
+   "removal-destroy",
+   "repeatable-removal",
+   "spot-removal",
+   "sweeper",
+   "synergy-double-strike",
+   "synergy-first-strike",
+   "synergy-haste",
+   "synergy-vigilance",
+   "triggered-ability"
+  ],
+  "ea9c459a-6047-43aa-968f-a582be4000e8": [
+   "activated-ability",
+   "adds-multiple-mana",
+   "bottom-deck-manipulation",
+   "card-advantage",
+   "creature-count-matters",
+   "impulse",
+   "impulse-creature",
+   "intervening-if-clause",
+   "land-ramp",
+   "library-manipulation",
+   "ramp",
+   "triggered-ability"
+  ],
+  "8a2e53f9-8100-488f-8504-b59e9bd1cc29": [
+   "adds-multiple-mana",
+   "name-matters",
+   "ramp",
+   "ritual",
+   "scales-with-multiple"
+  ],
+  "4b977117-741c-4157-8fcf-719e475a8a4c": [
+   "adds-multiple-mana",
+   "creature-count-matters",
+   "ramp",
+   "ritual"
+  ],
+  "39419d29-47e7-4d71-953b-96a2e14ae964": [
+   "adds-multiple-mana",
+   "cards-in-graveyard-matter",
+   "deprecated-card-types",
+   "interrupt",
+   "ramp",
+   "ritual",
+   "undergrowth"
+  ],
+  "437b2dab-15e0-4b9a-a204-58622d37a3b3": [
+   "alliteration",
+   "card-advantage",
+   "card-names",
+   "dilemma",
+   "divvy",
+   "fact-or-fiction",
+   "impulse",
+   "meme",
+   "mill",
+   "mill-self",
+   "minigame",
+   "mulch",
+   "opponent-chooses",
+   "pile"
+  ],
+  "f8b17b89-26ce-4208-874a-9e1d66514640": [
+   "alliteration",
+   "bottom-deck-manipulation",
+   "card-advantage",
+   "card-names",
+   "cheaper-than-mv",
+   "delve",
+   "discount-self",
+   "graveyard-fuel",
+   "impulse",
+   "library-manipulation"
+  ],
+  "981b0e21-e5e6-4a1e-bfde-679d56623f7f": [
+   "black-effect",
+   "burst-draw",
+   "card-advantage",
+   "draw",
+   "life-for-cards",
+   "life-payment"
+  ],
+  "e6555cca-e608-4c87-b835-9cd47fd1f543": [
+   "alliteration",
+   "card-advantage",
+   "card-names",
+   "draw",
+   "draw-engine",
+   "gains-pp-counters",
+   "landfall",
+   "lands-matter",
+   "mix-and-match",
+   "pure-draw",
+   "repeatable-artifact-tokens",
+   "repeatable-card-advantage",
+   "repeatable-clues",
+   "repeatable-draw",
+   "repeatable-noncreature-tokens",
+   "repeatable-pp-counters",
+   "repeatable-pure-draw",
+   "repeatable-token-generator",
+   "sacrifice-matters",
+   "synergy-clue",
+   "thingfall",
+   "triggered-ability",
+   "your-sacrifice-matters"
+  ],
+  "994bc16d-fdc6-475c-96df-beeb4d5aa03e": [
+   "activated-ability",
+   "card-advantage",
+   "gives-castable-from-library",
+   "gives-castable-from-nonhand",
+   "life-payment",
+   "mill",
+   "mill-exile",
+   "peek",
+   "peek-library",
+   "play-from-top",
+   "precognition",
+   "precognition-engine",
+   "repeatable-card-advantage",
+   "synergy-artifact",
+   "synergy-colorless"
+  ],
+  "2bd111bb-ce02-414c-b5b7-e0e037d8d96b": [
+   "activated-ability",
+   "black-effect",
+   "card-advantage",
+   "card-names",
+   "gives-castable-from-library",
+   "gives-castable-from-nonhand",
+   "group-slug",
+   "life-for-cards",
+   "life-payment",
+   "namesake-spell",
+   "opponent-loses-life",
+   "peek",
+   "peek-library",
+   "play-from-top",
+   "precognition",
+   "precognition-engine",
+   "repeatable-card-advantage",
+   "repeatable-sacrifice-outlet",
+   "sacrifice-outlet",
+   "sacrifice-outlet-artifact",
+   "sacrifice-outlet-creature",
+   "sacrifice-outlet-enchantment",
+   "sacrifice-outlet-nonland"
+  ],
+  "0f3c3e5f-6af3-4af2-8703-4ccc8ed8f675": [
+   "additional-cost",
+   "card-advantage",
+   "discard-outlet",
+   "draw",
+   "red-effect",
+   "rummage"
+  ],
+  "1cb0610b-a731-42c2-b93f-0a29f63cebf4": [
+   "additional-cost",
+   "card-advantage",
+   "discard-outlet",
+   "draw",
+   "red-effect",
+   "rummage",
+   "tormenting-voice"
+  ],
+  "0310dfdb-0498-488d-9f1a-279f8239e024": [
+   "card-advantage",
+   "counters-matter",
+   "death-trigger",
+   "face-commander",
+   "reanimate",
+   "reanimate-creature",
+   "recursion",
+   "recursion-creature",
+   "regrowth",
+   "regrowth-creature",
+   "repeatable-card-advantage",
+   "triggered-ability"
+  ],
+  "0826cf7d-7ccc-459b-a92f-29dc169628f8": [
+   "activate-from-hand",
+   "activated-ability",
+   "alliteration",
+   "black-effect",
+   "blue-effect",
+   "card-names",
+   "counterspell",
+   "counterspell-instant",
+   "counterspell-sorcery",
+   "counterspell-with-set-mechanic",
+   "more-expensive-than-mv",
+   "single-target-instant-sorcery",
+   "staple-with-set-s-mechanic",
+   "tutor",
+   "tutor-card",
+   "tutor-mv",
+   "tutor-to",
+   "tutor-to-hand"
+  ],
+  "9a1412db-45ad-46ea-8f12-a85d203113d8": [
+   "card-advantage",
+   "consult",
+   "fun-ruling",
+   "name-matters"
+  ],
+  "1a85ba2b-ae10-4917-954a-7709b75a9740": [
+   "card-advantage",
+   "consult",
+   "name-matters",
+   "stronger-in-singleton-formats"
+  ],
+  "28b46183-c62f-47b1-9fee-3ba148202cab": [
+   "additional-cost",
+   "full-refund",
+   "green-effect",
+   "refund",
+   "sacrifice-outlet",
+   "sacrifice-outlet-land",
+   "tutor",
+   "tutor-land",
+   "tutor-land-any",
+   "tutor-land-to-battlefield",
+   "tutor-to",
+   "tutor-to-battlefield"
+  ],
+  "ee24bf27-484d-4e1c-998e-6a74e3d3f6c4": [
+   "alliteration",
+   "card-names",
+   "green-effect",
+   "misnomer",
+   "tutor",
+   "tutor-land",
+   "tutor-land-any",
+   "tutor-to",
+   "tutor-to-hand"
+  ],
+  "a75445d3-1303-4bb5-89ad-26ea93fecd48": [
+   "activated-ability",
+   "fetchland",
+   "sacrifice-self",
+   "tutor",
+   "tutor-land",
+   "tutor-land-basic",
+   "tutor-land-to-battlefield",
+   "tutor-to",
+   "tutor-to-battlefield"
+  ],
+  "8539f295-5d58-4436-a73a-b9277c4c7795": [
+   "land-ramp",
+   "ramp",
+   "tutor",
+   "tutor-land",
+   "tutor-land-basic",
+   "tutor-land-to-battlefield",
+   "tutor-to",
+   "tutor-to-battlefield"
+  ],
+  "d75b9c82-1b49-4c3e-a1b5-aeef57d6644b": [
+   "alternative-cost",
+   "blue-effect",
+   "bounce",
+   "more-expensive-than-mv",
+   "pseudo-fog",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-bounce",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-nonland",
+   "removal-planeswalker",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "sweeper",
+   "sweeper-one-sided"
+  ],
+  "3567c3c8-b3c7-45b7-935b-b1fdbc973720": [
+   "alternative-cost",
+   "more-expensive-than-mv",
+   "removal",
+   "removal-artifact",
+   "removal-destroy",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "sweeper",
+   "sweeper-one-sided"
+  ],
+  "bf1341dd-41a3-49f6-87ec-63170dde4324": [
+   "activate-from-hand",
+   "activated-ability",
+   "disenchant-naturalize",
+   "donate-rampant-growth",
+   "hate",
+   "hate-nonbasic-land",
+   "removal",
+   "removal-artifact",
+   "removal-destroy",
+   "removal-enchantment",
+   "removal-land",
+   "spot-removal",
+   "swap-removal",
+   "synergy-legendary",
+   "utility-land"
+  ],
+  "e9b6a394-691c-425a-9307-76d8edc7375e": [
+   "activate-from-hand",
+   "activated-ability",
+   "blue-effect",
+   "bounce",
+   "removal",
+   "removal-artifact",
+   "removal-bounce",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-planeswalker",
+   "spot-removal",
+   "synergy-legendary",
+   "utility-land"
+  ],
+  "fa6e2a47-a8cb-4224-ae3e-f61c90477285": [
+   "combat-trick",
+   "meme",
+   "morbid",
+   "removal",
+   "removal-creature",
+   "removal-toughness",
+   "self-replacement-effect",
+   "single-target-instant-sorcery",
+   "spot-removal"
+  ],
+  "acf4d685-a718-42f7-9a7a-dee069ae8db2": [
+   "faux-targeting",
+   "multi-removal",
+   "multiplayer",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-exile",
+   "removal-nonland",
+   "removal-planeswalker",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "spot-removal",
+   "voting"
+  ],
+  "c753e9e3-9374-4e3c-8622-94576a8c1da3": [
+   "banish",
+   "card-names",
+   "meme",
+   "phasing",
+   "removal",
+   "removal-aura",
+   "removal-creature",
+   "removal-equipment",
+   "removal-exile",
+   "single-english-word-name",
+   "spot-removal",
+   "tapper",
+   "tapper-creature",
+   "triggered-ability"
+  ],
+  "48712d36-5c13-4ded-87a4-68106da4a5cd": [
+   "alternative-cost",
+   "blue-effect",
+   "cheaper-than-mv",
+   "counterspell",
+   "counterspell-exile",
+   "counterspell-free",
+   "counterspell-with-set-mechanic",
+   "hate",
+   "hate-storm",
+   "manaless-value",
+   "multiple-targets",
+   "potentially-free",
+   "remove-from-stack",
+   "single-target-instant-sorcery",
+   "staple-with-set-s-mechanic"
+  ],
+  "82506e51-3fe1-446f-83c9-69e67583cefc": [
+   "gives-pp-counters",
+   "phasing",
+   "protection",
+   "protects-creature",
+   "single-target-instant-sorcery"
+  ],
+  "b15c6203-6311-44eb-916d-a4c271960c74": [
+   "card-names",
+   "cheat-death",
+   "death-trigger",
+   "namesake-spell",
+   "protection",
+   "protects-creature",
+   "protects-planeswalker",
+   "synergy-planeswalker",
+   "triggered-ability",
+   "unexile",
+   "unique-enchant-target"
+  ],
+  "a731e87b-8d99-4b64-8ee3-8e540d652366": [
+   "activated-ability",
+   "alliteration",
+   "card-names",
+   "cheaper-than-mv",
+   "cheat-death",
+   "death-trigger",
+   "life-payment",
+   "protection",
+   "protects-creature",
+   "single-target-instant-sorcery",
+   "tapland",
+   "triggered-ability",
+   "utility-land"
+  ],
+  "e0aa6ce0-ca31-433b-ac6c-32b8675cdb71": [
+   "activated-ability",
+   "change-target",
+   "life-payment",
+   "phyrexian-mana",
+   "phyrexian-mana-ability",
+   "protection",
+   "protects-creature",
+   "repeatable-crime",
+   "type-addition-phyrexian",
+   "type-errata",
+   "type-errata-addition"
+  ],
+  "d0e1904e-1a37-41f6-8582-b9ea794bb886": [
+   "card-names",
+   "cheat-death",
+   "control-changing-effects",
+   "death-trigger",
+   "protection",
+   "protects-creature",
+   "single-english-word-name",
+   "theft",
+   "theft-creature",
+   "triggered-ability",
+   "untapper",
+   "untapper-creature",
+   "wth-storyline-in-cards"
+  ],
+  "2bb2eda7-3b38-4c56-870f-c3218a1056f5": [
+   "flavors-of-vanilla",
+   "gives-castable-from-graveyard",
+   "gives-castable-from-nonhand",
+   "gives-flashback",
+   "invitational-card",
+   "recursion",
+   "synergy-instant",
+   "synergy-sorcery",
+   "triggered-ability",
+   "virtual-vanilla"
+  ],
+  "c3a68018-9eff-47e6-a612-182886d28fe3": [
+   "fun-ruling",
+   "gives-castable-from-graveyard",
+   "gives-castable-from-nonhand",
+   "library-manipulation",
+   "mill",
+   "mill-self",
+   "peek",
+   "peek-library",
+   "recursion",
+   "surveil",
+   "synergy-instant",
+   "synergy-sorcery",
+   "top-deck-manipulation"
+  ],
+  "5277a68e-1ceb-4b40-8e10-3d0564f5d7be": [
+   "activated-ability",
+   "alternate-win-condition",
+   "burst-draw",
+   "card-advantage",
+   "draw",
+   "draw-engine",
+   "empty-library",
+   "library-size-matters",
+   "mill",
+   "mill-any",
+   "mill-opponent",
+   "mill-self",
+   "passive-ability",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-crime",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "synergy-mill"
+  ],
+  "e0cef79c-ad47-4cbc-9d73-a913e487ccb7": [
+   "activated-ability",
+   "anthem",
+   "card-advantage",
+   "death-trigger",
+   "draw",
+   "draw-engine",
+   "gives-trample",
+   "keyword-anthem",
+   "overrun",
+   "power-boost-to-all",
+   "pure-draw",
+   "removal",
+   "removal-creature",
+   "removal-destroy",
+   "repeatable-card-advantage",
+   "repeatable-creature-tokens",
+   "repeatable-crime",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "repeatable-removal",
+   "repeatable-token-generator",
+   "spot-removal",
+   "synergy-planeswalker",
+   "synergy-pw-garruk",
+   "synergy-pw-specific",
+   "toughness-boost-to-all",
+   "triggered-ability"
+  ],
+  "a33f6070-590c-4be8-9180-b1ac2608cbc4": [
+   "hate",
+   "hate-tutor",
+   "hatebear",
+   "special-action",
+   "symmetrical"
+  ],
+  "98dd6d43-cc56-4656-9e0c-240d0679b404": [
+   "hate",
+   "hate-high-mv",
+   "hate-noncreature",
+   "hatebear",
+   "mana-cost-matters",
+   "mana-value-matters",
+   "prevent-cast",
+   "symmetrical",
+   "unique-type-line",
+   "x-cost-matters"
+  ],
+  "ab26fbe2-e808-48b9-8d0d-3fbb6c3d554f": [
+   "activated-ability",
+   "card-advantage",
+   "draw-hate",
+   "hate",
+   "impulse",
+   "impulse-artifact",
+   "impulse-battle",
+   "impulse-enchantment",
+   "impulse-instant",
+   "impulse-noncreature",
+   "impulse-planeswalker",
+   "impulse-sorcery",
+   "passive-ability",
+   "repeatable-card-advantage",
+   "repeatable-impulse"
+  ],
+  "ae7604bb-4818-45a3-960c-cf3d83f15964": [
+   "activated-ability",
+   "alliteration",
+   "blue-effect",
+   "bounce",
+   "card-advantage",
+   "card-names",
+   "draw",
+   "draw-engine",
+   "gives-flash",
+   "hate",
+   "hate-counterspell",
+   "hate-flash",
+   "hate-instant",
+   "hate-off-turn-cast",
+   "passive-ability",
+   "pure-draw",
+   "removal",
+   "removal-artifact",
+   "removal-bounce",
+   "removal-creature",
+   "removal-enchantment",
+   "repeatable-card-advantage",
+   "repeatable-crime",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "repeatable-removal",
+   "spot-removal",
+   "synergy-sorcery"
+  ],
+  "a20dd48d-d344-4db1-b0e9-a2b71c3cc9d1": [
+   "activated-ability",
+   "animate",
+   "animate-artifact",
+   "hate",
+   "hate-activation",
+   "hate-artifact",
+   "mana-value-matters",
+   "null-rod",
+   "passive-ability",
+   "prevent-activation",
+   "recursion-from-exile",
+   "repeatable-crime",
+   "scales-with-mana-value",
+   "type-change",
+   "unexile",
+   "wish"
+  ],
+  "27ffa6e9-c161-4f53-8b41-7fae5f199f41": [
+   "alliteration",
+   "card-names",
+   "hate",
+   "hate-artifact",
+   "hatebear",
+   "ransom",
+   "removal",
+   "removal-artifact",
+   "removal-sacrifice",
+   "repeatable-removal",
+   "rhystic",
+   "spot-removal",
+   "symmetrical",
+   "tax"
+  ],
+  "5ba73182-30a7-4bad-9cb6-c0feecc2db33": [
+   "hate",
+   "hate-high-pt",
+   "lockdown",
+   "lockdown-creature",
+   "power-matters",
+   "removal",
+   "removal-creature",
+   "stasis",
+   "symmetrical",
+   "synergy-low-power"
+  ],
+  "53236dd7-845a-444c-96d5-f41ed7325d8f": [
+   "card-advantage",
+   "cast-tax",
+   "cast-trigger",
+   "cast-trigger-other",
+   "draw",
+   "draw-engine",
+   "meme",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "rhystic",
+   "tax",
+   "triggered-ability"
+  ],
+  "c749f23c-40c0-4159-b84c-a70cbb062c14": [
+   "hate",
+   "hate-artifact",
+   "hate-enchantment",
+   "hate-flash",
+   "hatebear",
+   "prevent-activation",
+   "prevent-cast",
+   "silence",
+   "white-effect"
+  ],
+  "1a0770e6-b093-4439-baff-6889a50ba12e": [
+   "alliteration",
+   "alternate-cost-life",
+   "blue-effect",
+   "card-names",
+   "cheaper-than-mv",
+   "color-break",
+   "counterspell",
+   "counterspell-free",
+   "counterspell-with-set-mechanic",
+   "discount-self",
+   "life-payment",
+   "manaless-value",
+   "phyrexian-mana",
+   "phyrexian-mana-cost",
+   "single-target-instant-sorcery",
+   "staple-with-set-s-mechanic"
+  ],
+  "dcb9c2a7-ae54-4ddc-a567-640bf4bf4366": [
+   "alternative-cost",
+   "card-names",
+   "cheaper-than-mv",
+   "flavors-of-vanilla",
+   "intervening-if-clause",
+   "lifegain",
+   "manaless-value",
+   "opponent-lifegain",
+   "pitch-spell",
+   "removal",
+   "removal-creature",
+   "removal-exile",
+   "repeatable-lifegain",
+   "single-english-word-name",
+   "spot-removal",
+   "synergy-white",
+   "triggered-ability",
+   "virtual-french-vanilla"
+  ],
+  "3939fbe0-3be4-41ef-828d-c93f2cb33b4f": [
+   "alternative-cost",
+   "cast-on-resolution",
+   "castable-from-exile",
+   "castable-from-nonhand",
+   "exile-self",
+   "intervening-if-clause",
+   "mass-reanimation",
+   "more-expensive-than-mv",
+   "reanimate",
+   "reanimate-creature",
+   "recursion",
+   "recursion-creature",
+   "removal",
+   "removal-creature",
+   "removal-sacrifice",
+   "spell-with-no-casting-cost",
+   "sweeper",
+   "symmetrical",
+   "trigger-from-exile",
+   "triggered-ability",
+   "unexile"
+  ],
+  "0923ad85-2ea4-4463-8f71-b7d0a162b486": [
+   "alternative-cost",
+   "cheaper-than-mv",
+   "hate",
+   "hate-island",
+   "manaless-value",
+   "potentially-free",
+   "removal",
+   "removal-artifact",
+   "removal-destroy",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "synergy-mountain"
+  ],
+  "5f079a75-899e-467d-b443-3b87ce2fb548": [
+   "activated-ability",
+   "burn",
+   "burn-any",
+   "burn-battle",
+   "burn-creature",
+   "burn-planeswalker",
+   "burn-player",
+   "enrage",
+   "gains-first-strike",
+   "removal",
+   "removal-burn",
+   "removal-creature",
+   "removal-planeswalker",
+   "repeatable-crime",
+   "repeatable-removal",
+   "spite-damage",
+   "spot-removal",
+   "triggered-ability"
+  ],
+  "5470dcfa-4eff-43da-abf7-19922841f719": [
+   "cheat-death",
+   "cheat-death-self",
+   "death-trigger",
+   "death-trigger-self",
+   "flavors-of-vanilla",
+   "gains-mm-counters",
+   "intervening-if-clause",
+   "lifegain",
+   "persist",
+   "triggered-ability",
+   "virtual-french-vanilla"
+  ],
+  "fd74f8eb-0253-42dd-8277-186d4934da38": [
+   "alternate-cost-life",
+   "card-names",
+   "cheaper-than-mv",
+   "color-break",
+   "discount-self",
+   "life-payment",
+   "phyrexian-mana",
+   "phyrexian-mana-cost",
+   "removal",
+   "removal-creature",
+   "removal-toughness",
+   "single-english-word-name",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "unique-mana-cost"
+  ],
+  "310f141c-7f37-4729-aed6-dd9c09db448d": [
+   "blood-artist-ability",
+   "card-names",
+   "death-trigger",
+   "drain-life",
+   "inscryption-achievement",
+   "inverted-effects",
+   "lifegain",
+   "opponent-loses-life",
+   "repeatable-crime",
+   "repeatable-lifegain",
+   "triggered-ability"
+  ],
+  "76b003e0-15af-4f22-bdf2-1ade5430964a": [
+   "blood-artist-ability",
+   "death-trigger",
+   "death-trigger-self",
+   "drain-life",
+   "group-slug",
+   "inverted-effects",
+   "lifegain",
+   "opponent-loses-life",
+   "repeatable-lifegain",
+   "triggered-ability"
+  ],
+  "3ee78cfc-0e9e-4737-a7e2-b42f94228040": [
+   "alliteration",
+   "blood-artist-ability",
+   "card-names",
+   "death-trigger",
+   "draft-signpost",
+   "drain-life",
+   "group-slug",
+   "inverted-effects",
+   "lifegain",
+   "opponent-loses-life",
+   "repeatable-lifegain",
+   "synergy-planeswalker",
+   "triggered-ability"
+  ],
+  "89ca686a-7c72-4d8f-9290-e89635624a83": [
+   "activated-ability",
+   "buff-mana",
+   "gives-uncounterable",
+   "hate",
+   "hate-counterspell",
+   "rainbow-land",
+   "restricted-mana",
+   "typal",
+   "typal-choose",
+   "typal-creature",
+   "utility-land"
+  ],
+  "48e6d3d8-2f27-4017-acdd-40bce8cdbc02": [
+   "activated-ability",
+   "evasion",
+   "face-commander",
+   "gives-pp-counters",
+   "mana-dork",
+   "mana-producer",
+   "noncreature-typal",
+   "ramp",
+   "repeatable-pp-counters",
+   "restricted-mana",
+   "typal",
+   "typal-angel",
+   "typal-creature"
+  ],
+  "986ae327-f433-4c58-93dc-afc544b9bfcb": [
+   "activated-ability",
+   "gains-pp-counters",
+   "gives-pp-counters",
+   "gives-pp-counters-to-all",
+   "power-boost-to-all",
+   "repeatable-pp-counters",
+   "synergy-artifact-creature",
+   "toughness-boost-to-all"
+  ],
+  "4fdfa41a-75a5-4b36-8c9e-083e26d137e2": [
+   "anthem",
+   "power-boost-to-all",
+   "synergy-artifact-creature",
+   "toughness-boost-to-all"
+  ],
+  "3d6fa57a-aa53-4b5c-b8af-a7612c823117": [
+   "alternative-cost",
+   "blue-effect",
+   "card-advantage",
+   "castable-from-graveyard",
+   "castable-from-nonhand",
+   "color-break",
+   "discard-outlet",
+   "draw",
+   "exile-self",
+   "loot",
+   "more-expensive-than-mv"
+  ],
+  "32e9aa23-fc0a-4b82-82f9-1659c304428c": [
+   "blue-effect",
+   "card-advantage",
+   "discard-outlet",
+   "draw",
+   "loot"
+  ],
+  "232284f7-c623-4895-9ab9-8b1a39926830": [
+   "card-names",
+   "continuous-effect-from-graveyard",
+   "evasion",
+   "gives-evasion",
+   "gives-flying",
+   "keyword-anthem",
+   "manaless-value",
+   "single-english-word-name",
+   "synergy-island"
+  ],
+  "a5e54d2b-aad8-4ddd-af4b-13668913762b": [
+   "card-advantage",
+   "draw",
+   "draw-engine",
+   "extra-land",
+   "land-ramp",
+   "play-additional-land",
+   "pure-draw",
+   "ramp",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "repeatable-sacrifice-outlet",
+   "sacrifice-outlet",
+   "sacrifice-outlet-land",
+   "synergy-land-graveyard",
+   "triggered-ability",
+   "upkeep-cost"
+  ],
+  "b2e950fb-cb7e-40a0-a311-5bbdd0477b29": [
+   "attack-trigger",
+   "attacking-matters-self",
+   "land-ramp",
+   "low-mana-value-matters",
+   "mana-value-matters",
+   "ramp",
+   "reanimate",
+   "reanimate-permanent",
+   "recursion",
+   "recursion-permanent",
+   "titan-trigger",
+   "triggered-ability"
+  ],
+  "2ae71e86-4400-4a30-9077-4d57a43e7395": [
+   "alliteration",
+   "card-advantage",
+   "card-names",
+   "cost-ignorer",
+   "creature-engine",
+   "creaturefall",
+   "draft-signpost",
+   "extra-land",
+   "impulse",
+   "impulse-onto-battlefield",
+   "impulse-to-zone",
+   "land-or-hand",
+   "land-ramp",
+   "noncreature-typal",
+   "ramp",
+   "repeatable-card-advantage",
+   "repeatable-impulse",
+   "sneak-from-library",
+   "thingfall",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-elemental"
+  ],
+  "9ad4f730-a18e-4a7c-a468-a926c718c741": [
+   "activated-ability",
+   "gives-evasion",
+   "gives-shroud",
+   "gives-unblockable",
+   "protection",
+   "protects-creature"
+  ],
+  "3635e4e5-e655-45f4-a444-39756f55129a": [
+   "attack-trigger",
+   "attacking-matters",
+   "enlarge",
+   "gives-annihilator",
+   "gives-trample",
+   "mixed-subtypes",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-land",
+   "removal-permanent",
+   "removal-planeswalker",
+   "removal-sacrifice",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "repeatable-removal",
+   "spot-removal",
+   "triggered-ability",
+   "unique-type-line"
+  ],
+  "9242cd3e-1a71-4700-8182-9c1005616033": [
+   "burn",
+   "burn-player",
+   "creaturefall",
+   "group-slug",
+   "impact-effect",
+   "pinger",
+   "thingfall",
+   "triggered-ability"
+  ],
+  "cc65ac73-5bef-4ecb-ad8e-39199084c027": [
+   "alliteration",
+   "card-names",
+   "creaturefall",
+   "gives-pp-counters",
+   "gives-pp-counters-to-all",
+   "power-boost-to-all",
+   "quadratic",
+   "repeatable-pp-counters",
+   "thingfall",
+   "toughness-boost-to-all",
+   "triggered-ability"
+  ],
+  "9b2cdbed-c733-409b-b0e4-2c8960c25111": [
+   "activated-ability",
+   "any-zone-type-change",
+   "gives-changeling",
+   "mana-sink",
+   "out-of-color-token",
+   "repeatable-creature-tokens",
+   "repeatable-token-generator",
+   "type-change",
+   "universal-type-change"
+  ],
+  "c5229c17-b7be-4b05-b683-f2277edc4849": [
+   "library-manipulation",
+   "top-deck-manipulation",
+   "tutor",
+   "tutor-artifact",
+   "tutor-enchantment",
+   "tutor-to",
+   "tutor-to-top"
+  ],
+  "d460a9e2-5a7d-4562-880e-45174be19a9d": [
+   "activated-ability",
+   "bombard",
+   "burn",
+   "burn-planeswalker",
+   "burn-player",
+   "enters-in-company",
+   "evasion",
+   "face-commander",
+   "lifegain",
+   "modal",
+   "multiple-bodies",
+   "removal",
+   "removal-burn",
+   "removal-creature",
+   "removal-planeswalker",
+   "removal-toughness",
+   "repeatable-crime",
+   "repeatable-lifegain",
+   "repeatable-modal-choice",
+   "repeatable-removal",
+   "repeatable-sacrifice-outlet",
+   "sacrifice-outlet",
+   "sacrifice-outlet-artifact",
+   "spot-removal",
+   "synergy-artifact",
+   "triggered-ability"
+  ],
+  "f5092c14-eec4-472c-999c-ba96c36b2fbb": [
+   "alt-commander",
+   "evasion",
+   "gives-castable-from-graveyard",
+   "gives-castable-from-nonhand",
+   "recursion",
+   "synergy-instant",
+   "synergy-sorcery"
+  ],
+  "33666a98-812f-4892-9f8d-33e0cbecc340": [
+   "burn",
+   "burn-any",
+   "burn-battle",
+   "burn-creature",
+   "burn-planeswalker",
+   "burn-player",
+   "card-advantage",
+   "cast-trigger",
+   "draw",
+   "draw-engine",
+   "draw-matters",
+   "evasion",
+   "hate",
+   "hate-counterspell",
+   "hate-instant",
+   "hate-sorcery",
+   "pinger",
+   "pure-draw",
+   "removal",
+   "removal-burn",
+   "removal-creature",
+   "removal-planeswalker",
+   "repeatable-card-advantage",
+   "repeatable-crime",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "repeatable-removal",
+   "spot-removal",
+   "synergy-instant",
+   "synergy-sorcery",
+   "tax",
+   "toll",
+   "triggered-ability",
+   "unique-mana-cost"
+  ],
+  "55123455-d435-46d4-b0cd-0c1614343be2": [
+   "clone",
+   "clone-graveyard",
+   "copy",
+   "copy-creature",
+   "copy-from-graveyard",
+   "face-commander",
+   "gains-pp-counters",
+   "graveyard-fuel",
+   "graveyard-fuel-creature",
+   "hate",
+   "hate-graveyard",
+   "power-matters",
+   "recursion",
+   "scales-with-power"
+  ],
+  "17a59d3d-9e01-48cd-bb4a-3eaaa077751c": [
+   "attack-trigger",
+   "attacking-matters",
+   "attacking-matters-self",
+   "cheat-death",
+   "cheat-death-self",
+   "counters-matter",
+   "death-trigger",
+   "delayed-trigger",
+   "gains-pp-counters",
+   "gives-dethrone",
+   "gives-pp-counters",
+   "keyword-anthem",
+   "pp-counters-matter",
+   "protection",
+   "protects-all",
+   "protects-creature",
+   "protects-self",
+   "repeatable-pp-counters",
+   "triggered-ability"
+  ],
+  "c803b788-4213-4fab-b841-7e5bbf66088e": [
+   "card-advantage",
+   "cast-trigger",
+   "cast-trigger-you",
+   "draw",
+   "draw-engine",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "synergy-artifact",
+   "synergy-historic",
+   "synergy-legendary",
+   "synergy-saga",
+   "triggered-ability"
+  ],
+  "d7950018-d744-48a8-81aa-0d8384703f48": [
+   "attack-trigger",
+   "attacking-matters-self",
+   "evasion",
+   "low-mana-value-matters",
+   "mana-value-matters",
+   "triggered-ability",
+   "tutor",
+   "tutor-enchantment",
+   "tutor-mv",
+   "tutor-to",
+   "tutor-to-battlefield"
+  ],
+  "956381ba-6d37-4a8a-846c-bad79222dbee": [
+   "alternate-cost-life",
+   "alternative-cost",
+   "blue-effect",
+   "cheaper-than-mv",
+   "counterspell",
+   "counterspell-free",
+   "counterspell-with-set-mechanic",
+   "deprecated-card-types",
+   "interrupt",
+   "life-payment",
+   "manaless-value",
+   "pitch-spell",
+   "single-target-instant-sorcery",
+   "staple-with-set-s-mechanic",
+   "synergy-blue"
+  ],
+  "34515b16-c9a4-4f98-8c77-416a7a523407": [
+   "hate",
+   "hate-regenerate",
+   "removal",
+   "removal-creature",
+   "removal-destroy",
+   "sweeper",
+   "symmetrical"
+  ],
+  "bccb06f1-8839-4104-9ffa-c79a817f8378": [
+   "cost-reducer",
+   "synergy-black"
+  ],
+  "bcc6eece-75ea-494c-b33a-d4477d504e0b": [
+   "activated-ability",
+   "alliteration",
+   "blue-effect",
+   "boltland",
+   "bounce",
+   "card-names",
+   "cheaper-than-mv",
+   "conditional-tapland",
+   "counterspell",
+   "counterspell-bounce",
+   "life-payment",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-bounce",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-nonland",
+   "removal-planeswalker",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "remove-from-stack",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "utility-land"
+  ],
+  "d683d985-9888-4d21-8b5f-69e69ce4a03b": [
+   "donate-rampant-growth",
+   "drawback",
+   "land-ramp",
+   "ramp",
+   "removal",
+   "removal-creature",
+   "removal-exile",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "swap-removal",
+   "tutor",
+   "tutor-land",
+   "tutor-land-basic",
+   "tutor-land-to-battlefield",
+   "tutor-to",
+   "tutor-to-battlefield"
+  ],
+  "7735eeba-693b-47e2-bd51-414379cf1016": [
+   "color-break",
+   "donate-token",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-creature",
+   "removal-destroy",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-land",
+   "removal-permanent",
+   "removal-planeswalker",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "single-target-instant-sorcery",
+   "spot-removal",
+   "swap-removal"
+  ],
+  "cfd60d1f-9832-4408-b84e-0fd3018b015b": [
+   "activated-ability",
+   "donate-token",
+   "drawback",
+   "group-hug",
+   "rainbow-land",
+   "repeatable-crime",
+   "selective-group-hug",
+   "triggered-ability"
+  ],
+  "3469463e-ed4d-44bb-81f3-42bbe09d34ad": [
+   "alliteration",
+   "card-names",
+   "donate-token",
+   "drawback",
+   "flavors-of-vanilla",
+   "group-hug",
+   "out-of-color-token",
+   "selective-group-hug",
+   "triggered-ability",
+   "virtual-french-vanilla"
+  ],
+  "9cfe86ae-eebe-44aa-a956-4b3e9e621105": [
+   "card-names",
+   "misnomer",
+   "multiple-bodies",
+   "namesake-spell"
+  ],
+  "fb868840-09fa-49b1-85cb-b08ad065e972": [
+   "black-effect",
+   "deal-with-the-devil",
+   "drawback",
+   "evasion",
+   "life-payment",
+   "repeatable-creature-tokens",
+   "repeatable-token-generator",
+   "triggered-ability"
+  ],
+  "1f8d4d5f-e82f-45f3-823e-1bb6b536eb18": [
+   "alliteration",
+   "card-names",
+   "cost-increaser",
+   "cost-reducer",
+   "inverted-effects",
+   "roman-numeral",
+   "synergy-blue",
+   "synergy-white"
+  ]
+ }
+}

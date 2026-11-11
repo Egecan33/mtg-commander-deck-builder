@@ -1,0 +1,1865 @@
+{
+ "cards": [
+  {
+   "oracleId": "a7043fbd-1dfd-42cf-be4b-cc343d0949e5",
+   "scryfallId": "fe9be3e0-076c-4703-9750-2a6b0a178bc9",
+   "name": "Yuriko, the Tiger's Shadow",
+   "frontName": "Yuriko, the Tiger's Shadow",
+   "layout": "normal",
+   "manaCost": "{1}{U}{B}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Human Ninja",
+   "frontTypeLine": "Legendary Creature — Human Ninja",
+   "oracleText": "Commander ninjutsu {U}{B} ({U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand or the command zone tapped and attacking.)\nWhenever a Ninja you control deals combat damage to a player, reveal the top card of your library and put that card into your hand. Each opponent loses life equal to that card's mana value.",
+   "colors": [
+    "B",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "U"
+   ],
+   "keywords": [
+    "Commander ninjutsu"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2562,
+   "priceUsd": 3.22,
+   "faces": [
+    {
+     "name": "Yuriko, the Tiger's Shadow",
+     "manaCost": "{1}{U}{B}",
+     "typeLine": "Legendary Creature — Human Ninja",
+     "oracleText": "Commander ninjutsu {U}{B} ({U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand or the command zone tapped and attacking.)\nWhenever a Ninja you control deals combat damage to a player, reveal the top card of your library and put that card into your hand. Each opponent loses life equal to that card's mana value.",
+     "power": "1",
+     "colors": [
+      "B",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "4fc5f871-a809-4a4a-adfb-eb4cd52837c8",
+   "scryfallId": "979076a7-313f-4227-a4c3-548e86997e0a",
+   "name": "Fallen Shinobi",
+   "frontName": "Fallen Shinobi",
+   "layout": "normal",
+   "manaCost": "{3}{U}{B}",
+   "cmc": 5,
+   "typeLine": "Creature — Zombie Ninja",
+   "frontTypeLine": "Creature — Zombie Ninja",
+   "oracleText": "Ninjutsu {2}{U}{B} ({2}{U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever this creature deals combat damage to a player, that player exiles the top two cards of their library. Until end of turn, you may play those cards without paying their mana costs.",
+   "colors": [
+    "B",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "U"
+   ],
+   "keywords": [
+    "Ninjutsu"
+   ],
+   "power": "5",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2132,
+   "priceUsd": 7.14,
+   "faces": [
+    {
+     "name": "Fallen Shinobi",
+     "manaCost": "{3}{U}{B}",
+     "typeLine": "Creature — Zombie Ninja",
+     "oracleText": "Ninjutsu {2}{U}{B} ({2}{U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever this creature deals combat damage to a player, that player exiles the top two cards of their library. Until end of turn, you may play those cards without paying their mana costs.",
+     "power": "5",
+     "colors": [
+      "B",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "354defd2-f63f-4a48-9fd4-2526b3878a84",
+   "scryfallId": "919cd266-b796-4a1c-937f-76b565c82495",
+   "name": "Ingenious Infiltrator",
+   "frontName": "Ingenious Infiltrator",
+   "layout": "normal",
+   "manaCost": "{2}{U}{B}",
+   "cmc": 4,
+   "typeLine": "Creature — Vedalken Ninja",
+   "frontTypeLine": "Creature — Vedalken Ninja",
+   "oracleText": "Ninjutsu {U}{B} ({U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever a Ninja you control deals combat damage to a player, draw a card.",
+   "colors": [
+    "B",
+    "U"
+   ],
+   "colorIdentity": [
+    "B",
+    "U"
+   ],
+   "keywords": [
+    "Ninjutsu"
+   ],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3261,
+   "priceUsd": 1.99,
+   "faces": [
+    {
+     "name": "Ingenious Infiltrator",
+     "manaCost": "{2}{U}{B}",
+     "typeLine": "Creature — Vedalken Ninja",
+     "oracleText": "Ninjutsu {U}{B} ({U}{B}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever a Ninja you control deals combat damage to a player, draw a card.",
+     "power": "2",
+     "colors": [
+      "B",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1f3c2b00-0000-4ae1-9650-9553accac52e",
+   "scryfallId": "fb245a12-4cbd-4291-af67-f3677ca822dc",
+   "name": "Ninja of the Deep Hours",
+   "frontName": "Ninja of the Deep Hours",
+   "layout": "normal",
+   "manaCost": "{3}{U}",
+   "cmc": 4,
+   "typeLine": "Creature — Human Ninja",
+   "frontTypeLine": "Creature — Human Ninja",
+   "oracleText": "Ninjutsu {1}{U} ({1}{U}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever this creature deals combat damage to a player, you may draw a card.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Ninjutsu"
+   ],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3686,
+   "priceUsd": 1.68,
+   "faces": [
+    {
+     "name": "Ninja of the Deep Hours",
+     "manaCost": "{3}{U}",
+     "typeLine": "Creature — Human Ninja",
+     "oracleText": "Ninjutsu {1}{U} ({1}{U}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhenever this creature deals combat damage to a player, you may draw a card.",
+     "power": "2",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "98636623-bbc6-4935-a2bb-2234691eb6d8",
+   "scryfallId": "89a698a5-f4ac-4b04-96dc-32e1eeef6ac7",
+   "name": "Thousand-Faced Shadow",
+   "frontName": "Thousand-Faced Shadow",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Creature — Human Ninja",
+   "frontTypeLine": "Creature — Human Ninja",
+   "oracleText": "Ninjutsu {2}{U}{U} ({2}{U}{U}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nFlying\nWhen this creature enters from your hand, if it's attacking, create a token that's a copy of another target attacking creature. The token enters tapped and attacking.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Flying",
+    "Ninjutsu"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2733,
+   "priceUsd": 1.88,
+   "faces": [
+    {
+     "name": "Thousand-Faced Shadow",
+     "manaCost": "{U}",
+     "typeLine": "Creature — Human Ninja",
+     "oracleText": "Ninjutsu {2}{U}{U} ({2}{U}{U}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nFlying\nWhen this creature enters from your hand, if it's attacking, create a token that's a copy of another target attacking creature. The token enters tapped and attacking.",
+     "power": "1",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a61ef0cc-1da9-49f9-b0dc-01cf9f6205be",
+   "scryfallId": "ab499df5-ed76-43ad-81b3-70afd0487ccd",
+   "name": "Changeling Outcast",
+   "frontName": "Changeling Outcast",
+   "layout": "normal",
+   "manaCost": "{B}",
+   "cmc": 1,
+   "typeLine": "Creature — Shapeshifter",
+   "frontTypeLine": "Creature — Shapeshifter",
+   "oracleText": "Changeling (This card is every creature type.)\nThis creature can't block and can't be blocked.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [
+    "Changeling"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 691,
+   "priceUsd": 2.44,
+   "faces": [
+    {
+     "name": "Changeling Outcast",
+     "manaCost": "{B}",
+     "typeLine": "Creature — Shapeshifter",
+     "oracleText": "Changeling (This card is every creature type.)\nThis creature can't block and can't be blocked.",
+     "power": "1",
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "b2e65e8b-5f08-4cc2-ab1d-00f8903dbea2",
+   "scryfallId": "f0b96dc7-d046-4b64-b3a8-8bf5ac7c8f9b",
+   "name": "Faerie Seer",
+   "frontName": "Faerie Seer",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Creature — Faerie Wizard",
+   "frontTypeLine": "Creature — Faerie Wizard",
+   "oracleText": "Flying\nWhen this creature enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Scry",
+    "Flying"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2421,
+   "priceUsd": 0.42,
+   "faces": [
+    {
+     "name": "Faerie Seer",
+     "manaCost": "{U}",
+     "typeLine": "Creature — Faerie Wizard",
+     "oracleText": "Flying\nWhen this creature enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)",
+     "power": "1",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "5a55641b-0818-4418-a2e5-44157056353c",
+   "scryfallId": "859e5ca5-c184-47ee-a2ea-8075847f46d9",
+   "name": "Slither Blade",
+   "frontName": "Slither Blade",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Creature — Snake Rogue",
+   "frontTypeLine": "Creature — Snake Rogue",
+   "oracleText": "This creature can't be blocked.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1746,
+   "priceUsd": 2.19,
+   "faces": [
+    {
+     "name": "Slither Blade",
+     "manaCost": "{U}",
+     "typeLine": "Creature — Snake Rogue",
+     "oracleText": "This creature can't be blocked.",
+     "power": "1",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a3a98bc9-caa0-49b7-951c-fe4e4f54e4ba",
+   "scryfallId": "305078a5-ac18-4721-bba2-3434eba5b1cf",
+   "name": "Ornithopter",
+   "frontName": "Ornithopter",
+   "layout": "normal",
+   "manaCost": "{0}",
+   "cmc": 0,
+   "typeLine": "Artifact Creature — Thopter",
+   "frontTypeLine": "Artifact Creature — Thopter",
+   "oracleText": "Flying",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "0",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 797,
+   "priceUsd": 0.32,
+   "faces": [
+    {
+     "name": "Ornithopter",
+     "manaCost": "{0}",
+     "typeLine": "Artifact Creature — Thopter",
+     "oracleText": "Flying",
+     "power": "0",
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "52237e6b-19f6-405c-a668-545c4ccb1b6d",
+   "scryfallId": "18acffb1-c1e8-4729-a350-64823b2f9d29",
+   "name": "Mothdust Changeling",
+   "frontName": "Mothdust Changeling",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Creature — Shapeshifter",
+   "frontTypeLine": "Creature — Shapeshifter",
+   "oracleText": "Changeling (This card is every creature type.)\nTap an untapped creature you control: This creature gains flying until end of turn.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Changeling"
+   ],
+   "power": "1",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4436,
+   "priceUsd": 1.09,
+   "faces": [
+    {
+     "name": "Mothdust Changeling",
+     "manaCost": "{U}",
+     "typeLine": "Creature — Shapeshifter",
+     "oracleText": "Changeling (This card is every creature type.)\nTap an untapped creature you control: This creature gains flying until end of turn.",
+     "power": "1",
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "880fcf86-e6a9-482c-b91d-750f293127b2",
+   "scryfallId": "a934590b-5c70-4f07-af67-fbe817a99531",
+   "name": "Miirym, Sentinel Wyrm",
+   "frontName": "Miirym, Sentinel Wyrm",
+   "layout": "normal",
+   "manaCost": "{3}{G}{U}{R}",
+   "cmc": 6,
+   "typeLine": "Legendary Creature — Dragon Spirit",
+   "frontTypeLine": "Legendary Creature — Dragon Spirit",
+   "oracleText": "Flying, ward {2}\nWhenever another nontoken Dragon you control enters, create a token that's a copy of it, except the token isn't legendary.",
+   "colors": [
+    "G",
+    "R",
+    "U"
+   ],
+   "colorIdentity": [
+    "G",
+    "R",
+    "U"
+   ],
+   "keywords": [
+    "Flying",
+    "Ward"
+   ],
+   "power": "6",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1474,
+   "priceUsd": 4.61,
+   "faces": [
+    {
+     "name": "Miirym, Sentinel Wyrm",
+     "manaCost": "{3}{G}{U}{R}",
+     "typeLine": "Legendary Creature — Dragon Spirit",
+     "oracleText": "Flying, ward {2}\nWhenever another nontoken Dragon you control enters, create a token that's a copy of it, except the token isn't legendary.",
+     "power": "6",
+     "colors": [
+      "G",
+      "R",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "87b22b09-4f6d-4bc5-9cfc-663e4c7c6981",
+   "scryfallId": "10d42b35-844f-4a64-9981-c6118d45e826",
+   "name": "The Ur-Dragon",
+   "frontName": "The Ur-Dragon",
+   "layout": "normal",
+   "manaCost": "{4}{W}{U}{B}{R}{G}",
+   "cmc": 9,
+   "typeLine": "Legendary Creature — Dragon Avatar",
+   "frontTypeLine": "Legendary Creature — Dragon Avatar",
+   "oracleText": "Eminence — As long as The Ur-Dragon is in the command zone or on the battlefield, other Dragon spells you cast cost {1} less to cast.\nFlying\nWhenever one or more Dragons you control attack, draw that many cards, then you may put a permanent card from your hand onto the battlefield.",
+   "colors": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "keywords": [
+    "Flying",
+    "Eminence"
+   ],
+   "power": "10",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 2700,
+   "priceUsd": 36.64,
+   "faces": [
+    {
+     "name": "The Ur-Dragon",
+     "manaCost": "{4}{W}{U}{B}{R}{G}",
+     "typeLine": "Legendary Creature — Dragon Avatar",
+     "oracleText": "Eminence — As long as The Ur-Dragon is in the command zone or on the battlefield, other Dragon spells you cast cost {1} less to cast.\nFlying\nWhenever one or more Dragons you control attack, draw that many cards, then you may put a permanent card from your hand onto the battlefield.",
+     "power": "10",
+     "colors": [
+      "B",
+      "G",
+      "R",
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "05a6a571-643e-429e-8e5c-1c3f8b0dc746",
+   "scryfallId": "df459109-d6ab-4b1d-9570-c7677ff4a014",
+   "name": "Utvara Hellkite",
+   "frontName": "Utvara Hellkite",
+   "layout": "normal",
+   "manaCost": "{6}{R}{R}",
+   "cmc": 8,
+   "typeLine": "Creature — Dragon",
+   "frontTypeLine": "Creature — Dragon",
+   "oracleText": "Flying\nWhenever a Dragon you control attacks, create a 6/6 red Dragon creature token with flying.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "6",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1522,
+   "priceUsd": 15.64,
+   "faces": [
+    {
+     "name": "Utvara Hellkite",
+     "manaCost": "{6}{R}{R}",
+     "typeLine": "Creature — Dragon",
+     "oracleText": "Flying\nWhenever a Dragon you control attacks, create a 6/6 red Dragon creature token with flying.",
+     "power": "6",
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "0a147009-a57c-4ac1-ab81-d8bd8b737631",
+   "scryfallId": "e6bd7225-b39f-4b3b-8c36-dbc2c09f6e50",
+   "name": "Scourge of Valkas",
+   "frontName": "Scourge of Valkas",
+   "layout": "normal",
+   "manaCost": "{2}{R}{R}{R}",
+   "cmc": 5,
+   "typeLine": "Creature — Dragon",
+   "frontTypeLine": "Creature — Dragon",
+   "oracleText": "Flying\nWhenever this creature or another Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control.\n{R}: This creature gets +1/+0 until end of turn.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": "4",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1500,
+   "priceUsd": 3.97,
+   "faces": [
+    {
+     "name": "Scourge of Valkas",
+     "manaCost": "{2}{R}{R}{R}",
+     "typeLine": "Creature — Dragon",
+     "oracleText": "Flying\nWhenever this creature or another Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control.\n{R}: This creature gets +1/+0 until end of turn.",
+     "power": "4",
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "6b8cf2a0-b045-4d91-9d91-c602d40c6237",
+   "scryfallId": "f79de5e7-1545-420c-bfe1-ee2444fca85b",
+   "name": "Basalt Monolith",
+   "frontName": "Basalt Monolith",
+   "layout": "normal",
+   "manaCost": "{3}",
+   "cmc": 3,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "This artifact doesn't untap during your untap step.\n{T}: Add {C}{C}{C}.\n{3}: Untap this artifact.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [],
+   "power": null,
+   "producedMana": [
+    "C"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 566,
+   "priceUsd": 5.4,
+   "faces": [
+    {
+     "name": "Basalt Monolith",
+     "manaCost": "{3}",
+     "typeLine": "Artifact",
+     "oracleText": "This artifact doesn't untap during your untap step.\n{T}: Add {C}{C}{C}.\n{3}: Untap this artifact.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1a85ba2b-ae10-4917-954a-7709b75a9740",
+   "scryfallId": "c513f51b-a0db-4c08-8acc-1e91060b93b7",
+   "name": "Tainted Pact",
+   "frontName": "Tainted Pact",
+   "layout": "normal",
+   "manaCost": "{1}{B}",
+   "cmc": 2,
+   "typeLine": "Instant",
+   "frontTypeLine": "Instant",
+   "oracleText": "Exile the top card of your library. You may put that card into your hand unless it has the same name as another card exiled this way. Repeat this process until you put a card into your hand or you exile two cards with the same name, whichever comes first.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 903,
+   "priceUsd": 41.74,
+   "faces": [
+    {
+     "name": "Tainted Pact",
+     "manaCost": "{1}{B}",
+     "typeLine": "Instant",
+     "oracleText": "Exile the top card of your library. You may put that card into your hand unless it has the same name as another card exiled this way. Repeat this process until you put a card into your hand or you exile two cards with the same name, whichever comes first.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "1d67f5ff-1fce-45e5-b6a1-416c569351e2",
+   "scryfallId": "995486ce-58bb-4753-a812-0ca73ef1a235",
+   "name": "Gitaxian Probe",
+   "frontName": "Gitaxian Probe",
+   "layout": "normal",
+   "manaCost": "{U/P}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "({U/P} can be paid with either {U} or 2 life.)\nLook at target player's hand.\nDraw a card.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 531,
+   "priceUsd": 3.19,
+   "faces": [
+    {
+     "name": "Gitaxian Probe",
+     "manaCost": "{U/P}",
+     "typeLine": "Sorcery",
+     "oracleText": "({U/P} can be paid with either {U} or 2 life.)\nLook at target player's hand.\nDraw a card.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "9a1de7e4-9930-4db3-a8f3-d146d0abf38b",
+   "scryfallId": "22d6a4c9-4bdd-4e70-8481-95260e6aa7ab",
+   "name": "Edric, Spymaster of Trest",
+   "frontName": "Edric, Spymaster of Trest",
+   "layout": "normal",
+   "manaCost": "{1}{G}{U}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Elf Rogue",
+   "frontTypeLine": "Legendary Creature — Elf Rogue",
+   "oracleText": "Whenever a creature deals combat damage to one of your opponents, its controller may draw a card.",
+   "colors": [
+    "G",
+    "U"
+   ],
+   "colorIdentity": [
+    "G",
+    "U"
+   ],
+   "keywords": [],
+   "power": "2",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 3503,
+   "priceUsd": 3.03,
+   "faces": [
+    {
+     "name": "Edric, Spymaster of Trest",
+     "manaCost": "{1}{G}{U}",
+     "typeLine": "Legendary Creature — Elf Rogue",
+     "oracleText": "Whenever a creature deals combat damage to one of your opponents, its controller may draw a card.",
+     "power": "2",
+     "colors": [
+      "G",
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "8a05ec32-7b0c-4f23-a4f7-413301c2a70a",
+   "scryfallId": "3c3d9916-76c4-425a-a215-6226d0921f0b",
+   "name": "Coastal Piracy",
+   "frontName": "Coastal Piracy",
+   "layout": "normal",
+   "manaCost": "{2}{U}{U}",
+   "cmc": 4,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever a creature you control deals combat damage to an opponent, you may draw a card.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1525,
+   "priceUsd": 0.28,
+   "faces": [
+    {
+     "name": "Coastal Piracy",
+     "manaCost": "{2}{U}{U}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever a creature you control deals combat damage to an opponent, you may draw a card.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e1afaef7-9fa3-4662-a95f-adfb0da9fd11",
+   "scryfallId": "94751d5e-7693-44af-b1b5-e440677dc7a2",
+   "name": "Bident of Thassa",
+   "frontName": "Bident of Thassa",
+   "layout": "normal",
+   "manaCost": "{2}{U}{U}",
+   "cmc": 4,
+   "typeLine": "Legendary Enchantment Artifact",
+   "frontTypeLine": "Legendary Enchantment Artifact",
+   "oracleText": "Whenever a creature you control deals combat damage to a player, you may draw a card.\n{1}{U}, {T}: Creatures your opponents control attack this turn if able.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 447,
+   "priceUsd": 0.63,
+   "faces": [
+    {
+     "name": "Bident of Thassa",
+     "manaCost": "{2}{U}{U}",
+     "typeLine": "Legendary Enchantment Artifact",
+     "oracleText": "Whenever a creature you control deals combat damage to a player, you may draw a card.\n{1}{U}, {T}: Creatures your opponents control attack this turn if able.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "04cf02dc-f053-414e-87d8-1537f25bcbf4",
+   "scryfallId": "db89ae4d-1cc2-41d8-a4de-a54b958c4429",
+   "name": "Lotus Bloom",
+   "frontName": "Lotus Bloom",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Suspend"
+   ],
+   "power": null,
+   "producedMana": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4085,
+   "priceUsd": 3.75,
+   "faces": [
+    {
+     "name": "Lotus Bloom",
+     "manaCost": "",
+     "typeLine": "Artifact",
+     "oracleText": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "a8abd966-de7b-46a3-8ac7-8747ab35653a",
+   "scryfallId": "2597050f-6b1b-474e-aa16-33fd154628ca",
+   "name": "Wheel of Fortune",
+   "frontName": "Wheel of Fortune",
+   "layout": "normal",
+   "manaCost": "{2}{R}",
+   "cmc": 3,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Each player discards their hand, then draws seven cards.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "R"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 580,
+   "priceUsd": null,
+   "faces": [
+    {
+     "name": "Wheel of Fortune",
+     "manaCost": "{2}{R}",
+     "typeLine": "Sorcery",
+     "oracleText": "Each player discards their hand, then draws seven cards.",
+     "power": null,
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "65114758-9a75-43a7-96e8-0aa68faa6b24",
+   "scryfallId": "a062a004-984e-4b62-960c-af7288f7a3e9",
+   "name": "Isshin, Two Heavens as One",
+   "frontName": "Isshin, Two Heavens as One",
+   "layout": "normal",
+   "manaCost": "{R}{W}{B}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Human Samurai",
+   "frontTypeLine": "Legendary Creature — Human Samurai",
+   "oracleText": "If a creature attacking causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.",
+   "colors": [
+    "B",
+    "R",
+    "W"
+   ],
+   "colorIdentity": [
+    "B",
+    "R",
+    "W"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1462,
+   "priceUsd": 3.96,
+   "faces": [
+    {
+     "name": "Isshin, Two Heavens as One",
+     "manaCost": "{R}{W}{B}",
+     "typeLine": "Legendary Creature — Human Samurai",
+     "oracleText": "If a creature attacking causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time.",
+     "power": "3",
+     "colors": [
+      "B",
+      "R",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "73089a39-a2f6-4aa2-a058-e6551475153d",
+   "scryfallId": "ad4de9f1-7a39-45af-828e-c59234d9e9b9",
+   "name": "Sanguine Bond",
+   "frontName": "Sanguine Bond",
+   "layout": "normal",
+   "manaCost": "{3}{B}{B}",
+   "cmc": 5,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever you gain life, target opponent loses that much life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 506,
+   "priceUsd": 6.19,
+   "faces": [
+    {
+     "name": "Sanguine Bond",
+     "manaCost": "{3}{B}{B}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever you gain life, target opponent loses that much life.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "8f933fae-6c0c-42d7-a817-14760d8285cd",
+   "scryfallId": "0e8ccfa7-4178-476a-a155-0ca1c98556c9",
+   "name": "Exquisite Blood",
+   "frontName": "Exquisite Blood",
+   "layout": "normal",
+   "manaCost": "{4}{B}",
+   "cmc": 5,
+   "typeLine": "Enchantment",
+   "frontTypeLine": "Enchantment",
+   "oracleText": "Whenever an opponent loses life, you gain that much life.",
+   "colors": [
+    "B"
+   ],
+   "colorIdentity": [
+    "B"
+   ],
+   "keywords": [],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 521,
+   "priceUsd": 39.27,
+   "faces": [
+    {
+     "name": "Exquisite Blood",
+     "manaCost": "{4}{B}",
+     "typeLine": "Enchantment",
+     "oracleText": "Whenever an opponent loses life, you gain that much life.",
+     "power": null,
+     "colors": [
+      "B"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "09619943-6aec-4080-ace5-a0c6ebb23f1c",
+   "scryfallId": "2cb1d1da-6077-46b5-8c63-39882b8016f2",
+   "name": "Najeela, the Blade-Blossom",
+   "frontName": "Najeela, the Blade-Blossom",
+   "layout": "normal",
+   "manaCost": "{2}{R}",
+   "cmc": 3,
+   "typeLine": "Legendary Creature — Human Warrior",
+   "frontTypeLine": "Legendary Creature — Human Warrior",
+   "oracleText": "Whenever a Warrior attacks, you may have its controller create a 1/1 white Warrior creature token that's tapped and attacking.\n{W}{U}{B}{R}{G}: Untap all attacking creatures. They gain trample, lifelink, and haste until end of turn. After this phase, there is an additional combat phase. Activate only during combat.",
+   "colors": [
+    "R"
+   ],
+   "colorIdentity": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "keywords": [],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 5600,
+   "priceUsd": 6.41,
+   "faces": [
+    {
+     "name": "Najeela, the Blade-Blossom",
+     "manaCost": "{2}{R}",
+     "typeLine": "Legendary Creature — Human Warrior",
+     "oracleText": "Whenever a Warrior attacks, you may have its controller create a 1/1 white Warrior creature token that's tapped and attacking.\n{W}{U}{B}{R}{G}: Untap all attacking creatures. They gain trample, lifelink, and haste until end of turn. After this phase, there is an additional combat phase. Activate only during combat.",
+     "power": "3",
+     "colors": [
+      "R"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "7b8528b0-71eb-4c9e-bed9-aa2d2e84038f",
+   "scryfallId": "d27cf7b7-7982-46bd-a559-7789c0e74bae",
+   "name": "Kozilek, Butcher of Truth",
+   "frontName": "Kozilek, Butcher of Truth",
+   "layout": "normal",
+   "manaCost": "{10}",
+   "cmc": 10,
+   "typeLine": "Legendary Creature — Eldrazi",
+   "frontTypeLine": "Legendary Creature — Eldrazi",
+   "oracleText": "When you cast this spell, draw four cards.\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Kozilek is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Annihilator"
+   ],
+   "power": "12",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 1108,
+   "priceUsd": 47.78,
+   "faces": [
+    {
+     "name": "Kozilek, Butcher of Truth",
+     "manaCost": "{10}",
+     "typeLine": "Legendary Creature — Eldrazi",
+     "oracleText": "When you cast this spell, draw four cards.\nAnnihilator 4 (Whenever this creature attacks, defending player sacrifices four permanents of their choice.)\nWhen Kozilek is put into a graveyard from anywhere, its owner shuffles their graveyard into their library.",
+     "power": "12",
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "e7fc5ad6-f2f0-4b06-a61b-05022db9d93b",
+   "scryfallId": "1e90c638-d4b2-4243-bbc4-1cc10516c40f",
+   "name": "Arcades, the Strategist",
+   "frontName": "Arcades, the Strategist",
+   "layout": "normal",
+   "manaCost": "{1}{G}{W}{U}",
+   "cmc": 4,
+   "typeLine": "Legendary Creature — Elder Dragon",
+   "frontTypeLine": "Legendary Creature — Elder Dragon",
+   "oracleText": "Flying, vigilance\nWhenever a creature you control with defender enters, draw a card.\nEach creature you control with defender assigns combat damage equal to its toughness rather than its power and can attack as though it didn't have defender.",
+   "colors": [
+    "G",
+    "U",
+    "W"
+   ],
+   "colorIdentity": [
+    "G",
+    "U",
+    "W"
+   ],
+   "keywords": [
+    "Flying",
+    "Vigilance"
+   ],
+   "power": "3",
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 5863,
+   "priceUsd": 3.6,
+   "faces": [
+    {
+     "name": "Arcades, the Strategist",
+     "manaCost": "{1}{G}{W}{U}",
+     "typeLine": "Legendary Creature — Elder Dragon",
+     "oracleText": "Flying, vigilance\nWhenever a creature you control with defender enters, draw a card.\nEach creature you control with defender assigns combat damage equal to its toughness rather than its power and can attack as though it didn't have defender.",
+     "power": "3",
+     "colors": [
+      "G",
+      "U",
+      "W"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "56956afd-db53-4542-816b-490c8b0bbcf7",
+   "scryfallId": "5b75eb6b-d76c-4b92-b042-13493f9ef164",
+   "name": "Serum Visions",
+   "frontName": "Serum Visions",
+   "layout": "normal",
+   "manaCost": "{U}",
+   "cmc": 1,
+   "typeLine": "Sorcery",
+   "frontTypeLine": "Sorcery",
+   "oracleText": "Draw a card. Scry 2.",
+   "colors": [
+    "U"
+   ],
+   "colorIdentity": [
+    "U"
+   ],
+   "keywords": [
+    "Scry"
+   ],
+   "power": null,
+   "producedMana": [],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 898,
+   "priceUsd": 1.74,
+   "faces": [
+    {
+     "name": "Serum Visions",
+     "manaCost": "{U}",
+     "typeLine": "Sorcery",
+     "oracleText": "Draw a card. Scry 2.",
+     "power": null,
+     "colors": [
+      "U"
+     ]
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  },
+  {
+   "oracleId": "cc319819-68f9-4c1e-8d60-25a5e3e50669",
+   "scryfallId": "dcd05b01-dc73-4dd2-970a-32ec6e153c86",
+   "name": "Mox Tantalite",
+   "frontName": "Mox Tantalite",
+   "layout": "normal",
+   "manaCost": "",
+   "cmc": 0,
+   "typeLine": "Artifact",
+   "frontTypeLine": "Artifact",
+   "oracleText": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}: Add one mana of any color.",
+   "colors": [],
+   "colorIdentity": [],
+   "keywords": [
+    "Suspend"
+   ],
+   "power": null,
+   "producedMana": [
+    "B",
+    "G",
+    "R",
+    "U",
+    "W"
+   ],
+   "legality": "legal",
+   "gameChanger": false,
+   "edhrecRank": 4455,
+   "priceUsd": 9.87,
+   "faces": [
+    {
+     "name": "Mox Tantalite",
+     "manaCost": "",
+     "typeLine": "Artifact",
+     "oracleText": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}: Add one mana of any color.",
+     "power": null,
+     "colors": []
+    }
+   ],
+   "imageFaces": 1,
+   "isMeldResult": false
+  }
+ ],
+ "tags": {
+  "a7043fbd-1dfd-42cf-be4b-cc343d0949e5": [
+   "activate-from-command-zone",
+   "activated-ability",
+   "attacking-matters",
+   "bounce",
+   "card-advantage",
+   "cheaper-than-mv",
+   "commander-matters",
+   "commander-tax-evasion",
+   "cost-ignorer",
+   "curiosity-like",
+   "cycle",
+   "cycle-c18-sub-commander",
+   "cycle-cmm-r-two-color-legend",
+   "group-slug",
+   "impulse",
+   "mana-value-matters",
+   "opponent-loses-life",
+   "repeatable-card-advantage",
+   "repeatable-impulse",
+   "rescue",
+   "rescue-creature",
+   "saboteur",
+   "scales-with-mana-value",
+   "sneak",
+   "sneak-from-command-zone",
+   "sneak-self",
+   "synergy-commander",
+   "top-matters",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-ninja",
+   "unique-cr-reference",
+   "unique-keyword"
+  ],
+  "4fc5f871-a809-4a4a-adfb-eb4cd52837c8": [
+   "activate-from-hand",
+   "activated-ability",
+   "attacking-matters",
+   "bounce",
+   "card-advantage",
+   "cheaper-than-mv",
+   "control-changing-effects",
+   "cost-ignorer",
+   "curiosity-like",
+   "cycle",
+   "cycle-mh1-r-two-color",
+   "free-cast-another",
+   "gives-castable-from-exile",
+   "gives-castable-from-nonhand",
+   "ingest",
+   "mill",
+   "mill-exile",
+   "mill-opponent",
+   "nightveil-theft",
+   "ninjutsu",
+   "repeatable-card-advantage",
+   "rescue",
+   "rescue-creature",
+   "saboteur",
+   "sneak",
+   "sneak-self",
+   "theft",
+   "theft-cast",
+   "triggered-ability",
+   "unique-type-line"
+  ],
+  "354defd2-f63f-4a48-9fd4-2526b3878a84": [
+   "activate-from-hand",
+   "activated-ability",
+   "alliteration",
+   "attacking-matters",
+   "bounce",
+   "card-advantage",
+   "card-names",
+   "cheaper-than-mv",
+   "cost-ignorer",
+   "curiosity",
+   "curiosity-like",
+   "cycle",
+   "cycle-mh1-draft-signpost",
+   "draft-signpost",
+   "draw",
+   "draw-engine",
+   "ninjutsu",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "rescue",
+   "rescue-creature",
+   "saboteur",
+   "sneak",
+   "sneak-self",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-ninja",
+   "unique-type-line"
+  ],
+  "1f3c2b00-0000-4ae1-9650-9553accac52e": [
+   "activate-from-hand",
+   "activated-ability",
+   "attacking-matters",
+   "bounce",
+   "card-advantage",
+   "cheaper-than-mv",
+   "cost-ignorer",
+   "curiosity",
+   "curiosity-like",
+   "draw",
+   "draw-engine",
+   "ninjutsu",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "rescue",
+   "rescue-creature",
+   "saboteur",
+   "sneak",
+   "sneak-self",
+   "triggered-ability"
+  ],
+  "98636623-bbc6-4935-a2bb-2234691eb6d8": [
+   "activate-from-hand",
+   "activated-ability",
+   "attacking-matters",
+   "bounce",
+   "copy",
+   "copy-creature",
+   "cost-ignorer",
+   "enters-in-company",
+   "evasion",
+   "flavors-of-vanilla",
+   "intervening-if-clause",
+   "more-expensive-than-mv",
+   "multiple-bodies",
+   "ninjutsu",
+   "rescue",
+   "rescue-creature",
+   "sneak",
+   "sneak-self",
+   "triggered-ability",
+   "virtual-french-vanilla"
+  ],
+  "a61ef0cc-1da9-49f9-b0dc-01cf9f6205be": [
+   "cda-subtype",
+   "changeling",
+   "characteristic-defining-ability",
+   "drawback",
+   "evasion",
+   "unblockable"
+  ],
+  "b2e65e8b-5f08-4cc2-ab1d-00f8903dbea2": [
+   "bottom-deck-manipulation",
+   "evasion",
+   "flavors-of-vanilla",
+   "library-manipulation",
+   "peek",
+   "peek-library",
+   "scry",
+   "top-deck-manipulation",
+   "triggered-ability",
+   "virtual-french-vanilla"
+  ],
+  "5a55641b-0818-4418-a2e5-44157056353c": [
+   "evasion",
+   "type-errata",
+   "type-errata-genericise",
+   "type-errata-naga",
+   "unblockable"
+  ],
+  "a3a98bc9-caa0-49b7-951c-fe4e4f54e4ba": [
+   "card-names",
+   "evasion",
+   "flavors-of-vanilla",
+   "french-vanilla",
+   "has-identical-token",
+   "manaless-value",
+   "single-english-word-name",
+   "token-versions-of-cards",
+   "type-addition-from-none",
+   "type-errata",
+   "type-errata-addition"
+  ],
+  "52237e6b-19f6-405c-a668-545c4ccb1b6d": [
+   "activated-ability",
+   "cda-subtype",
+   "changeling",
+   "characteristic-defining-ability",
+   "cycle",
+   "cycle-mor-c-changeling",
+   "evasion",
+   "gains-flying",
+   "jump",
+   "tap-fuel-creature",
+   "tap-outlet"
+  ],
+  "880fcf86-e6a9-482c-b91d-750f293127b2": [
+   "copy",
+   "copy-creature",
+   "copy-legendary",
+   "cycle",
+   "cycle-clb-tricolor-legend",
+   "dnd",
+   "dnd-character",
+   "evasion",
+   "hate",
+   "hate-target",
+   "noncreature-typal",
+   "protects-self",
+   "repeatable-creature-tokens",
+   "repeatable-token-generator",
+   "rhystic",
+   "tax",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-dragon",
+   "ward"
+  ],
+  "87b22b09-4f6d-4bc5-9cfc-663e4c7c6981": [
+   "attack-trigger",
+   "attacking-matters",
+   "card-advantage",
+   "cost-ignorer",
+   "cost-reducer",
+   "cost-reducer-creature",
+   "cycle",
+   "cycle-c17-eminence-commander",
+   "draw",
+   "draw-engine",
+   "eminence",
+   "evasion",
+   "face-commander",
+   "land-ramp",
+   "noncreature-typal",
+   "pure-draw",
+   "ramp",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "sneak",
+   "sneak-permanent",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-dragon",
+   "unique-mana-cost"
+  ],
+  "05a6a571-643e-429e-8e5c-1c3f8b0dc746": [
+   "attack-trigger",
+   "attacking-matters",
+   "cycle",
+   "cycle-rtr-m-monocolor",
+   "evasion",
+   "exponential",
+   "repeatable-creature-tokens",
+   "repeatable-token-generator",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-dragon"
+  ],
+  "0a147009-a57c-4ac1-ab81-d8bd8b737631": [
+   "activated-ability",
+   "bottomless-mana-sink",
+   "burn",
+   "burn-any",
+   "burn-battle",
+   "burn-creature",
+   "burn-planeswalker",
+   "burn-player",
+   "creaturefall",
+   "cycle",
+   "cycle-m14-iconic-creature",
+   "evasion",
+   "firebreathing",
+   "impact-effect",
+   "mana-sink",
+   "noncreature-typal",
+   "removal",
+   "removal-burn",
+   "removal-creature",
+   "removal-planeswalker",
+   "repeatable-crime",
+   "repeatable-removal",
+   "spot-removal",
+   "thingfall",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-dragon"
+  ],
+  "6b8cf2a0-b045-4d91-9d91-c602d40c6237": [
+   "activated-ability",
+   "adds-multiple-mana",
+   "doesn-t-untap",
+   "full-refund",
+   "fun-ruling",
+   "mana-producer",
+   "mana-rock",
+   "ramp",
+   "refund",
+   "untapper",
+   "untaps-self"
+  ],
+  "1a85ba2b-ae10-4917-954a-7709b75a9740": [
+   "card-advantage",
+   "consult",
+   "name-matters",
+   "stronger-in-singleton-formats"
+  ],
+  "1d67f5ff-1fce-45e5-b6a1-416c569351e2": [
+   "alternate-cost-life",
+   "black-effect",
+   "cantrip",
+   "card-advantage",
+   "card-names",
+   "cheaper-than-mv",
+   "discount-self",
+   "draw",
+   "life-for-cards",
+   "life-payment",
+   "manaless-value",
+   "namesake-spell",
+   "peek",
+   "peek-hand",
+   "phyrexian-mana",
+   "phyrexian-mana-cost",
+   "pure-draw",
+   "single-target-instant-sorcery"
+  ],
+  "9a1de7e4-9930-4db3-a8f3-d146d0abf38b": [
+   "card-advantage",
+   "curiosity",
+   "curiosity-like",
+   "cycle",
+   "cycle-cmd-enemy-legend",
+   "cycle-cns-r-two-color",
+   "cycle-vma-r-two-color",
+   "draw",
+   "draw-engine",
+   "group-hug",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "saboteur",
+   "triggered-ability",
+   "unique-type-line"
+  ],
+  "8a05ec32-7b0c-4f23-a4f7-413301c2a70a": [
+   "card-advantage",
+   "curiosity",
+   "curiosity-like",
+   "draw",
+   "draw-engine",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "saboteur",
+   "triggered-ability"
+  ],
+  "e1afaef7-9fa3-4662-a95f-adfb0da9fd11": [
+   "activated-ability",
+   "card-advantage",
+   "card-names",
+   "combat-manipulation",
+   "curiosity",
+   "curiosity-like",
+   "cycle",
+   "cycle-ths-god-weapon",
+   "draw",
+   "draw-engine",
+   "force-attacker",
+   "namesake-spell",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "saboteur",
+   "triggered-ability"
+  ],
+  "04cf02dc-f053-414e-87d8-1537f25bcbf4": [
+   "activated-ability",
+   "adds-multiple-mana",
+   "alternative-cost",
+   "cast-on-resolution",
+   "castable-from-exile",
+   "castable-from-nonhand",
+   "cycle",
+   "cycle-tsp-no-mana-cost-suspend",
+   "egg",
+   "exile-self",
+   "intervening-if-clause",
+   "mana-egg",
+   "manaless-value",
+   "ramp",
+   "sacrifice-self",
+   "spell-with-no-casting-cost",
+   "trigger-from-exile",
+   "triggered-ability",
+   "unexile"
+  ],
+  "a8abd966-de7b-46a3-8ac7-8747ab35653a": [
+   "black-effect",
+   "burst-draw",
+   "card-advantage",
+   "discard",
+   "discard-outlet",
+   "ditch-hand",
+   "draw",
+   "force-draw",
+   "hand-disruption",
+   "symmetrical",
+   "wheel",
+   "wheel-symmetrical"
+  ],
+  "65114758-9a75-43a7-96e8-0aa68faa6b24": [
+   "attacking-matters",
+   "hate",
+   "hate-attacker",
+   "trigger-doubler"
+  ],
+  "73089a39-a2f6-4aa2-a058-e6551475153d": [
+   "lifegain-matters",
+   "lifegain-to-damage",
+   "opponent-loses-life",
+   "repeatable-crime",
+   "triggered-ability"
+  ],
+  "8f933fae-6c0c-42d7-a817-14760d8285cd": [
+   "life-loss-matters",
+   "lifegain",
+   "repeatable-lifegain",
+   "triggered-ability"
+  ],
+  "09619943-6aec-4080-ace5-a0c6ebb23f1c": [
+   "5c-set-mechanic-commander",
+   "activated-ability",
+   "alliteration",
+   "attack-trigger",
+   "attacking-matters",
+   "card-names",
+   "donate-token",
+   "exponential",
+   "extra-combat-phase",
+   "gains-lifelink",
+   "gains-trample",
+   "gives-haste",
+   "gives-lifelink",
+   "gives-trample",
+   "lifegain",
+   "offcolor-ability",
+   "out-of-color-token",
+   "phase-manipulation",
+   "repeatable-creature-tokens",
+   "repeatable-lifegain",
+   "repeatable-token-generator",
+   "staple-with-set-s-mechanic",
+   "triggered-ability",
+   "typal",
+   "typal-creature",
+   "typal-warrior",
+   "untapper",
+   "untapper-creature"
+  ],
+  "7b8528b0-71eb-4c9e-bed9-aa2d2e84038f": [
+   "attack-trigger",
+   "attacking-matters-self",
+   "burst-draw",
+   "card-advantage",
+   "cast-trigger",
+   "cast-trigger-self",
+   "cycle-roe-titan",
+   "draw",
+   "eldrazi-titan",
+   "pure-draw",
+   "recursion",
+   "recursion-self",
+   "removal",
+   "removal-artifact",
+   "removal-aura",
+   "removal-battle",
+   "removal-creature",
+   "removal-enchantment",
+   "removal-equipment",
+   "removal-land",
+   "removal-permanent",
+   "removal-planeswalker",
+   "removal-sacrifice",
+   "removal-spacecraft",
+   "removal-vehicle",
+   "repeatable-removal",
+   "restock",
+   "restock-self",
+   "spot-removal",
+   "titan-immortality",
+   "triggered-ability"
+  ],
+  "e7fc5ad6-f2f0-4b06-a61b-05022db9d93b": [
+   "buttstrike",
+   "card-advantage",
+   "creature-engine",
+   "creaturefall",
+   "cycle",
+   "cycle-m19-elder-dragon",
+   "draw",
+   "draw-engine",
+   "evasion",
+   "pure-draw",
+   "repeatable-card-advantage",
+   "repeatable-draw",
+   "repeatable-pure-draw",
+   "synergy-defender",
+   "thingfall",
+   "toughness-matters",
+   "triggered-ability",
+   "turns-off-defender"
+  ],
+  "56956afd-db53-4542-816b-490c8b0bbcf7": [
+   "bottom-deck-manipulation",
+   "cantrip",
+   "card-advantage",
+   "draw",
+   "library-manipulation",
+   "peek",
+   "peek-library",
+   "pure-draw",
+   "scry",
+   "top-deck-manipulation"
+  ],
+  "cc319819-68f9-4c1e-8d60-25a5e3e50669": [
+   "activated-ability",
+   "alternative-cost",
+   "cast-on-resolution",
+   "castable-from-exile",
+   "castable-from-nonhand",
+   "exile-self",
+   "intervening-if-clause",
+   "mana-producer",
+   "mana-rock",
+   "manaless-value",
+   "moxen",
+   "ramp",
+   "spell-with-no-casting-cost",
+   "trigger-from-exile",
+   "triggered-ability",
+   "unexile"
+  ]
+ },
+ "combos": [
+  {
+   "id": "129-4131",
+   "cards": [
+    {
+     "oracleId": "8d11aa49-d4cd-48b1-aa0f-8548fa733416",
+     "mustBeCommander": false
+    },
+    {
+     "oracleId": "6b8cf2a0-b045-4d91-9d91-c602d40c6237",
+     "mustBeCommander": false
+    }
+   ],
+   "requiresCount": 0,
+   "bracketTag": "R",
+   "manaValueNeeded": 0,
+   "produces": [
+    "Infinite colorless mana"
+   ],
+   "popularity": 47016
+  },
+  {
+   "id": "1295-3093",
+   "cards": [
+    {
+     "oracleId": "1a85ba2b-ae10-4917-954a-7709b75a9740",
+     "mustBeCommander": false
+    },
+    {
+     "oracleId": "1de1b591-a73f-4974-b507-8c63e07a0868",
+     "mustBeCommander": false
+    }
+   ],
+   "requiresCount": 0,
+   "bracketTag": "R",
+   "manaValueNeeded": 4,
+   "produces": [
+    "Win the game"
+   ],
+   "popularity": 132759
+  },
+  {
+   "id": "690-3966",
+   "cards": [
+    {
+     "oracleId": "73089a39-a2f6-4aa2-a058-e6551475153d",
+     "mustBeCommander": false
+    },
+    {
+     "oracleId": "8f933fae-6c0c-42d7-a817-14760d8285cd",
+     "mustBeCommander": false
+    }
+   ],
+   "requiresCount": 0,
+   "bracketTag": "S",
+   "manaValueNeeded": 0,
+   "produces": [
+    "Infinite lifegain triggers",
+    "Infinite lifeloss",
+    "Infinite lifegain"
+   ],
+   "popularity": 152180
+  }
+ ]
+}
