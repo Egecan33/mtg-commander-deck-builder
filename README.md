@@ -29,6 +29,8 @@ It runs on your machine. Card data and about 66,000 card images are downloaded o
 - **Themes from the commander's own text.** Tokens, counters, sacrifice, spellslinger, landfall, typal for any creature type and more, with sliders when you disagree.
 - **Combos.** What your deck already contains and what is one card away.
 - **Your collection.** Import a CSV or list, mark what you own, build from owned cards only.
+- **Directed improve.** Tell an improve run what you want: change at most N cards, aim for another bracket, more win conditions, removal, card draw or ramp, or lean into one theme. Each swap says which goal it serves. "Add one" buttons suggest a single card of a kind with the card to cut for it, and each deck can set its own wanted counts (win conditions default to 4–6). When the engine thinks a change is not an improvement it still offers it, marked with its objection.
+- **Proxies.** Put any card, the cards an improve run proposes, or the cards of a deck you do not own on a proxy list, then print true-size playtest sheets (63 × 88 mm, nine per A4 or US Letter page, cut marks, optional back faces and a "not for sale" label) or download the images as a zip.
 
 <table>
 <tr>

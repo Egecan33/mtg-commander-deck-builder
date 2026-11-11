@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { CardScore, Deck, DeckEntry } from '@/engine/types';
 import { CardImage, Mana, ScoreBadge } from '../../components/card';
 import type { CardLookup, ClientCard } from '../../lib/api';
@@ -20,8 +20,10 @@ const LockIcon = ({ open = false }: { open?: boolean }) => (
 
 /** The deck as card images, grouped by what the cards do or by card type; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, grouping, layout, setGrouping, setLayout, onRemove, onAdd, onLock, onOpen,
+  deck, lookup, scoreOf, weakest, grouping, layout, setGrouping, setLayout, onRemove, onAdd, onLock, onOpen, tools,
 }: {
+  /** Extra actions for the whole deck, shown under the header. */
+  tools?: ReactNode;
   deck: Deck;
   lookup: CardLookup;
   scoreOf: (id: string) => CardScore | undefined;
@@ -73,6 +75,8 @@ export function DeckView({
           <button type="button" aria-pressed={layout === 'list'} onClick={() => setLayout('list')} data-testid="layout-list">List</button>
         </div>
       </div>
+
+      {tools && <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">{tools}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4" data-testid="deck-scroll">
         {empty && (

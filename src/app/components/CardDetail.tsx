@@ -5,6 +5,7 @@ import type { CardScore } from '@/engine/types';
 import type { ClientCard } from '../lib/api';
 import { BAND_VAR, PART_LABEL, ROLE_LABEL, bandOf, fmtPrice } from '../lib/ui';
 import { CardImage, Mana, Overlay, ScoreBadge } from './card';
+import { useProxies } from './Shell';
 
 /**
  * The card at full size with why it scores what it scores. Two-faced cards flip.
@@ -21,6 +22,8 @@ export function CardDetail({
   note?: ReactNode;
 }) {
   const [face, setFace] = useState<0 | 1>(0);
+  const proxies = useProxies();
+  const onList = proxies.qty[id] ?? 0;
   useEffect(() => setFace(0), [id]);
   const name = card?.name ?? 'Unknown card';
   const twoFaced = card?.imageFaces === 2;
@@ -118,7 +121,20 @@ export function CardDetail({
           )}
 
           {note && <div className="mt-4 text-ash">{note}</div>}
-          {actions && <div className="mt-auto flex flex-wrap gap-2 pt-6">{actions}</div>}
+          <div className="mt-auto flex flex-wrap gap-2 pt-6">
+            {actions}
+            {card && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void proxies.add([{ oracleId: id, qty: 1 }], `Added ${card.name} to the proxy list`)}
+                title="Put this card on the list of playtest proxies to print"
+                data-testid="detail-proxy"
+              >
+                {onList > 0 ? `Proxy another (${onList} on the list)` : 'Proxy'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Overlay>

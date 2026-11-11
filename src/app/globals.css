@@ -294,3 +294,108 @@ input[type='radio'] {
     transition: none !important;
   }
 }
+
+/* Proxy sheets: true-size cards (63 x 88 mm) on a white sheet, the same markup on screen and on paper. */
+.proxy-sheet {
+  position: relative;
+  box-sizing: border-box;
+  margin: 0 0 1.25rem;
+  background: #fff;
+  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.9);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.proxy-grid {
+  display: grid;
+  justify-content: start;
+  align-content: start;
+}
+.proxy-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 63mm;
+  height: 88mm;
+  overflow: hidden;
+  background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.proxy-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.proxy-label {
+  position: absolute;
+  left: 50%;
+  bottom: 0.7mm;
+  transform: translateX(-50%);
+  padding: 0.15mm 1.2mm;
+  border-radius: 0.6mm;
+  background: rgb(0 0 0 / 0.78);
+  color: #fff;
+  font: 600 1.45mm/1.5 var(--font-sans, sans-serif);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.cut-mark {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+.cut-v {
+  width: 0;
+  border-left: 0.2mm solid #000;
+  transform: translateX(-0.1mm);
+}
+.cut-h {
+  height: 0;
+  border-top: 0.2mm solid #000;
+  transform: translateY(-0.1mm);
+}
+
+/* Printing: only the proxy sheets. The app is a fixed-height dark shell on screen; on paper it is plain flow on white. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .app-shell {
+    display: block !important;
+    height: auto !important;
+    min-width: 0 !important;
+  }
+  .app-shell > main {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .proxy-layout,
+  .proxy-main {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .proxy-sheets {
+    padding: 0 !important;
+  }
+  .proxy-sheet {
+    margin: 0 !important;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .proxy-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}

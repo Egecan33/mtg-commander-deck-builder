@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bracket, CardScore, Color, Deck, Fix, SwapProposal } from '@/engine/types';
+import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
-import { useNotify } from '../../components/Shell';
+import { useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getDeck, loadEdhrec, updateDeck,
   type AnalyzeResponse, type CardLookup, type ClientCard, type ScoredCard,
@@ -16,7 +16,7 @@ import {
 } from '../../lib/ui';
 import { Browser } from './Browser';
 import { DeckView, type Grouping, type Layout } from './DeckView';
-import { BracketPanel, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet } from './Panels';
+import { ADD_ONE, BracketPanel, GOAL_CHIPS, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet } from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'rating', label: 'Rating' },
@@ -28,6 +28,8 @@ const WEAKEST = 5;
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
+  const proxies = useProxies();
+  const { status } = useStatus();
   const [deck, setDeck] = useState<Deck | null>(null);
   const [settled, setSettled] = useState<Deck | null>(null);
   const [rev, setRev] = useState(0);
@@ -44,7 +46,7 @@ export function Builder({ id }: { id: string }) {
   const [layout, setLayout] = useState<Layout>('grid');
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean } | null>(null);
-  const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '' });
+  const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
   const dirty = useRef(false);
   const saveSeq = useRef(0);
@@ -201,6 +203,12 @@ export function Builder({ id }: { id: string }) {
     return new Set(scored.slice(0, WEAKEST).map((x) => x.id));
   }, [deck, analysis, lookup]);
 
+  // The deck's themes, strongest first, for "Lean into theme".
+  const themeAxes = useMemo(() => {
+    const w = analysis?.themeWeights ?? {};
+    return Object.keys(w).filter((a) => (w[a] ?? 0) > 0).sort((a, b) => (w[b] ?? 0) - (w[a] ?? 0) || a.localeCompare(b));
+  }, [analysis]);
+
   // ---- build actions
   const buildOpts = () => {
     const price = Number(options.maxPrice);
@@ -227,7 +235,19 @@ export function Builder({ id }: { id: string }) {
     setPanel('improve');
     const bracket = options.bracket === 'keep' ? deck.targetBracket : options.bracket;
     try {
-      const res = await buildDeck({ ...deck, targetBracket: bracket }, kind, { ...buildOpts(), count: kind === 'improve' ? 15 : 8 });
+      let res;
+      if (kind === 'improve') {
+        const typed = Math.floor(Number(options.maxSwaps));
+        const goals: ImproveGoals = {
+          maxSwaps: Number.isFinite(typed) && typed >= 1 ? Math.min(40, typed) : 15,
+          targetBracket: bracket,
+          emphasizeRoles: GOAL_CHIPS.filter((g) => options.goals.includes(g.id)).flatMap((g) => g.roles),
+          emphasizeAxes: options.lean && themeAxes.length > 0 ? [themeAxes.includes(options.leanAxis) ? options.leanAxis : themeAxes[0]!] : [],
+        };
+        res = await buildDeck(deck, 'improve', { ...buildOpts(), goals });
+      } else {
+        res = await buildDeck({ ...deck, targetBracket: bracket }, 'swaps', { ...buildOpts(), count: 8 });
+      }
       learn(res.cards);
       setProposals({ kind, bracket, items: res.proposals, asked: false });
     } catch (e) {
@@ -236,13 +256,44 @@ export function Builder({ id }: { id: string }) {
       setBusy(null);
     }
   };
+  const addOne = async (role: Role) => {
+    if (!deck) return;
+    setBusy(`add:${role}`);
+    setPanel('improve');
+    try {
+      const res = await buildDeck(deck, 'add', { ...buildOpts(), role, count: 5 });
+      learn(res.cards);
+      setProposals({ kind: 'add', bracket: deck.targetBracket, items: res.proposals, asked: false, noun: ADD_ONE.find((a) => a.role === role)?.noun });
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const proxyCards = (ids: string[], what?: string) => void proxies.add(ids.map((oracleId) => ({ oracleId, qty: 1 })), what);
+  /** The deck's cards for the proxy list: the ones not in the collection, or all of them. Basic lands are left out. */
+  const proxyDeck = (all: boolean) => {
+    if (!deck) return;
+    const wanted = [...deck.commanders.map((oracleId) => ({ oracleId, qty: 1 })), ...deck.main.map((e) => ({ oracleId: e.oracleId, qty: e.qty }))].filter((i) => {
+      const card = lookup[i.oracleId];
+      return card && !/\bBasic\b.*\bLand\b/.test(card.typeLine) && (all || !card.owned);
+    });
+    if (wanted.length === 0) {
+      notify.info(all ? 'The deck has no cards to proxy besides basic lands.' : 'You own every card in this deck (basic lands are not counted).');
+      return;
+    }
+    const n = wanted.reduce((sum, i) => sum + i.qty, 0);
+    void proxies.add(wanted, `Added ${n} ${n === 1 ? 'card' : 'cards'} ${all ? 'from this deck' : 'you do not own'} to the proxy list. Basic lands were left out.`);
+  };
   const accept = (list: SwapProposal[]) => {
     if (!proposals || !deck) return;
     const bracket = proposals.bracket;
-    const usable = list.filter((p) => entryOf(deck, p.out));
+    // A proposal with no card to cut is a plain add (the deck had open slots).
+    const usable = list.filter((p) => p.out === '' || entryOf(deck, p.out));
     if (usable.length < list.length) notify.info('A swap was skipped because its card is no longer in the deck.');
-    mutate((d) => ({ ...usable.reduce((acc, p) => swapCard(acc, p.out, p.in), d), targetBracket: bracket }));
-    setProposals({ ...proposals, asked: true, items: proposals.items.filter((p) => !list.includes(p)) });
+    mutate((d) => ({ ...usable.reduce((acc, p) => (p.out === '' ? addCard(acc, p.in) : swapCard(acc, p.out, p.in)), d), targetBracket: bracket }));
+    // "Add one" suggestions are alternatives: taking one settles the question.
+    setProposals({ ...proposals, asked: true, items: proposals.kind === 'add' ? [] : proposals.items.filter((p) => !list.includes(p)) });
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
   const doExport = async () => {
@@ -283,6 +334,7 @@ export function Builder({ id }: { id: string }) {
 
   const count = deckCount(deck);
   const rating = analysis?.rating;
+  const noCollection = status?.counts.collection === 0;
   const broken = rating ? brokenRules(rating, count) : [];
   const needsColor = rating?.violations.some((v) => v.code === 'needs-color') || deck.chosenColor !== null;
   const detailEntry = detail ? entryOf(deck, detail) : undefined;
@@ -424,6 +476,18 @@ export function Builder({ id }: { id: string }) {
           onAdd={add}
           onLock={lock}
           onOpen={openCard}
+          tools={
+            <button
+              type="button"
+              className="btn btn-sm btn-quiet"
+              disabled={deck.main.length === 0 && deck.commanders.length === 0}
+              onClick={() => proxyDeck(noCollection)}
+              title={noCollection ? 'Your collection is empty, so every card counts as not owned. Puts the whole deck on the proxy list (basic lands left out).' : 'Puts every card of this deck that is not in your collection on the proxy list (basic lands left out).'}
+              data-testid="proxy-deck"
+            >
+              {noCollection ? 'Proxy whole deck' : 'Proxy cards I don’t own'}
+            </button>
+          }
         />
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
           <div className="flex shrink-0 border-b border-slag" role="tablist">
@@ -447,7 +511,21 @@ export function Builder({ id }: { id: string }) {
             {!analysis ? (
               <p className="p-4 text-ash">Reading the deck</p>
             ) : panel === 'rating' ? (
-              <RatingPanel analysis={analysis} lookup={lookup} onFix={applyFix} onOpen={openCard} />
+              <RatingPanel
+                analysis={analysis}
+                deck={deck}
+                lookup={lookup}
+                busy={busy}
+                onFix={applyFix}
+                onOpen={openCard}
+                onAddOne={(role) => void addOne(role)}
+                onWanted={(role, n) => mutate((d) => {
+                  const next = { ...(d.roleTargets ?? {}) };
+                  if (n === null) delete next[role];
+                  else next[role] = n;
+                  return { ...d, roleTargets: Object.keys(next).length > 0 ? next : null };
+                })}
+              />
             ) : panel === 'bracket' ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} />
             ) : panel === 'themes' ? (
@@ -462,11 +540,14 @@ export function Builder({ id }: { id: string }) {
               <ImprovePanel
                 deck={deck}
                 lookup={lookup}
+                themeAxes={themeAxes}
                 options={options}
                 setOptions={setOptions}
                 proposals={proposals}
                 busy={busy}
                 onRun={(kind) => void propose(kind)}
+                onAddOne={(role) => void addOne(role)}
+                onProxy={(ids) => proxyCards(ids)}
                 onAccept={(p) => accept([p])}
                 onReject={(p) => proposals && setProposals({ ...proposals, asked: true, items: proposals.items.filter((x) => x !== p) })}
                 onApplyAll={() => proposals && accept(proposals.items)}

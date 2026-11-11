@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type ReactNode } from 'react';
-import type { Bracket, Deck, Fix, FoundCombo, SwapProposal } from '@/engine/types';
+import type { Bracket, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
 import { CardImage, ColorPip, Gauge } from '../../components/card';
 import type { AnalyzeResponse, CardLookup } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules } from '../../lib/ui';
@@ -34,8 +34,44 @@ const Section = ({ title, aside, children }: { title: string; aside?: ReactNode;
 // ---------------------------------------------------------------------------------------------
 // Rating
 
-export function RatingPanel({ analysis, lookup, onFix, onOpen }: { analysis: AnalyzeResponse; lookup: CardLookup; onFix: (fix: Fix) => void; onOpen: (id: string) => void }) {
+/** "Add one" buttons: the kinds of card a click asks the engine to suggest one more of. */
+export const ADD_ONE: { role: Role; label: string; noun: string }[] = [
+  { role: 'win-condition', label: 'Add a win condition', noun: 'a win condition' },
+  { role: 'land', label: 'Add a land', noun: 'a land' },
+  { role: 'spot-removal', label: 'Add removal', noun: 'a removal spell' },
+  { role: 'draw', label: 'Add card draw', noun: 'card draw' },
+  { role: 'ramp', label: 'Add ramp', noun: 'ramp' },
+];
+/** Which add-one buttons sit under which part of the rating. */
+const ADD_ONE_FOR: Record<string, Role[]> = { mana: ['land'], roles: ['ramp', 'draw'], interaction: ['spot-removal'], wincons: ['win-condition'] };
+
+/** Counts the user can set for this deck. `Removal` is targeted removal; counterspells keep their own band. */
+const WANTED: { role: Role; label: string }[] = [
+  { role: 'win-condition', label: 'Win conditions' },
+  { role: 'land', label: 'Lands' },
+  { role: 'ramp', label: 'Ramp' },
+  { role: 'draw', label: 'Card draw' },
+  { role: 'spot-removal', label: 'Removal' },
+  { role: 'wipe', label: 'Board wipes' },
+];
+
+export function RatingPanel({
+  analysis, deck, lookup, busy, onFix, onOpen, onAddOne, onWanted,
+}: {
+  analysis: AnalyzeResponse;
+  deck: Deck;
+  lookup: CardLookup;
+  busy: string | null;
+  onFix: (fix: Fix) => void;
+  onOpen: (id: string) => void;
+  onAddOne: (role: Role) => void;
+  /** Sets the wanted count of a role on the deck; null puts it back to the bracket's default. */
+  onWanted: (role: Role, n: number | null) => void;
+}) {
   const { rating, summary, targets } = analysis;
+  const defaults = analysis.defaultTargets ?? targets;
+  const defaultOf = (role: Role): number => (role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0));
+  const anyWanted = Object.keys(deck.roleTargets ?? {}).length > 0;
   const broken = brokenRules(rating, summary.cardCount);
   const curveMax = Math.max(1, ...summary.curve);
   const sources = (['W', 'U', 'B', 'R', 'G', 'C'] as const).filter((c) => (summary.sources[c] ?? 0) > 0);
@@ -105,6 +141,15 @@ export function RatingPanel({ analysis, lookup, onFix, onOpen }: { analysis: Ana
                     )}
                   </ul>
                 )}
+                {ADD_ONE_FOR[s.key] && (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {ADD_ONE.filter((a) => ADD_ONE_FOR[s.key].includes(a.role)).map((a) => (
+                      <button key={a.role} type="button" className="btn btn-sm btn-quiet" disabled={!!busy || deck.commanders.length === 0} onClick={() => onAddOne(a.role)} title={`Suggest a few ways to bring in ${a.noun}, each with the card to cut for it`} data-testid={`rating-add-${a.role}`}>
+                        + {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -135,6 +180,27 @@ export function RatingPanel({ analysis, lookup, onFix, onOpen }: { analysis: Ana
             </li>
           ))}
           {sources.length === 0 && <li className="text-ash">No mana sources yet.</li>}
+        </ul>
+      </Section>
+
+      <Section title="Wanted counts" aside={anyWanted ? 'set by you' : `defaults for Bracket ${deck.targetBracket}`}>
+        <p className="mb-2.5 text-[0.84rem] text-ash">How many of each this deck should run. The rating, the card scores and the builder all aim for your number.</p>
+        <ul className="grid gap-1.5" data-testid="wanted-counts">
+          {WANTED.map(({ role, label }) => {
+            const base = defaultOf(role);
+            const set = deck.roleTargets?.[role];
+            const value = set ?? base;
+            return (
+              <li key={role} className="flex items-center gap-1.5 text-[0.86rem]" data-testid="wanted-row" data-role={role}>
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                <button type="button" className="btn btn-sm px-2" disabled={value <= 0} onClick={() => onWanted(role, Math.max(0, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
+                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-brass' : ''}`} data-testid="wanted-value">{value}</span>
+                <button type="button" className="btn btn-sm px-2" disabled={value >= 40} onClick={() => onWanted(role, value + 1)} aria-label={`Want one more: ${label}`} data-testid="wanted-more">+</button>
+                <span className="w-[4.6rem] text-right text-[0.75rem] text-smoke">default {base}</span>
+                <button type="button" className={`text-[0.75rem] text-brass hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
+              </li>
+            );
+          })}
         </ul>
       </Section>
 
@@ -352,25 +418,53 @@ export function ThemesPanel({
 // ---------------------------------------------------------------------------------------------
 // Improve
 
-export interface ImproveOptions { bracket: Bracket | 'keep'; ownedOnly: boolean; maxPrice: string }
-export interface ProposalSet { kind: 'improve' | 'swaps'; bracket: Bracket; items: SwapProposal[]; asked: boolean }
+/** Goal chips of a directed improve run, and the roles each one asks for more of. */
+export type GoalChip = 'wincons' | 'removal' | 'draw' | 'ramp';
+export const GOAL_CHIPS: { id: GoalChip; label: string; roles: Role[] }[] = [
+  { id: 'wincons', label: 'More win conditions', roles: ['win-condition'] },
+  { id: 'removal', label: 'More removal', roles: ['spot-removal', 'wipe', 'counterspell'] },
+  { id: 'draw', label: 'More card draw', roles: ['draw'] },
+  { id: 'ramp', label: 'More ramp', roles: ['ramp'] },
+];
+
+export interface ImproveOptions {
+  bracket: Bracket | 'keep'; ownedOnly: boolean; maxPrice: string;
+  /** "Change at most N cards", as typed. */
+  maxSwaps: string;
+  goals: GoalChip[];
+  /** "Lean into theme" is on, and the axis it leans into ('' = the deck's strongest). */
+  lean: boolean;
+  leanAxis: string;
+}
+export interface ProposalSet {
+  kind: 'improve' | 'swaps' | 'add';
+  bracket: Bracket; items: SwapProposal[]; asked: boolean;
+  /** kind 'add': what was asked for, e.g. "a win condition". */
+  noun?: string;
+}
 
 const delta = (p: SwapProposal) => Math.round((p.ratingAfter - p.ratingBefore) * 10) / 10;
 const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n).toFixed(1)}`;
+const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, options, setOptions, proposals, busy, onRun, onAccept, onReject, onApplyAll, onOpen,
+  deck, lookup, themeAxes, options, setOptions, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
   lookup: CardLookup;
+  /** The deck's current theme axes, strongest first. */
+  themeAxes: string[];
   options: ImproveOptions;
   setOptions: (o: ImproveOptions) => void;
   proposals: ProposalSet | null;
   busy: string | null;
   onRun: (kind: 'improve' | 'swaps') => void;
+  onAddOne: (role: Role) => void;
   onAccept: (p: SwapProposal) => void;
   onReject: (p: SwapProposal) => void;
   onApplyAll: () => void;
+  /** Puts incoming cards on the proxy list. */
+  onProxy: (ids: string[]) => void;
   onOpen: (id: string) => void;
 }) {
   const items = proposals?.items ?? [];
@@ -378,31 +472,66 @@ export function ImprovePanel({
   const first = items[0];
   const last = items[items.length - 1];
   const otherBracket = proposals && proposals.bracket !== deck.targetBracket;
+  const dissent = items.filter((p) => p.agrees === false).length;
+  const toggleGoal = (id: GoalChip) => setOptions({ ...options, goals: options.goals.includes(id) ? options.goals.filter((g) => g !== id) : [...options.goals, id] });
+  const leanAxis = themeAxes.includes(options.leanAxis) ? options.leanAxis : (themeAxes[0] ?? '');
 
   return (
     <div data-testid="panel-improve">
       <Section title="Make this deck better">
         <p className="text-[0.86rem] text-ash">
-          The weakest card goes out and the best replacement comes in, one swap at a time, as long as the rating goes up. Locked cards are never cut
+          Say how far to go and what you want more of. Swaps come one at a time, weakest card out, and each says why. Locked cards are never cut
           {locked ? ` (${locked} locked now)` : ''}.
         </p>
         <div className="mt-3 grid gap-2">
           <label className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-ash">Aim for</span>
+            <span className="shrink-0">Change at most</span>
+            <input
+              className="field w-14 text-center"
+              type="number"
+              min={1}
+              max={40}
+              value={options.maxSwaps}
+              onChange={(e) => setOptions({ ...options, maxSwaps: e.target.value })}
+              aria-label="Most cards to change, 1 to 40"
+              data-testid="improve-max"
+            />
+            <span>cards</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="shrink-0">Aim for bracket</span>
             <select
               className="field w-0 min-w-0 flex-1"
               value={options.bracket}
               onChange={(e) => setOptions({ ...options, bracket: e.target.value === 'keep' ? 'keep' : (Number(e.target.value) as Bracket) })}
               data-testid="improve-bracket"
             >
-              <option value="keep">Same bracket ({deck.targetBracket}, {bracketName(deck.targetBracket)})</option>
-              {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>Bracket {b.n}, {b.name}</option>)}
+              <option value="keep">{deck.targetBracket}, {bracketName(deck.targetBracket)} (the deck&rsquo;s)</option>
+              {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>{b.n}, {b.name}</option>)}
             </select>
           </label>
+          <div>
+            <div className="mb-1 text-[0.8rem] text-ash">Goals (pick any)</div>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Goals for this run">
+              {GOAL_CHIPS.map((g) => (
+                <button key={g.id} type="button" className={chipClass(options.goals.includes(g.id))} aria-pressed={options.goals.includes(g.id)} onClick={() => toggleGoal(g.id)} data-testid={`goal-${g.id}`}>
+                  {g.label}
+                </button>
+              ))}
+              <button type="button" className={chipClass(options.lean)} aria-pressed={options.lean} disabled={themeAxes.length === 0} title={themeAxes.length === 0 ? 'The deck has no theme yet' : 'Cut off-theme cards first and bring in cards for this theme'} onClick={() => setOptions({ ...options, lean: !options.lean })} data-testid="goal-theme">
+                Lean into theme
+              </button>
+            </div>
+            {options.lean && themeAxes.length > 0 && (
+              <select className="field mt-1.5 w-full" value={leanAxis} onChange={(e) => setOptions({ ...options, leanAxis: e.target.value })} aria-label="Theme to lean into" data-testid="goal-theme-axis">
+                {themeAxes.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
+              </select>
+            )}
+          </div>
           <label className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-ash">Price cap</span>
+            <span className="shrink-0 text-ash">Price cap</span>
             <input
-              className="field w-24"
+              className="field w-20"
               inputMode="decimal"
               value={options.maxPrice}
               onChange={(e) => setOptions({ ...options, maxPrice: e.target.value })}
@@ -427,35 +556,64 @@ export function ImprovePanel({
         </div>
       </Section>
 
+      <Section title="Add one card">
+        <p className="text-[0.86rem] text-ash">A short list of the best cards of one kind to bring in, each with the card to cut for it.</p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {ADD_ONE.map((a) => (
+            <button key={a.role} type="button" className="btn btn-sm" disabled={!!busy || deck.commanders.length === 0} onClick={() => onAddOne(a.role)} data-testid={`add-one-${a.role}`}>
+              {busy === `add:${a.role}` ? 'Looking' : `+ ${a.label}`}
+            </button>
+          ))}
+        </div>
+      </Section>
+
       {proposals && (
         <Section
-          title={proposals.kind === 'improve' ? 'Swaps, in order' : 'Suggested swaps'}
+          title={proposals.kind === 'improve' ? 'Swaps, in order' : proposals.kind === 'add' ? `Ways to add ${proposals.noun ?? 'a card'}` : 'Suggested swaps'}
           aside={items.length ? `${items.length} left` : undefined}
         >
           {items.length === 0 ? (
             <p className="text-ash" data-testid="no-proposals">
-              {proposals.asked ? 'Nothing left to review.' : 'No swap raises the rating with these options. The deck is already tight for them.'}
+              {proposals.asked
+                ? 'Nothing left to review.'
+                : proposals.kind === 'add'
+                  ? 'No card of that kind fits this deck with these options, or every card that could be cut is locked.'
+                  : 'No swap raises the rating with these options. The deck is already tight for them.'}
             </p>
           ) : (
             <>
-              <div className="mb-3 flex items-center gap-2">
+              {otherBracket && (
+                <p className="mb-2.5 rounded-md border border-band-good px-2.5 py-1.5 text-[0.86rem] text-band-good" data-testid="bracket-notice">
+                  These swaps aim for Bracket {proposals.bracket} ({bracketName(proposals.bracket)}), not the deck&rsquo;s Bracket {deck.targetBracket}. Applying any of them sets the deck to Bracket {proposals.bracket}.
+                </p>
+              )}
+              <div className="mb-2 flex items-center gap-2">
                 <p className="min-w-0 flex-1 text-[0.86rem]">
                   {proposals.kind === 'improve' && first && last ? (
                     <>Taking all of them moves the rating from <b>{first.ratingBefore.toFixed(1)}</b> to <b className="text-band-top">{last.ratingAfter.toFixed(1)}</b>.</>
+                  ) : proposals.kind === 'add' ? (
+                    'Pick one. Each is the same change with a different card.'
                   ) : (
                     'Each swap stands on its own.'
                   )}
-                  {otherBracket && <span className="block text-band-good">Accepting also sets the deck to Bracket {proposals.bracket}.</span>}
+                  {dissent > 0 && <span className="block text-band-mid">The engine disagrees with {dissent === items.length ? (dissent === 1 ? 'it' : 'all of them') : `${dissent} of them`}; its reasons are on the {dissent === 1 ? 'card' : 'cards'}.</span>}
                 </p>
-                <button type="button" className="btn btn-sm btn-primary" onClick={onApplyAll} data-testid="apply-all">Apply all</button>
+                {proposals.kind !== 'add' && <button type="button" className="btn btn-sm btn-primary" onClick={onApplyAll} data-testid="apply-all">Apply all</button>}
               </div>
+              <button type="button" className="btn btn-sm mb-3 w-full" onClick={() => onProxy([...new Set(items.map((p) => p.in))])} data-testid="proxy-incoming">
+                Add incoming cards to proxy list ({new Set(items.map((p) => p.in)).size})
+              </button>
               <ol className="grid gap-2.5">
                 {items.map((p) => {
                   const d = delta(p);
                   return (
-                    <li key={`${p.out}>${p.in}`} className="rounded-md border border-slag bg-soot p-2.5" data-testid="proposal" data-out={lookup[p.out]?.name} data-in={lookup[p.in]?.name}>
+                    <li key={`${p.out}>${p.in}`} className={`rounded-md border bg-soot p-2.5 ${p.agrees === false ? 'border-dashed border-band-mid/70' : 'border-slag'}`} data-testid="proposal" data-out={lookup[p.out]?.name ?? ''} data-in={lookup[p.in]?.name} data-agrees={p.agrees === false ? 'no' : 'yes'}>
                       <div className="flex items-center gap-2">
-                        <Thumb id={p.out} lookup={lookup} onOpen={onOpen} width={78} />
+                        {p.out ? (
+                          <Thumb id={p.out} lookup={lookup} onOpen={onOpen} width={78} />
+                        ) : (
+                          <div className="flex shrink-0 items-center justify-center rounded-md border border-dashed border-smoke text-center text-[0.72rem] text-ash" style={{ width: 78, aspectRatio: '63 / 88' }}>open slot</div>
+                        )}
                         <div className="flex flex-col items-center px-0.5">
                           <svg viewBox="0 0 28 12" width="28" height="12" aria-label="replaced by" className="text-brass">
                             <path d="M1 6h24M20 1l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -467,14 +625,20 @@ export function ImprovePanel({
                         <Thumb id={p.in} lookup={lookup} onOpen={onOpen} width={78} />
                         <div className="ml-1 flex min-w-0 flex-1 flex-col gap-1.5">
                           <button type="button" className="btn btn-sm btn-primary" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
-                          <button type="button" className="btn btn-sm" onClick={() => onReject(p)} data-testid="proposal-reject">Reject</button>
+                          {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={() => onReject(p)} data-testid="proposal-reject">Reject</button>}
+                          <button type="button" className="btn btn-sm btn-quiet" onClick={() => onProxy([p.in])} title={`Put ${lookup[p.in]?.name ?? 'the incoming card'} on the proxy list`} data-testid="proposal-proxy">Proxy</button>
                         </div>
                       </div>
                       <p className="mt-2 text-[0.84rem]">
-                        <span className="text-ash">{lookup[p.out]?.name ?? 'Unknown'}</span> out, <span className="font-medium">{lookup[p.in]?.name ?? 'Unknown'}</span> in.
+                        {p.out ? <><span className="text-ash">{lookup[p.out]?.name ?? 'Unknown'}</span> out, </> : null}<span className="font-medium">{lookup[p.in]?.name ?? 'Unknown'}</span> in.
                       </p>
                       <p className="text-[0.84rem] text-ash" data-testid="proposal-reason">{p.reason}</p>
-                      <p className="text-[0.76rem] text-smoke">Rating {p.ratingBefore.toFixed(1)} to {p.ratingAfter.toFixed(1)}</p>
+                      {p.agrees === false && p.objection && (
+                        <p className="mt-1.5 border-l-2 border-band-mid pl-2 text-[0.82rem] text-band-mid" data-testid="proposal-objection">
+                          <span className="font-semibold">The engine disagrees.</span> {p.objection}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[0.76rem] text-smoke">Rating {p.ratingBefore.toFixed(1)} to {p.ratingAfter.toFixed(1)}</p>
                     </li>
                   );
                 })}

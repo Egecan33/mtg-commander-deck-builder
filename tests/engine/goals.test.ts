@@ -42,6 +42,17 @@ describe('directed improve', () => {
     }
   });
 
+  it('never cuts a card an earlier proposal of the same run brought in', () => {
+    for (const goals of [{ emphasizeRoles: ['win-condition', 'spot-removal', 'wipe', 'counterspell', 'draw', 'ramp'] as Role[], maxSwaps: 30 }, { targetBracket: 4 as Bracket, emphasizeRoles: ['win-condition'] as Role[], emphasizeAxes: ['tokens'], maxSwaps: 30 }]) {
+      const proposals = improveDeck(precon, ctx, opts(goals));
+      const cameIn = new Set<string>();
+      for (const p of proposals) {
+        expect(cameIn.has(p.out), `${db.get(p.out)?.name} was brought in and then cut`).toBe(false);
+        cameIn.add(p.in);
+      }
+    }
+  });
+
   it('maxSwaps is a hard cap', () => {
     const proposals = improveDeck(precon, ctx, opts({ maxSwaps: 5, emphasizeRoles: ['win-condition', 'draw'] }));
     expect(proposals.length).toBeLessThanOrEqual(5);

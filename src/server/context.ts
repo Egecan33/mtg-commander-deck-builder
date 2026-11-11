@@ -38,6 +38,8 @@ export function deckKey(deck: Deck): string {
 
 export interface Report {
   rating: DeckRating; bracket: BracketReport; summary: DeckSummary; targets: Targets;
+  /** The targets without the deck's own wanted counts (`Deck.roleTargets`). */
+  defaultTargets: Targets;
   themeWeights: Record<string, number>;
   deckScores: Record<string, CardScore>;
   unknown: string[];
@@ -83,6 +85,7 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         bracket: analyzeBracket(deck, ctx),
         summary,
         targets: targetsFor(deck, ctx, summary),
+        defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
         themeWeights: resolveThemeWeights(deck, ctx),
         deckScores, unknown,
       });

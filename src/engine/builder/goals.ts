@@ -91,6 +91,16 @@ export function goalDeck(deck: Deck, ctx: EngineContext, goals: ImproveGoals): D
   return d;
 }
 
+/** Cards that win on a condition of their own (Laboratory Maniac, Luck Bobblehead). */
+const ALT_WIN = /\byou win the game\b/i;
+/** Theme fit from which such a card belongs to the deck's plan. */
+const ON_THEME = 0.5;
+/**
+ * Asked for a win condition, a deck gets finishers before "you win the game" cards it is not built
+ * for: those are only offered when the deck's theme wants them, or when nothing else is left.
+ */
+const offPlanAltWin = (c: Candidate, role: Role): boolean => role === 'win-condition' && ALT_WIN.test(c.card.oracleText) && c.theme < ON_THEME;
+
 const idsOf = (d: Deck): Set<string> => new Set([...d.commanders, ...d.main.map((e) => e.oracleId)]);
 const lockedOf = (d: Deck): Set<string> => new Set(d.main.filter((e) => e.locked).map((e) => e.oracleId));
 
@@ -128,6 +138,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
   const keep = lockedOf(work);
   const combo = comboPieces(work, ctx);
   const tried = new Set<string>();
+  const brought = new Set<string>();
   const power = new Set<number>(); // proposals made to raise the deck toward its bracket
   const featuresOf = (id: string) => ctx.db.features(id);
   let tries = 0;
@@ -138,7 +149,8 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     const scorer = createScorer(current, ctx);
     const fits = planFilter(current, ctx, pool);
     const top = bestOf(pool.nonland, scorer, idsOf(current), 1, (c) => !tried.has(c.card.oracleId) && fits(c) && want(c))[0];
-    const out = cuttable(current, ctx, pool, keep, combo, scorer).find((x) => !x.land && spare(x));
+    // Never a card an earlier proposal of this run brought in.
+    const out = cuttable(current, ctx, pool, keep, combo, scorer).find((x) => !x.land && !brought.has(x.id) && spare(x));
     if (!top || !out) return false;
     tried.add(top.c.card.oracleId);
     const shown = Math.round(top.score - top.c.jitter - top.c.adjust);
@@ -146,6 +158,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     const next = swapOne(current, out.id, top.c.card.oracleId);
     const off = nextOffender(next, ctx, keep);
     if (off && off.violation.oracleIds.includes(top.c.card.oracleId)) return true; // would break a rule or the bracket
+    brought.add(top.c.card.oracleId);
     proposals.push({
       out: out.id, in: top.c.card.oracleId, reason: why(top.c, shown, out),
       ratingBefore: shownRating(rateDeck(current, ctx)), ratingAfter: shownRating(rateDeck(next, ctx)),
@@ -162,6 +175,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     const into = bestReplacement(without, ctx, pool, { card: ctx.db.get(off.id), f: featuresOf(off.id) });
     if (!into) break;
     const next = addCard(without, into.card.oracleId);
+    brought.add(into.card.oracleId);
     proposals.push({
       out: off.id, in: into.card.oracleId, reason: off.violation.message,
       ratingBefore: shownRating(rateDeck(current, ctx)), ratingAfter: shownRating(rateDeck(next, ctx)),
@@ -181,7 +195,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
       const one = ROLE_ONE[role] ?? role;
       const before = proposals.length;
       const ok = force(
-        (c) => matches(c, { role }),
+        (c) => matches(c, { role }) && !offPlanAltWin(c, role),
         (x) => !(featuresOf(x.id)?.roles.includes(role)),
         (into, score, out) => `${sentence(need.label)}: ${need.count} held, this run asks for ${need.band.lo}. ${into.card.name} scores ${score} for this deck; ${out.name} (${Math.max(0, out.score)}) is the weakest card that is not ${one}.`,
         false,
@@ -227,7 +241,6 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
   // 3. The rest of the budget goes to the ordinary run, on the same raised targets.
   // Cards the goals just brought in are not offered as cuts again.
   if (proposals.length < limit) {
-    const brought = new Set(proposals.map((p) => p.in));
     const guarded: Deck = { ...current, main: current.main.map((e) => (brought.has(e.oracleId) ? { ...e, locked: true } : e)) };
     proposals.push(...improvePlain(guarded, ctx, plain, limit - proposals.length));
   }
@@ -332,7 +345,11 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
     const makes = (x: Candidate, c: Color) => (x.f.sources[c] ?? 0) >= RELIABLE_SOURCE;
     ins = bestOf(lands, scorer, have, n, (x) => (colour ? makes(x, colour) : pool.identity.length === 0 || pool.identity.some((c) => makes(x, c))));
   } else {
-    ins = bestOf(pool.nonland, scorer, have, n, (c) => fits(c) && matches(c, { role }));
+    ins = bestOf(pool.nonland, scorer, have, n, (c) => fits(c) && matches(c, { role }) && !offPlanAltWin(c, role));
+    if (ins.length < n) {
+      const taken = new Set(ins.map((x) => x.c.card.oracleId));
+      ins.push(...bestOf(pool.nonland, scorer, have, n - ins.length, (c) => !taken.has(c.card.oracleId) && fits(c) && matches(c, { role })));
+    }
   }
   if (ins.length === 0) return [];
 

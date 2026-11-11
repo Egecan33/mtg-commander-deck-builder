@@ -176,6 +176,8 @@ export interface AnalyzeResponse {
   bracket: BracketReport;
   summary: DeckSummary;
   targets: Targets;
+  /** `targets` as they would be without the deck's own wanted counts (`deck.roleTargets`). */
+  defaultTargets: Targets;
   themeWeights: Record<AxisId, number>;
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
