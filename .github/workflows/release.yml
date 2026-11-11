@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and upload to (for example v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS Apple Silicon
+          # macos-13 runners are retired; this is GitHub's remaining Intel macOS image.
+          - os: macos-15-intel
+            label: macOS Intel
+          - os: windows-latest
+            label: Windows x64
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm build:sync
+
+      - name: Assemble bundle
+        shell: bash
+        run: RELEASE_VERSION="$TAG" node packaging/assemble.mjs
+
+      - name: Smoke test the bundled sync CLI and native module
+        shell: bash
+        run: |
+          dir=$(ls -d release/CommanderForge-*/ | head -1)
+          if [ -f "$dir/node/node.exe" ]; then node="$dir/node/node.exe"; else node="$dir/node/bin/node"; fi
+          "$node" "$dir/app/dist/sync.mjs" --help
+          "$node" -e "const D=require(process.argv[1]); const db=new D(':memory:'); console.log('sqlite', db.prepare('select sqlite_version() v').get().v)" "./${dir}app/node_modules/better-sqlite3"
+
+      - name: Upload to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Commander Forge ${{ env.TAG }}
+          body_path: packaging/RELEASE_NOTES.md
+          files: release/*.zip

@@ -15,10 +15,9 @@ interface Flags { limit?: number; match?: string; keepRaw: boolean }
 async function runFeatures(db: Db, log: Log): Promise<void> {
   // src/ingest/features.ts arrives with the features engine (plan Task 4) and exports
   // `syncFeatures(db, log)`. Until it exists the step reports that and moves on.
-  const spec = './features';
   let mod: { syncFeatures?: (db: Db, log: Log) => Promise<void> | void };
   try {
-    mod = await import(spec);
+    mod = await import('./features');
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code !== 'ERR_MODULE_NOT_FOUND' && code !== 'MODULE_NOT_FOUND') throw err;
@@ -69,8 +68,15 @@ export function parseArgs(argv: string[]): { steps: Step[]; flags: Flags } {
   return { steps: STEPS.filter((s) => steps.includes(s)), flags };
 }
 
+export const USAGE = `Usage: sync [${STEPS.join('|')}|all]... [--limit N] [--match TEXT] [--keep-raw]`;
+
 async function main(): Promise<void> {
-  const { steps, flags } = parseArgs(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(USAGE);
+    return;
+  }
+  const { steps, flags } = parseArgs(args);
   const db = openDb();
   const log: Log = (line) => console.log(line);
   try {

@@ -1,0 +1,41 @@
+COMMANDER FORGE
+===============
+
+Build, score, rate and improve Magic: The Gathering Commander decks on your own computer.
+Nothing to install: this folder carries its own copy of Node.js.
+
+START
+  macOS:   double-click "Commander Forge.command"
+  Windows: double-click "Commander Forge.bat"
+
+A window opens and your browser shows the app. Keep that window open while you use
+Commander Forge. Close it, or press Ctrl+C in it, to stop.
+
+FIRST RUN
+  The first start downloads the card data and about 66,000 card images, roughly 5 GB.
+  - Card data takes about 3 minutes. The app opens as soon as it is done.
+  - Images keep downloading in the background for about 40 minutes. Cards show
+    without pictures until theirs arrive. If you stop the app early, the download
+    picks up where it left off next time.
+  After that, Commander Forge works offline.
+
+IF YOUR COMPUTER BLOCKS IT
+  macOS ("cannot be opened because it is from an unidentified developer"):
+    right-click "Commander Forge.command", choose Open, then Open again. Only needed once.
+    Or in Terminal:  xattr -dr com.apple.quarantine "/path/to/this/folder"
+  Windows ("Windows protected your PC"):
+    click "More info", then "Run anyway".
+
+WHERE YOUR DATA LIVES
+  macOS:   ~/Library/Application Support/Commander Forge
+  Windows: %LOCALAPPDATA%\Commander Forge
+  Your decks, settings, card data and images are all there, not in this folder.
+
+UPDATING
+  Download the new zip from
+  https://github.com/Egecan33/mtg-commander-deck-builder/releases/latest
+  unzip it, and start it the same way. You can delete the old folder. Your data is kept.
+  To refresh card data, use the Data page in the app.
+
+The app only listens on 127.0.0.1, so other computers on your network cannot reach it.
+MIT licence, see LICENSE.

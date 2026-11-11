@@ -4,6 +4,8 @@
 
 **Build, score, rate and improve Magic: The Gathering Commander decks — locally, with every card on screen.**
 
+[![Download](https://img.shields.io/github/v/release/Egecan33/mtg-commander-deck-builder?label=download&color=8a63d2)](https://github.com/Egecan33/mtg-commander-deck-builder/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Egecan33/mtg-commander-deck-builder/total.svg)](https://github.com/Egecan33/mtg-commander-deck-builder/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f.svg)](LICENSE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-App%20Router-000000.svg)
@@ -44,13 +46,30 @@ It runs on your machine. Card data and about 66,000 card images are downloaded o
 </tr>
 </table>
 
-## Quick start
+## Download
+
+No Node.js or anything else to install. Get the zip for your computer from the [latest release](https://github.com/Egecan33/mtg-commander-deck-builder/releases/latest):
+
+| Computer | File |
+|---|---|
+| Mac with Apple Silicon (M1 and later) | `CommanderForge-<version>-macos-arm64.zip` |
+| Mac with Intel | `CommanderForge-<version>-macos-x64.zip` |
+| Windows 10/11 (x64) | `CommanderForge-<version>-windows-x64.zip` |
+
+Unzip it and double-click `Commander Forge.command` (macOS) or `Commander Forge.bat` (Windows). A terminal window opens and the app opens in your browser.
+
+- **First run** downloads card data (about 3 minutes, then the app opens) and about 66,000 card images in the background (~5 GB, ~40 minutes). Cards show without pictures until theirs arrive.
+- **macOS** may say the developer is unidentified: right-click the file, choose **Open**, then **Open** again. Only needed once.
+- **Windows SmartScreen** may warn you: click **More info**, then **Run anyway**.
+- Your decks, settings, card data and images live in `~/Library/Application Support/Commander Forge` (macOS) or `%LOCALAPPDATA%\Commander Forge` (Windows). To update, download the new zip; your data is kept.
+
+## Run from source
 
 Requires Node 22+ and [pnpm](https://pnpm.io). About 6 GB of free disk space.
 
 ```bash
-git clone https://github.com/Egecan33/commander-forge.git
-cd commander-forge
+git clone https://github.com/Egecan33/mtg-commander-deck-builder.git
+cd mtg-commander-deck-builder
 pnpm install
 pnpm sync all
 pnpm build
