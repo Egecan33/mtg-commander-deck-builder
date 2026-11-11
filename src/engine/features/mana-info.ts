@@ -81,6 +81,9 @@ export function hasRepeatableManaAbility(c: Ctx): boolean {
   return false;
 }
 
+const UNRELIABLE_COLOUR = /devotion to that color|has a luck counter on it/;
+const UNRELIABLE_SOURCE = 0.25;
+
 function addAll(out: CardFeatures['sources'], colours: readonly string[], weight: number): void {
   for (const col of colours) {
     if (col === 'C' || (COLORS as string[]).includes(col)) {
@@ -109,6 +112,9 @@ export function sourcesOf(c: Ctx, landWeight: number): CardFeatures['sources'] {
   const produced = c.card.producedMana ?? [];
   if (landWeight === 1) {
     addAll(out, produced, 1);
+    // Coloured mana that is rarely there: devotion (Nykthos), a luck counter from the opening hand
+    // (Gemstone Caverns). Such a land is a colourless source that sometimes helps, not a fixer.
+    if (UNRELIABLE_COLOUR.test(c.t)) for (const col of COLORS) if (out[col]) out[col] = UNRELIABLE_SOURCE;
     if (produced.length === 0) {
       const fetch = fetchColours(c.t);
       // A fetchland finds typed duals too, so the named types are full sources; "basic land" fetchers are half.

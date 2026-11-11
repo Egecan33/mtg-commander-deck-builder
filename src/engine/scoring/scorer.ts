@@ -59,6 +59,9 @@ function rankQuality(rank: number | null | undefined): number {
 
 /** Mana value a role's cards normally cost; each mana above it costs quality. */
 const ROLE_BASELINE: Partial<Record<Role, number>> = { ramp: 2, 'spot-removal': 2, counterspell: 2, draw: 3, tutor: 3, wipe: 5 };
+/** Commander mana value from which mana rocks that make two or more mana are not held to the two-mana baseline. */
+const BIG_COMMANDER = [6];
+const MULTI_MANA = /\{T\}[^.\n]*: Add (\{[WUBRGC]\}){2,}|: Add (two|three|four|five|X) mana/;
 const OVERCOST_STEP = 0.05;
 const OVERCOST_MAX = 0.15;
 const INSTANT_BONUS = 0.05;
@@ -142,6 +145,8 @@ const NO_MANA_QUALITY = 0.1;
  * commander there is no such colour, so the card makes no mana at all.
  */
 function onlyIdentityMana(card: Card): boolean {
+  // Chrome Mox makes a colour of the card imprinted on it: a colourless deck has no coloured card to imprint.
+  if (/\badd\b[^.\n]*of any of the exiled card['’]s colors/i.test(card.oracleText)) return true;
   let any = false;
   for (const sentence of card.oracleText.split(/[.\n]/)) {
     if (!/\badd\b/i.test(sentence)) continue;
@@ -398,7 +403,10 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
       if (base !== undefined) over = Math.min(over, mv - base);
     }
     // A creature or planeswalker brings a body with the effect; only plain spells are held to the role's price.
-    if (over !== Infinity && over >= 1 && !/\b(Creature|Planeswalker)\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) {
+    // Nor is a rock that makes two or more mana overpriced for a commander that costs six or more
+    // (Thran Dynamo and Gilded Lotus are how Kozilek gets cast).
+    const bigRock = roles.includes('ramp') && BIG_COMMANDER.some((n) => s.commanderMvs.has(n) || [...s.commanderMvs].some((m) => m >= n)) && MULTI_MANA.test(card.oracleText);
+    if (over !== Infinity && over >= 1 && !bigRock && !/\b(Creature|Planeswalker)\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) {
       quality -= Math.min(OVERCOST_MAX, OVERCOST_STEP * Math.floor(over));
       qualityText += ', costs more than most cards doing this job';
     }

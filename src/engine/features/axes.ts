@@ -104,7 +104,8 @@ const AURA_PAYOFF = /whenever you cast an? aura|auras?,? (and |or |and\/or )?equ
 const EQUIP_PAYOFF = /whenever you cast an? equipment|auras?,? (and |or |and\/or )?equipment|equipment,? (and |or |and\/or )?auras?|for each equipment|equipment (spells?|cards?)|whenever (an?|one or more|~ or another) equipment|equipment you control|is equipped\b|equipped creatures? you control|attach (target equipment|any number of equipment)|equip (abilities|costs?)|search your library for an? (aura or )?equipment|equipment attached|equipment or aura/;
 const isEquipment = (c: Ctx) => /\bequipment\b/.test(c.type);
 const isBuffAura = (c: Ctx) => /\baura\b/.test(c.type) && /enchant (creature|permanent)/.test(c.t) && !hasTag(c, 'pacifism', 'removal-aura', 'parasitic-aura', 'lockdown-creature');
-const DEFENDER_PAYOFF = /with defender|toughness rather than (its|their) power|as though (it|they) didn't have defender|toughness greater than (its|their) power/;
+/** Not: a card that only makes tokens with defender, least of all for an opponent (Dowsing Dagger). */
+const DEFENDER_PAYOFF = /(?<!tokens? )with defender|toughness rather than (its|their) power|as though (it|they) didn't have defender|toughness greater than (its|their) power/;
 /** A list of card types ("an artifact, creature, enchantment, land, or planeswalker") names no one of them as a theme. */
 const TYPE_LIST = /(artifact|creature|land|instant), (creature, |enchantment, |land, |instant, )*(enchantment|artifact)(,| or| and)/;
 const LANDFALL = /\blandfall\b|whenever (a|one or more) lands? (you control )?enters?|whenever a land enters the battlefield under your control/;
@@ -225,6 +226,8 @@ const RULES: Rule[] = [
   // lands
   { axis: 'landfall', side: 'e', s: 1, when: any(tag('extra-land', 'play-additional-land', 'multi-land-ramp'), re(/you may play (an|two|three|x|up to \w+) additional lands?|play lands from your graveyard/)) },
   // The tags also cover lands handed to an opponent (Path to Exile): require the land to be yours.
+  // Lands put onto the battlefield turn after turn (Chulane, Tatyova's friends): what a lands deck is built on.
+  { axis: 'landfall', side: 'e', s: 0.9, when: rep(EXTRA_LAND) },
   { axis: 'landfall', side: 'e', s: 0.7, when: any(re(EXTRA_LAND), all(tag('tutor-land-to-battlefield', 'land-ramp', 'recursion-land', 'reanimate-land', 'regrowth-land', 'fetchland', 'sneak-land'), re(/your library|your hand|your graveyard|additional land|you control/))) },
   { axis: 'landfall', side: 'p', s: 1, when: any(re(LANDFALL), kw('landfall'), tag('landfall')) },
   { axis: 'landfall', side: 'p', s: 0.7, when: re(LAND_PAYOFF) },

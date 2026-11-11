@@ -55,6 +55,10 @@ const REDUNDANCY_NEED: PerBracket<number> = [3, 4, 5, 7, 10];
 const KARSTEN_CURVE: Record<number, number[]> = {
   2: [9, 0, 20, 14, 9, 4], 3: [8, 19, 0, 16, 10, 3], 4: [6, 12, 13, 0, 13, 8], 5: [6, 12, 10, 13, 0, 10], 6: [6, 12, 10, 14, 9, 0],
 };
+/** The roles no deck does without, the coverage below which one of them drags the whole sub-score, and how far (to this share at zero). */
+const CORE_ROLES: readonly Role[] = ['ramp', 'draw', 'spot-removal'];
+const CORE_ROLE_KNEE = 0.5;
+const CORE_ROLE_FLOOR = 0.55;
 /** Role coverage: the least a role scores for being over its band. */
 const OVER_FLOOR = 0.5;
 /** Three creatures this large count as one win condition, up to the band's lower end (combat wins games). */
@@ -126,6 +130,8 @@ interface Facts {
   bracket: Bracket;
   report: BracketReport;
   commanderIds: Set<string>;
+  /** Cards outside the commander's colours: the rule violation names them, the mana base is not asked to cast them. */
+  offIdentity: Set<string>;
   count(pred: (c: DeckCard) => boolean): number;
 }
 
@@ -137,13 +143,13 @@ const nonland = (c: DeckCard): boolean => !isLandCard(c.features);
  * mana value ≤ 2 ×2, with the worst shortfall per colour.
  */
 function colourSources(
-  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>,
+  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>, offIdentity?: Set<string>,
 ): { share: number; weightSum: number; worst: Map<Color, { name: string; have: number; need: number; lost: number }> } {
   let weightSum = 0;
   let credit = 0;
   const worst = new Map<Color, { name: string; have: number; need: number; lost: number }>();
   for (const c of cards) {
-    if (!nonland(c)) continue;
+    if (!nonland(c) || offIdentity?.has(c.card.oracleId)) continue;
     const w = (commanderIds.has(c.card.oracleId) ? 5 : c.card.cmc <= 2 ? 2 : 1) * c.qty;
     let cardCredit = 1;
     let coloured = false;
@@ -220,7 +226,7 @@ function manaPart(f: Facts): Part {
   const structure = 0.6 * landScore + 0.25 * tapScore + 0.15 * utility;
 
   // Coloured sources multiply the rest: lands that cannot cast the deck's spells are not a mana base.
-  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds);
+  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds, f.offIdentity);
   const colourFactor = share ** CASTABLE_POWER;
   for (const [color, e] of worst) {
     const short = Math.ceil(e.need - e.have);
@@ -240,6 +246,7 @@ function rolesPart(f: Facts): Part {
   const issues: Issue[] = [];
   let weightSum = 0;
   let total = 0;
+  let worstCore = 1;
   for (const [role, need] of f.needs) {
     const weight = COVERAGE[role];
     if (!weight) continue;
@@ -253,6 +260,7 @@ function rolesPart(f: Facts): Part {
         : band(n, b.lo, b.hi, Math.max(1, b.lo / 2));
     weightSum += weight;
     total += weight * v;
+    if (CORE_ROLES.includes(role)) worstCore = Math.min(worstCore, v);
     const want = b.lo === b.hi ? `${b.lo}` : `${b.lo}-${b.hi}`;
     if (need.short > 0) {
       issues.push({ text: `${need.short} short on ${label}: have ${n}, want ${want}.`, filter: { role }, loss: weight * (1 - v) });
@@ -260,7 +268,10 @@ function rolesPart(f: Facts): Part {
       issues.push({ text: `${need.over} over on ${label}: have ${n}, want ${want}. Some of those slots could go to the theme.`, filter: null, loss: weight * (1 - v) });
     }
   }
-  return { value: weightSum > 0 ? total / weightSum : 0, issues };
+  // Ramp, card draw and removal are what every deck runs on: one of them (nearly) missing is not
+  // averaged away by full marks for recursion and graveyard hate.
+  const coreFactor = worstCore < CORE_ROLE_KNEE ? CORE_ROLE_FLOOR + (1 - CORE_ROLE_FLOOR) * (worstCore / CORE_ROLE_KNEE) : 1;
+  return { value: (weightSum > 0 ? total / weightSum : 0) * coreFactor, issues };
 }
 
 /** Theme weights to rate against: the deck's own, else what the deck itself is mostly made of. */
@@ -642,13 +653,14 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const fullTargets = targetsFor(deck, ctx, summary);
   const filled = Math.min(1, Math.max(0, summary.cardCount) / 100);
   const commanderIds = new Set(deck.commanders);
+  const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds,
+    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity,
     bi: bracket - 1,
     targets: scaleTargets(fullTargets, summary.cardCount),
     needs: new Map(roleNeeds(deck, ctx, { summary, targets: fullTargets, scaled: true }).map((n) => [n.role, n])),
     castable: Math.min(
-      colourSources(cards, summary, filled, commanderIds).share,
+      colourSources(cards, summary, filled, commanderIds, offIdentity).share,
       band(summary.landsEffective, Math.round(fullTargets.lands * filled) - LAND_SLACK, Math.round(fullTargets.lands * filled) + LAND_SLACK, Math.max(4, LAND_BREAK * filled)),
     ),
     report: analyzeBracket(deck, ctx),

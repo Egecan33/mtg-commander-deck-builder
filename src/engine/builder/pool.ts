@@ -55,8 +55,12 @@ export const isStaple = (card: Card): boolean => card.edhrecRank !== null && car
 const CORE_RANK = 5;
 export const isCore = (card: Card): boolean => card.edhrecRank !== null && card.edhrecRank >= 1 && card.edhrecRank <= CORE_RANK;
 
+/** Source weight from which a land counts as making a colour for the mana base (Nykthos and Gemstone Caverns, at 0.25, do not). */
+export const RELIABLE_SOURCE = 0.5;
 /** Text of cards whose combos need a library with no basic lands. */
 const NEEDS_NO_BASICS = /until you reveal a basic land card/i;
+/** Tainted Pact stops at the second copy of any name: a tutor only in a deck with no repeated basics. */
+const NEEDS_NO_REPEATS = /same name as (?:another|any other) card exiled this way/i;
 
 const COLOR_WORD: Record<string, Color> = { white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G' };
 const COLOR_REFERENCE = /\b(white|blue|black|red|green) (?:(?:creature|instant|sorcery|artifact|enchantment|planeswalker) )?(?:spells?|creatures?|permanents?|cards?|sources?)\b|\bif it's (white|blue|black|red|green)\b/gi;
@@ -273,7 +277,7 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
     if (!land && namesOnlyOtherColours(card, identity)) continue;
     if (plan.bracket <= 2 && !land && !isStaple(card) && (f.powerTier >= 5 || f.roles.includes('fast-mana'))) continue;
     // A card that digs for a basic land (Hermit Druid) is a combo piece only in a deck with none; builds always run basics.
-    if (!land && NEEDS_NO_BASICS.test(card.oracleText)) continue;
+    if (!land && (NEEDS_NO_BASICS.test(card.oracleText) || NEEDS_NO_REPEATS.test(card.oracleText))) continue;
     (land ? lands : nonland).push(cand);
   }
   const byBase = (a: Candidate, b: Candidate) => b.base + b.jitter + b.adjust - (a.base + a.jitter + a.adjust) || (a.card.oracleId < b.card.oracleId ? -1 : 1);
@@ -317,7 +321,7 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
     const c = db.byName(BASIC_NAME[k]);
     if (c && isBasicLand(c) && allowed(c)) basics[k] = c;
   }
-  const makes = (c: Candidate) => identity.filter((k) => (c.f.sources[k] ?? 0) > 0).length;
+  const makes = (c: Candidate) => identity.filter((k) => (c.f.sources[k] ?? 0) >= RELIABLE_SOURCE).length;
   const tapCost = plan.bracket >= 3 ? TAP_COST_HIGH : TAP_COST_LOW;
   const fixerValue = (c: Candidate): number => {
     const any = COLORS.filter((k) => (c.f.sources[k] ?? 0) > 0).length;

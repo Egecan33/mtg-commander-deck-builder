@@ -1,7 +1,7 @@
 import { analyzeBracket, findCombos } from '../brackets';
 import { karstenSources } from '../mana';
 import { rateDeck } from '../rating';
-import { isBasicLand, validateDeck } from '../rules';
+import { copyLimit, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, summarizeDeck } from '../summary';
 import { scaleTargets, targetsFor } from '../targets';
@@ -24,6 +24,8 @@ const FIXES_PER_STEP = 3;
 const INS_PER_FIX = 2;
 const GENERIC_INS = 1;
 const NONLAND_OUTS = 2;
+/** Spells tried as the cut when a land comes in for a spell. */
+const LAND_FOR_SPELL_OUTS = 3;
 /** Most swaps rated per step: rating a deck is the slow part (its combo search). */
 const TRIALS_PER_STEP = 14;
 /** Deck ratings `improveDeck` may spend in all. */
@@ -143,6 +145,7 @@ function bestOf(cands: Iterable<Candidate>, scorer: Scorer, have: Set<string>, n
   const top: { c: Candidate; score: number }[] = [];
   for (const c of cands) {
     if ((have.has(c.card.oracleId) && !isBasicLand(c.card)) || !pred(c)) continue;
+    if (copyLimit(c.card) > 1 && !isBasicLand(c.card)) continue; // a lone copy of a many-copy card does nothing
     const s = scorer.score(c.card);
     if (s.gate) continue;
     const score = s.score + c.jitter + c.adjust;
@@ -299,7 +302,7 @@ interface ClimbOptions {
 }
 
 interface Out { id: string; name: string; score: number; land: boolean; basic: boolean; cmc: number; qty: number; themed: boolean }
-interface Trial { into: Candidate; out: string; reason: string; minGain: number }
+interface Trial { into: Candidate; out: string; reason: string; minGain: number; generic?: true }
 
 /** Sources of each colour the deck's most demanding spell needs (Karsten), and what it holds. */
 function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { need: number; have: number }> {
@@ -424,9 +427,12 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
       for (const c of ins) {
         const inId = c.card.oracleId;
         if (surplus <= -1 && !filter.color) {
-          // Short of lands: the land takes the place of the deck's lowest-scoring spell.
-          const x = spells[0];
-          if (x) trials.push({ into: c, out: x.id, minGain: gainFor(x), reason: `${fixText} ${x.name} is the lowest-scoring spell the deck can give up (${Math.max(0, x.score)}).` });
+          // Short of lands: the land takes the place of one of the deck's lowest-scoring spells
+          // (the very lowest may be the one card another part of the rating hangs on).
+          spells.slice(0, LAND_FOR_SPELL_OUTS).forEach((x, i) => trials.push({
+            into: c, out: x.id, minGain: gainFor(x),
+            reason: `${fixText} ${x.name} is ${i === 0 ? 'the lowest-scoring spell' : 'among the lowest-scoring spells'} the deck can give up (${Math.max(0, x.score)}).`,
+          }));
           continue;
         }
         // Otherwise a land replaces a land the deck can spare.
@@ -484,7 +490,7 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
     for (const { c, score } of bestOf(pool.nonland, scorer, have, GENERIC_INS, fits)) {
       const shown = Math.round(score - c.jitter - c.adjust);
       for (const x of spells) {
-        if (shown >= x.score + GENERIC_MARGIN) trials.push({ into: c, out: x.id, minGain: MIN_GAIN, reason: `${c.card.name} scores ${shown} for this deck against ${Math.max(0, x.score)} for ${x.name}.` });
+        if (shown >= x.score + GENERIC_MARGIN) trials.push({ into: c, out: x.id, minGain: MIN_GAIN, generic: true, reason: `${c.card.name} scores ${shown} for this deck against ${Math.max(0, x.score)} for ${x.name}.` });
       }
       if (surplus >= 1.5) {
         const land = outs.filter((x) => x.basic).sort((a, b) => b.qty - a.qty || (a.id < b.id ? -1 : 1))[0] ?? outs.find((x) => x.land);
@@ -516,7 +522,7 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
       }
     }
 
-    type Won = { deck: Deck; value: number; shown: number; t: Trial };
+    type Won = { deck: Deck; value: number; shown: number; t: Trial; r: DeckRating };
     let best: Won | null = null;
     let rated = 0;
     const tried = new Set<string>();
@@ -533,7 +539,7 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
         const value = fineRating(r);
         const shown = shownRating(r);
         if (value < cur + t.minGain || shown <= shownCur) continue;
-        if (!best || value > best.value) best = { deck: next, value, shown, t };
+        if (!best || value > best.value) best = { deck: next, value, shown, t, r };
       }
     };
     for (const { fix, filter } of fixes.slice(0, FIXES_PER_STEP)) rate(trialsFor(deck, scorer, outs, fix.text, filter, INS_PER_FIX), TRIALS_PER_STEP);
@@ -547,7 +553,19 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
     }
     const won = best as Won | null;
     if (won) {
-      swaps.push({ out: won.t.out, in: won.t.into.card.oracleId, reason: won.t.reason, ratingBefore: shownCur, ratingAfter: won.shown });
+      // A swap no shortfall asked for says what it moved: the part of the rating that rose most.
+      let reason = won.t.reason;
+      if (won.t.generic) {
+        let top: { label: string; from: number; to: number; gain: number } | null = null;
+        for (const s of won.r.subscores) {
+          const before = rating.subscores.find((x) => x.key === s.key);
+          if (!before) continue;
+          const gain = s.weight * (s.value - before.value);
+          if (gain >= 1 && (!top || gain > top.gain)) top = { label: s.label, from: before.value, to: s.value, gain };
+        }
+        if (top) reason += ` The swap lifts ${top.label} from ${Math.round(top.from * 100)}% to ${Math.round(top.to * 100)}%.`;
+      }
+      swaps.push({ out: won.t.out, in: won.t.into.card.oracleId, reason, ratingBefore: shownCur, ratingAfter: won.shown });
       deck = won.deck;
       continue;
     }

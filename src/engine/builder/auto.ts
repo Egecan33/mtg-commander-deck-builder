@@ -7,7 +7,7 @@ import { deckCards, isLandCard, summarizeDeck } from '../summary';
 import { targetsFor } from '../targets';
 import type { BuildOptions, Card, CardFeatures, Color, Deck, EngineContext, Role, Targets } from '../types';
 import { bestReplacement, climb, fineRating, nextOffender } from './improve';
-import { COLORS, addCard, buildPool, deckCount, isCore, isStaple, packWanted, qtyOf, removeCard, sharedTypeFor } from './pool';
+import { COLORS, RELIABLE_SOURCE, addCard, buildPool, deckCount, isCore, isStaple, packWanted, qtyOf, removeCard, sharedTypeFor } from './pool';
 import type { Candidate, Pool } from './pool';
 import { planBonus, tallyDeck } from './plan';
 
@@ -41,6 +41,10 @@ const POWER_SWAPS = 26;
 /** ...and at Brackets 1-2, where a pile of popular cards has further to come down. */
 const LOW_POWER_SWAPS = 26;
 const REPAIR_ROUNDS = 12;
+/** Floor of a colour's weight when basics are split by shortfall × pip share (see `addBasics`). */
+const PIP_BASE = 1;
+/** Rating points a build may give up to play at its target bracket instead of above or below it. */
+const ON_TARGET_SLACK = 2;
 /** Basics of an off-identity colour (see `Pool.splash`): this many times the colour's share of the deck's pips. */
 const SPLASH_SHARE = 2.5;
 
@@ -71,7 +75,8 @@ function landSlots(deck: Deck, ctx: EngineContext, pool: Pool): number {
 function fillNonland(start: Deck, ctx: EngineContext, pool: Pool, slots: number): Deck {
   let deck = start;
   const used = new Set(deckCounts(deck).keys());
-  let cands = pool.nonland.filter((c) => !used.has(c.card.oracleId));
+  // One Shadowborn Apostle does nothing: many-copy cards come in as a pack (`seedPacks`) or not at all.
+  let cands = pool.nonland.filter((c) => !used.has(c.card.oracleId) && !(copyLimit(c.card) > 1));
   let ranked: Candidate[] = [];
 
   for (let i = 0; i < slots && cands.length > 0; i++) {
@@ -235,7 +240,7 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   // Every colour keeps at least a couple of basics, for the cards that fetch them.
   const reserve = basicCards.length === 0 ? 0 : nColors === 0 ? 4 : Math.min(slots, nColors >= 4 ? nColors : nColors * 2);
   const cap = basicCards.length === 0 ? slots : Math.min(NONBASIC_CAP[ci], slots - reserve);
-  const makes = (c: Candidate) => pool.identity.filter((col) => finite(c.f.sources[col]) > 0).length;
+  const makes = (c: Candidate) => pool.identity.filter((col) => finite(c.f.sources[col]) >= RELIABLE_SOURCE).length;
   const anyColours = (c: Candidate) => COLORS.filter((col) => finite(c.f.sources[col]) > 0).length;
   const tapCap = finalTargets(deck, ctx, pool).taplandCap;
   let taplands = finite(summarizeDeck(deck, ctx.db).taplands);
@@ -341,7 +346,13 @@ function addBasics(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
     need[c] = Math.max(0, demand[c] - finite(have[c]));
     needSum += need[c] as number;
   }
-  const counts: Partial<Record<Color, number>> = needSum >= left ? split(left, need, colors) : {};
+  // Not enough basics for every colour's most demanding spell: each colour's shortfall is weighed
+  // by its share of the deck's pips, so one triple-black card does not hand an Elf deck more
+  // Swamps than Forests.
+  const pipSum = colors.reduce((a, c) => a + pips[c], 0);
+  const weighed: Partial<Record<Color, number>> = {};
+  for (const c of colors) weighed[c] = (need[c] as number) * (PIP_BASE + (pipSum > 0 ? pips[c] / pipSum : 1 / colors.length));
+  const counts: Partial<Record<Color, number>> = needSum >= left ? split(left, weighed, colors) : {};
   if (needSum < left) {
     // Every colour gets what it is short of; the surplus follows the pips.
     const whole: Partial<Record<Color, number>> = {};
@@ -437,9 +448,13 @@ function tunePower(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string
       const f = card ? db.features(e.oracleId) : undefined;
       if (!card || !f || isLandCard(f)) continue;
       const sharp = isSharp(card, f);
-      if (gap > 0 ? isStaple(card) || !(f.powerTier >= 5 || sharp || (target <= 2 && f.powerTier >= 3)) : f.powerTier > 2) continue;
+      // Brackets 1-2 keep the staples every precon carries. Above that a deck that still plays over
+      // its target after the other sharp cards went trades its staple tutors and fast mana too
+      // (Kaalia at Bracket 4 came out as a Bracket 5 pile), all but Sol Ring and Arcane Signet.
+      const staple = isStaple(card);
+      if (gap > 0 ? (staple && (target <= 2 || isCore(card))) || !(f.powerTier >= 5 || sharp || (target <= 2 && f.powerTier >= 3)) : f.powerTier > 2) continue;
       const score = scorer.score(card).score;
-      const key = gap > 0 ? Math.max(f.powerTier, sharp ? 4.5 : 0) * 1000 - score : -score;
+      const key = gap > 0 ? Math.max(f.powerTier, sharp ? 4.5 : 0) * 1000 - score - (staple ? 10000 : 0) : -score;
       if (key > outKey) { outKey = key; out = { id: e.oracleId, card, f }; }
     }
     if (!out) break;
@@ -452,7 +467,11 @@ function tunePower(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string
     if (!into) break;
     deck = addCard(without, into.card.oracleId);
   }
-  return fineRating(rateDeck(deck, ctx)) > fineRating(rateDeck(start, ctx)) ? deck : start;
+  // A deck that now plays at its target is what was asked for: it is kept unless it rates clearly
+  // worse (the later climb repairs what the trades cost). Otherwise the better-rated deck stays.
+  const after = fineRating(rateDeck(deck, ctx));
+  const before = fineRating(rateDeck(start, ctx));
+  return after > before || (gapOf(deck) === 0 && after >= before - ON_TARGET_SLACK) ? deck : start;
 }
 
 /** A build and what the builder had to change about the request to make it legal. */

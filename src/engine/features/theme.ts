@@ -88,6 +88,22 @@ function settleAttachments(out: Record<AxisId, number>): void {
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
+/** Loyalty cost from which an ability is an ultimate: it happens once, late, if at all. */
+const ULTIMATE_COST = 6;
+const ULTIMATE_LINE = /^[\u2212-](\d+):/;
+/**
+ * A planeswalker commander is built around the abilities it uses every turn, not its ultimate
+ * (Lord Windgrace is a lands deck; the six Cats of his -11 do not make it a token deck).
+ */
+function withoutUltimates(card: Card): Card {
+  if (!/\bPlaneswalker\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) return card;
+  const strip = (text: string | undefined) => (text ?? '').split('\n').filter((line) => {
+    const m = ULTIMATE_LINE.exec(line.trim());
+    return !m || Number(m[1]) < ULTIMATE_COST;
+  }).join('\n');
+  return { ...card, oracleText: strip(card.oracleText), faces: card.faces.map((f) => ({ ...f, oracleText: strip(f.oracleText) })) };
+}
+
 function axisForTheme(theme: string): AxisId | undefined {
   const key = theme.trim().toLowerCase().replace(/\s+/g, '-');
   const direct = EDHREC_THEME_AXIS[key];
@@ -112,12 +128,13 @@ export function commanderThemeWeights(commanders: Card[], edhrecThemes?: Record<
 
   for (const card of commanders) {
     if (!card) continue;
-    const c = makeCtx(card, []);
+    const c = makeCtx(withoutUltimates(card), []);
     for (const [axis, s] of axisSignals(c)) {
       if (axis.startsWith('typal:')) continue;
+      // The stronger of the two readings: a repeatable enabler (0.8) beats a soft payoff (0.7).
       if (s.p >= FULL_PAYOFF) raise(axis, 1);
       else if (s.p >= 0.5) raise(axis, SOFT_PAYOFF);
-      else if (s.e >= 0.9) raise(axis, Math.min(0.8, ENABLER_CAP[axis] ?? 1));
+      if (s.e >= 0.9) raise(axis, Math.min(0.8, ENABLER_CAP[axis] ?? 1));
       else if (s.e >= 0.5) raise(axis, Math.min(0.6, ENABLER_CAP[axis] ?? 1));
       else if (s.e > 0 || s.p > 0) raise(axis, 0.3);
     }
