@@ -41,6 +41,7 @@ const NAV = [
   { href: '/', label: 'Decks' },
   { href: '/new', label: 'New deck' },
   { href: '/collection', label: 'Collection' },
+  { href: '/discover', label: 'Best from collection' },
   { href: '/proxies', label: 'Proxies' },
   { href: '/data', label: 'Card data' },
 ];

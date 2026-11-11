@@ -58,6 +58,19 @@
  * PUT  /api/proxies     {items}         -> ProxyListResponse   replaces the list ([] clears it).
  * POST /api/proxies     {items}         -> ProxyListResponse   adds cards; quantities of a card already listed add up.
  *        items: [{ oracleId, qty }], qty 1..99, at most 500 different cards. An unknown oracle id is a 400.
+ * POST /api/discover    {bracket}       -> DiscoverState
+ *        "Best from collection": which commanders you own make the best deck from the cards you
+ *        own, at that bracket. Starts a background job (or answers at once from the cache, keyed
+ *        by collection + bracket) and returns its state; poll with GET while `status` is 'running'.
+ *        Every owned commander gets a full owned-only build when there are at most 40; above that
+ *        a cheap pre-score picks the best 40 (`considered` says out of how many). Single commanders
+ *        only (no partner pairs). Each entry carries tier 0 (owned cards only, basic lands free)
+ *        and the unlimited tier. 'empty' means no collection has been imported.
+ * GET  /api/discover?bracket=N          -> DiscoverState   progress and the entries finished so far.
+ * POST /api/discover/tiers {bracket, commander} -> DiscoverTiersResponse
+ *        The 5/10/15/20-buy tiers for one listed commander (computed once, then cached): the
+ *        owned-only deck improved with the whole pool open, with at most N incoming cards that are
+ *        not owned. 404 when the commander is not in the finished result for that bracket.
  * GET  /api/settings                    -> Settings
  * PUT  /api/settings    Partial<Settings> -> Settings   merges the given keys.
  * POST /api/edhrec      {commanders, bracket} -> EdhrecResponse
@@ -248,6 +261,33 @@ export interface CollectionImportResponse { count: number; totalQty: number; unr
 export interface ProxyItem { oracleId: string; qty: number }
 export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantities. */ total: number; cards: CardLookup }
 
+export interface DiscoverTier {
+  /** Most cards to buy; null = no limit (a normal unrestricted build). */
+  cap: number | null;
+  rating: number;
+  /** Oracle ids of the cards to buy (not owned, not basic lands). */
+  buys: string[];
+  /** Sum of the known prices of `buys`, and how many of them have no price. */
+  price: number; unpriced: number;
+  /** The deck itself, ready for POST /api/decks. */
+  deck: Deck;
+}
+export interface DiscoverEntry { commander: ClientCard; preScore: number; tiers: DiscoverTier[] }
+export interface DiscoverState {
+  status: 'idle' | 'running' | 'done' | 'error' | 'empty';
+  bracket: Bracket;
+  stage: string; done: number; total: number;
+  /** Owned commanders in all, and how many of them were built (the best by pre-score when there are more than 40). */
+  considered: number; built: number;
+  /** Best owned-only rating first. */
+  entries: DiscoverEntry[];
+  cards: CardLookup;
+  error: string | null;
+  /** Milliseconds the job took (so far). */
+  ms: number;
+}
+export interface DiscoverTiersResponse { tiers: DiscoverTier[]; cards: CardLookup }
+
 export interface EdhrecResponse { status: EdhrecStatus; commanderDecks: number; cards: number }
 
 // ---------------------------------------------------------------------------------------------
@@ -332,6 +372,10 @@ export const replaceCollection = (text: string) => call<CollectionImportResponse
 export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET', '/api/proxies', undefined, signal);
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
+
+export const startDiscover = (bracket: Bracket) => call<DiscoverState>('POST', '/api/discover', { bracket });
+export const getDiscover = (bracket: Bracket, signal?: AbortSignal) => call<DiscoverState>('GET', `/api/discover${query({ bracket })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string) => call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);
