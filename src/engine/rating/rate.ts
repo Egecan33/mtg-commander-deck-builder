@@ -61,7 +61,7 @@ const CORE_ROLE_KNEE = 0.5;
 const CORE_ROLE_FLOOR = 0.55;
 /** Role coverage: the least a role scores for being over its band. */
 const OVER_FLOOR = 0.5;
-/** Three creatures this large count as one win condition, up to the band's lower end (combat wins games). */
+/** Three creatures this large count as one win condition, up to half the band's lower end (combat wins games, but a deck still needs finishers). */
 const THREAT_POWER = 6;
 const THREATS_PER_WINCON = 3;
 /** Most the theme-density term earns when the theme was read off the deck, not the commander or the user. */
@@ -504,7 +504,7 @@ function winconsPart(f: Facts): Part {
   const cards = need?.count ?? 0;
   const combos = f.report.combos.included.length;
   const threats = f.count((c) => /\bCreature\b/.test(c.card.frontTypeLine) && Number(c.card.power) >= THREAT_POWER);
-  const n = cards + Math.min(3, combos) + Math.min(b.lo, Math.floor(threats / THREATS_PER_WINCON));
+  const n = cards + Math.min(3, combos) + Math.min(Math.floor(b.lo / 2), Math.floor(threats / THREATS_PER_WINCON));
   const want = b.lo === b.hi ? `${b.lo}` : `${b.lo}-${b.hi}`;
   if (n === 0 && owed) {
     issues.push({

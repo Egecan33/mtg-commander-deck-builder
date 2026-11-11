@@ -13,7 +13,8 @@ const ROLE_BANDS: Partial<Record<Role, PerBracket<Band>>> = {
   wipe: [[2, 5], [2, 5], [2, 4], [1, 3], [0, 2]],
   protection: [[1, 4], [2, 4], [2, 5], [2, 5], [2, 4]],
   tutor: [[0, 2], [0, 3], [2, 6], [4, 10], [8, 14]],
-  'win-condition': [[3, 7], [4, 8], [3, 6], [2, 5], [1, 3]],
+  // Four to six ways to end the game below cEDH; a Bracket 5 deck is built around two to four compact lines.
+  'win-condition': [[4, 7], [4, 8], [4, 6], [4, 6], [2, 4]],
   recursion: [[1, 4], [2, 4], [2, 4], [1, 3], [0, 3]],
   'graveyard-hate': [[0, 2], [1, 2], [2, 3], [2, 4], [2, 5]],
 };
@@ -69,6 +70,10 @@ const DRAW_COMMANDER_LO = -2;
 export const ARCHETYPE_WEIGHT = 0.6;
 /** Deltas come from the deck's strongest archetypes only, so stacked themes cannot erase a band. */
 export const MAX_ARCHETYPES = 2;
+
+/** A wanted count set on the deck (`Deck.roleTargets`) makes the band [n, n + span]; n is held to 0..max. */
+export const ROLE_TARGET_SPAN = 2;
+export const ROLE_TARGET_MAX = 40;
 
 const bracketIndex = (b: number): number => Math.min(5, Math.max(1, Math.round(Number.isFinite(b) ? b : 3))) - 1;
 const archetypeOf = (axis: AxisId): AxisId => (axis.startsWith('typal:') ? 'typal' : axis);
@@ -141,6 +146,14 @@ export function targetsFor(deck: Deck, ctx: EngineContext, summary: DeckSummary)
     band.hi = Math.max(1, band.lo, band.hi);
   }
   avgMv.lo = Math.min(avgMv.lo, Math.round((avgMv.hi - 0.4) * 10) / 10);
+
+  // Counts the user asked for on this deck win over everything above.
+  for (const [role, raw] of Object.entries(deck.roleTargets ?? {}) as [Role, unknown][]) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    const n = Math.min(ROLE_TARGET_MAX, Math.max(0, Math.round(raw)));
+    if (role === 'land') lands = Math.min(LAND_MAX, Math.max(LAND_MIN, n));
+    else if (ROLE_LABEL[role] !== undefined && (roles[role] || role !== 'counterspell')) roles[role] = { lo: n, hi: n + ROLE_TARGET_SPAN };
+  }
 
   return {
     lands: Math.min(LAND_MAX, Math.max(LAND_MIN, Math.round(lands))),

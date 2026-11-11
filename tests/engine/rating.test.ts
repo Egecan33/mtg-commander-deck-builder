@@ -64,13 +64,13 @@ describe('rateDeck shape', () => {
 });
 
 describe('rateDeck on the reference decks', () => {
-  it('precon at target 2 rates 55-80 and is legal and complete', () => {
+  it('precon at target 2 rates 55-82 and is legal and complete', () => {
     const r = rateDeck(fixtureDeck('precon', 2), ctx);
     expect(r.legal).toBe(true);
     expect(r.complete).toBe(true);
     expect(r.violations).toEqual([]);
     expect(r.rating).toBeGreaterThanOrEqual(55);
-    expect(r.rating).toBeLessThanOrEqual(80);
+    expect(r.rating).toBeLessThanOrEqual(82);
   });
 
   it('cEDH at target 5 rates at least 60 and is not punished for its land count', () => {

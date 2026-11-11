@@ -33,6 +33,9 @@ const EXTRAS = [
   'Seven Dwarves', 'Nazgûl', 'The Prismatic Piper', 'Grist, the Hunger Tide', "Lim-Dûl's Vault",
   'Fire // Ice', 'Bonecrusher Giant', 'Delver of Secrets', 'Brisela, Voice of Nightmares',
   'Gisela, the Broken Blade', 'Bruna, the Fading Light',
+  // Finishers the win-condition role is tested on.
+  'Overwhelming Stampede', 'Triumph of the Hordes', 'Torment of Hailfire', 'Aggravated Assault', 'Relentless Assault',
+  'Seize the Day', 'Gray Merchant of Asphodel', 'Beastmaster Ascension',
   'Gyruda, Doom of Depths', 'Jegantha, the Wellspring', 'Kaheera, the Orphanguard', 'Keruga, the Macrosage',
   'Lurrus of the Dream-Den', 'Lutri, the Spellchaser', 'Obosh, the Preypiercer', 'Umori, the Collector',
   'Yorion, Sky Nomad', 'Zirda, the Dawnwaker',

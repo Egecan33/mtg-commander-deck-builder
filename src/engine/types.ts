@@ -75,6 +75,11 @@ export interface Deck {
   main: DeckEntry[];             // excludes commanders and companion
   targetBracket: Bracket;
   themeWeights: Record<AxisId, number> | null; // null = derive from commander
+  /**
+   * Wanted counts the user set for this deck, by role ('land' is the land count). A role's band
+   * becomes [n, n + 2]; roles left out keep the bracket's default band (see `targetsFor`).
+   */
+  roleTargets?: Partial<Record<Role, number>> | null;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -125,7 +130,28 @@ export interface SubScore { key: string; label: string; weight: number; value: n
 export interface Fix { text: string; filter: { role?: Role; axis?: AxisId; color?: Color; maxMv?: number; land?: boolean } | null }
 export interface DeckRating { rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[] }
 
-export interface BuildOptions { ownedOnly: boolean; owned: Set<string> | null; maxPriceUsd: number | null; seed: number }
-export interface SwapProposal { out: string; in: string; reason: string; ratingBefore: number; ratingAfter: number }
+/** What a directed improve run is asked to do (all optional; see `improveDeck`). */
+export interface ImproveGoals {
+  /** Hard cap on proposals, 1-40. */
+  maxSwaps?: number;
+  /** Improve toward this bracket instead of the deck's own target. */
+  targetBracket?: Bracket;
+  /** Roles the run should add more of: their bands are raised for the run. */
+  emphasizeRoles?: Role[];
+  /** Theme axes to lean into: their weights go to 1, the others are scaled down. */
+  emphasizeAxes?: AxisId[];
+}
+export interface BuildOptions {
+  ownedOnly: boolean; owned: Set<string> | null; maxPriceUsd: number | null; seed: number;
+  goals?: ImproveGoals | null;
+}
+export interface SwapProposal {
+  /** The card to cut; '' when the proposal is a plain add (the deck is under 100 cards). */
+  out: string;
+  in: string; reason: string; ratingBefore: number; ratingAfter: number;
+  /** false when the engine thinks the change is not an improvement; `objection` then says why. Absent means it agrees. */
+  agrees?: boolean;
+  objection?: string;
+}
 
 export interface EngineContext { db: CardDb; edhrec: EdhrecData | null; mldOverrides: Record<string, boolean>; extraTurnOverrides: Record<string, boolean> }

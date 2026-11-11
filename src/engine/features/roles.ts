@@ -8,6 +8,9 @@ const WIN_SEEDS = new Set([
   'Triumph of the Hordes', 'Finale of Devastation', 'Blightsteel Colossus', 'Expropriate', 'Rise of the Dark Realms',
   'Overwhelming Stampede', "Akroma's Will", 'Moonshaker Cavalry', 'End-Raze Forerunners', 'Pathbreaker Ibex',
   'Grapeshot', 'Brain Freeze', 'Tendrils of Agony', 'Walking Ballista', 'Crackle with Power', 'Debt to the Deathless',
+  // Go-wide and drain engines that end the game the turn they come together.
+  'Beastmaster Ascension', 'Coat of Arms', 'Shared Animosity', 'Purphoros, God of the Forge', 'Sanguine Bond',
+  'Exquisite Blood', 'Bloodchief Ascension',
 ]);
 
 /** Lock pieces whose wording no rule catches. */
@@ -245,6 +248,29 @@ function isRecursion(c: Ctx): boolean {
 /** A planeswalker loyalty ability line: "+1: ...", "−3: ...", "0: ...". */
 const LOYALTY_LINE = /^[+−-]?(\d+|x): /;
 
+/**
+ * Mass pump that turns a board into lethal: every creature you control gets at least +2/+2 (or
+ * +X/+X) and trample. Four mana and up, so combat tricks and small anthems stay out.
+ */
+function isOverrun(c: Ctx): boolean {
+  if (c.card.cmc < 4) return false;
+  const pump = '\\+(x|[2-9])\\/\\+(x|[2-9])';
+  const yours = '(other )?creatures you control|each (other )?creature you control';
+  return new RegExp(
+    `(${yours}) (get|gain|gets|gains|have|has)[^.]*${pump}[^.]*trample|(${yours}) (get|gain|gets|gains|have|has)[^.]*trample[^.]*${pump}|trample and gets? ${pump}`,
+  ).test(c.t);
+}
+
+/**
+ * Extra combat steps for your whole team (Aggravated Assault, Moraug, Relentless Assault). Effects
+ * that give one creature another attack, or that turn an opponent's attack around, are not finishers.
+ */
+function isExtraCombatFinisher(c: Ctx): boolean {
+  if (c.isLand || !/additional combat phase/.test(c.t)) return false;
+  if (/can't attack you|attacking creatures from combat|prevent all combat damage/.test(c.t)) return false;
+  return /untap (all|each) (attacking )?creatures?( you control| that attacked)?|untap all creatures|creatures you control (gain|have|get)/.test(c.t);
+}
+
 function isWinCondition(c: Ctx): boolean {
   if (WIN_SEEDS.has(c.card.frontName) || WIN_SEEDS.has(c.card.name)) return true;
   // Planeswalker ultimates are too slow to be a deck's plan; a static line (Jace, Wielder of Mysteries) is not.
@@ -255,7 +281,8 @@ function isWinCondition(c: Ctx): boolean {
   if (!walker && hasTag(c, 'alternate-win-condition') && /(wins?|loses?) the game/.test(c.t)) return true;
   const xCost = /\{x\}/i.test(c.card.manaCost ?? '');
   if (xCost && /each opponent loses (x|twice x|that much) life|deals x damage to each opponent|each opponent loses x life/.test(c.t)) return true;
-  if (!walker && hasTag(c, 'overrun') && c.card.cmc >= 5 && /creatures you control (get|gain)[^.]*\+(x|[3-9])\/\+(x|[3-9])[^.]*trample|creatures you control (get|gain)[^.]*trample[^.]*\+(x|[3-9])\/\+(x|[3-9])|trample and get \+x\/\+x/.test(c.t)) return true;
+  if (!walker && hasTag(c, 'overrun') && isOverrun(c)) return true;
+  if (!walker && hasTag(c, 'extra-combat-phase') && isExtraCombatFinisher(c)) return true;
   return false;
 }
 

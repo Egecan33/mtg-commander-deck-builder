@@ -31,7 +31,8 @@ export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecS
  */
 export function deckKey(deck: Deck): string {
   const theme = deck.themeWeights ? Object.entries(deck.themeWeights).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
-  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty])];
+  const wanted = deck.roleTargets ? Object.entries(deck.roleTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
+  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted];
   return createHash('sha1').update(JSON.stringify(shape)).digest('hex');
 }
 

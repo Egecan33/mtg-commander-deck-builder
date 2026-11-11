@@ -533,6 +533,63 @@ function rebalanceBasics(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<
   return fineRating(rateDeck(deck, ctx)) >= fineRating(rateDeck(start, ctx)) ? deck : start;
 }
 
+/** Score under which a finisher is not forced into a deck just to make the count. */
+const WINCON_MIN_SCORE = 20;
+/** Cards that win on a condition of their own: brought in for the count only when on theme, or when nothing else is left. */
+const ALT_WIN = /\byou win the game\b/i;
+
+/**
+ * The later passes trade cards by score and can leave the deck under its win-condition band (the
+ * fill only insists on role minimums when slots run short). While the deck holds fewer finishers
+ * than the band's bottom, its lowest-scoring free spell that is not one gives way to the best
+ * finisher the pool has for it. Stops when the pool has none worth playing.
+ */
+function ensureWinConditions(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>): Deck {
+  let deck = start;
+  const isWin = (id: string) => ctx.db.features(id)?.roles.includes('win-condition') === true;
+  for (let n = 0; n < 8; n++) {
+    const summary = summarizeDeck(deck, ctx.db);
+    const band = targetsFor(deck, ctx, summary).roles['win-condition'];
+    if (!band || finite(summary.roleCounts['win-condition']) >= band.lo) break;
+    const scorer = createScorer(deck, ctx);
+    const have = new Set(deckCounts(deck).keys());
+    const ins: { c: Candidate; key: number }[] = [];
+    const tally = tallyDeck(deck, ctx, pool.plan);
+    for (const c of pool.nonland) {
+      if (have.has(c.card.oracleId) || !c.f.roles.includes('win-condition') || copyLimit(c.card) > 1) continue;
+      if (planBonus(c.kind, tally, pool.plan) === null) continue;
+      const s = scorer.score(c.card);
+      if (s.gate || s.score < WINCON_MIN_SCORE) continue;
+      ins.push({ c, key: s.score + c.jitter + c.adjust - (ALT_WIN.test(c.card.oracleText) && c.theme < 0.5 ? 25 : 0) });
+    }
+    ins.sort((x, y) => y.key - x.key || (x.c.card.oracleId < y.c.card.oracleId ? -1 : 1));
+    let out: string | null = null;
+    let outScore = Infinity;
+    for (const e of deck.main) {
+      if (e.locked || keep.has(e.oracleId) || qtyOf(e) < 1 || isWin(e.oracleId)) continue;
+      const card = ctx.db.get(e.oracleId);
+      const f = card ? ctx.db.features(e.oracleId) : undefined;
+      if (!card || !f || isLandCard(f)) continue;
+      const score = scorer.score(card).score;
+      if (score < outScore) { outScore = score; out = e.oracleId; }
+    }
+    if (!out) break;
+    // Never at the price of legality or of the bracket the deck plays at.
+    const plays = analyzeBracket(deck, ctx).playsLike;
+    let next: Deck | null = null;
+    for (const { c } of ins.slice(0, 4)) {
+      const trial = addCard(removeCard(deck, out), c.card.oracleId);
+      if (nextOffender(trial, ctx, keep)) continue;
+      if (analyzeBracket(trial, ctx).playsLike > Math.max(plays, pool.plan.bracket)) continue;
+      next = trial;
+      break;
+    }
+    if (!next) break;
+    deck = next;
+  }
+  return deck;
+}
+
 function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: BuildOptions): Deck {
   const pool = buildPool(start, ctx, opts);
   let deck = fillOpen(start, ctx, pool);
@@ -549,7 +606,7 @@ function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: Bui
   deck = rebalanceBasics(deck, ctx, pool, keep);
   const climbed = climb(deck, ctx, pool, keep, { maxSwaps: CLIMB_SWAPS, evalBudget: CLIMB_EVALS });
   if (climbed.swaps.length > 0) deck = repair(climbed.deck, ctx, pool, keep);
-  return deck;
+  return ensureWinConditions(deck, ctx, pool, keep);
 }
 
 /**

@@ -3,7 +3,8 @@ import type { DeckTile } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
 import { rateDeck } from '@/engine/rating';
 import { deckSize } from '@/engine/rules';
-import type { Bracket, Color, Deck, DeckEntry } from '@/engine/types';
+import { ROLE_LABEL } from '@/engine/targets';
+import type { Bracket, Color, Deck, DeckEntry, Role } from '@/engine/types';
 import { cardLookup } from './cards';
 import { deckKey, engineContext } from './context';
 import { HttpError, isObject } from './http';
@@ -14,6 +15,7 @@ const COLORS: readonly string[] = ['W', 'U', 'B', 'R', 'G'];
 export const MAX_NAME = 200;
 export const MAX_ENTRIES = 2000;
 export const MAX_QTY = 9999;
+const ROLE_TARGET_KEYS: readonly string[] = ['land', ...Object.keys(ROLE_LABEL)];
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
@@ -68,7 +70,15 @@ export function sanitizeDeck(input: unknown): Deck {
     }
   }
 
-  return { id, name, commanders, companion, chosenColor, main: [...merged.values()], targetBracket, themeWeights };
+  const deck: Deck = { id, name, commanders, companion, chosenColor, main: [...merged.values()], targetBracket, themeWeights };
+  if (isObject(input.roleTargets)) {
+    const roleTargets: NonNullable<Deck['roleTargets']> = {};
+    for (const [role, n] of Object.entries(input.roleTargets as Record<string, unknown>)) {
+      if (ROLE_TARGET_KEYS.includes(role) && typeof n === 'number' && Number.isFinite(n)) roleTargets[role as Role] = Math.min(60, Math.max(0, Math.round(n)));
+    }
+    if (Object.keys(roleTargets).length > 0) deck.roleTargets = roleTargets;
+  }
+  return deck;
 }
 
 interface Row { id: string; name: string; json: string; updated_at: string }
