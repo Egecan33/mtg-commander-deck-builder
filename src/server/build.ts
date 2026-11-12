@@ -1,5 +1,5 @@
 import type { BuildMode, BuildResponse } from '@/app/lib/api';
-import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, autoBuild, fillRest, improveDeck, suggestSwaps } from '@/engine/builder';
+import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, replaceCard, autoBuild, fillRest, improveDeck, suggestSwaps } from '@/engine/builder';
 import { ROLE_LABEL } from '@/engine/targets';
 import type { Bracket, BuildOptions, Deck, ImproveGoals, Role } from '@/engine/types';
 import { cardLookup } from './cards';
@@ -7,7 +7,7 @@ import { ownedSet } from './collection';
 import { engineContext } from './context';
 import { HttpError, intParam, isObject } from './http';
 
-const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add'];
+const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace'];
 export const MAX_PROPOSAL_COUNT = 30;
 
 /** `options.goals` of an 'improve' request, checked. Unknown roles are a 400; unknown axes are simply not in the deck. */
@@ -62,6 +62,11 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
     if (typeof o.role !== 'string' || !ADD_ONE_ROLES.includes(o.role as Role)) throw new HttpError(400, `options.role must be one of: ${ADD_ONE_ROLES.join(', ')}.`);
     const proposals = addOne(deck, ctx, options, o.role as Role, intParam(o.count, 5, 1, 10));
     return { proposals, cards: cardLookup(proposals.flatMap((p) => [p.out, p.in]).filter((id) => id !== '')) };
+  }
+  if (mode === 'replace') {
+    if (typeof o.out !== 'string' || !deck.main.some((e) => e.oracleId === o.out)) throw new HttpError(400, 'options.out must be the oracleId of a card in the deck (not a commander).');
+    const proposals = replaceCard(deck, ctx, options, o.out, intParam(o.count, 6, 1, 12));
+    return { proposals, cards: cardLookup([o.out, ...proposals.map((p) => p.in)]) };
   }
   const proposals =
     mode === 'swaps'

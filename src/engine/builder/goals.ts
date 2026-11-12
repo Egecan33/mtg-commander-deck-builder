@@ -404,3 +404,51 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
   }
   return proposals;
 }
+
+/**
+ * Replacements for one chosen card in the deck: up to `count` swaps, ranked by the rating after.
+ * Same-role cards come first (a land is replaced by lands); a few best-overall cards follow.
+ * Swaps the engine thinks are worse still come back, with `agrees: false` and an objection.
+ */
+export function replaceCard(deck: Deck, ctx: EngineContext, opts: BuildOptions, outId: string, count = 6): SwapProposal[] {
+  const n = Math.min(12, Math.max(1, Math.floor(Number.isFinite(count) ? count : 6)));
+  const { db } = ctx;
+  if (!deck.main.some((e) => e.oracleId === outId)) return [];
+  const outCard = db.get(outId);
+  const outF = db.features(outId);
+  const pool = buildPool(deck, ctx, { ...opts, goals: null });
+  const scorer = createScorer(deck, ctx);
+  const have = idsOf(deck);
+  const fits = planFilter(deck, ctx, pool);
+  const wasLand = outF ? isLandCard(outF) : false;
+  const roles: Role[] = (outF?.roles ?? []).filter((r) => r !== 'land' && r !== 'game-changer' && r !== 'mass-land-denial' && r !== 'extra-turn');
+
+  const picked = new Map<string, Candidate>();
+  const take = (list: { c: Candidate }[]) => { for (const x of list) if (!picked.has(x.c.card.oracleId)) picked.set(x.c.card.oracleId, x.c); };
+  if (wasLand) {
+    take(bestOf(landCandidates(pool, ctx), scorer, have, n, () => true));
+  } else {
+    if (roles.length > 0) take(bestOf(pool.nonland, scorer, have, n, (c) => fits(c) && c.f.roles.some((r) => roles.includes(r))));
+    take(bestOf(pool.nonland, scorer, have, Math.max(2, n - picked.size), (c) => fits(c) && !picked.has(c.card.oracleId)));
+  }
+  if (picked.size === 0) return [];
+
+  const before = shownRating(rateDeck(deck, ctx));
+  const outScore = Math.max(0, Math.round(scorer.score(outCard ?? ({ oracleId: outId } as never)).score));
+  const outName = outCard?.name ?? 'this card';
+  const roleText = roles.length > 0 ? roles.map((r) => ROLE_LABEL[r] ?? r).join(' / ') : wasLand ? 'land' : null;
+  const proposals: SwapProposal[] = [];
+  for (const c of picked.values()) {
+    const id = c.card.oracleId;
+    const after = shownRating(rateDeck(swapOne(deck, outId, id), ctx));
+    const score = Math.round(scorer.score(c.card).score);
+    const same = wasLand ? (c.f && isLandCard(c.f)) : c.f.roles.some((r) => roles.includes(r));
+    const lead = same && roleText
+      ? `${c.card.name} (${score}) does the same job (${roleText}) as ${outName} (${outScore}).`
+      : `${c.card.name} (${score}) is one of the strongest cards for this deck that is not in it; it does a different job than ${outName} (${outScore}).`;
+    const p: SwapProposal = { out: outId, in: id, reason: lead, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
+    if (!p.agrees) p.objection = `Swapping out ${outName} for ${c.card.name} drops the rating ${before} -> ${after}; the engine thinks ${outName} is the better fit here.`;
+    proposals.push(p);
+  }
+  return proposals.sort((a, b) => b.ratingAfter - a.ratingAfter).slice(0, n);
+}

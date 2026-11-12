@@ -48,6 +48,7 @@ export function Builder({ id }: { id: string }) {
   const [exported, setExported] = useState<{ text: string; copied: boolean } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
+  const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string } | null>(null);
   const dirty = useRef(false);
   const saveSeq = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -268,6 +269,18 @@ export function Builder({ id }: { id: string }) {
       notify.error(e);
     } finally {
       setBusy(null);
+    }
+  };
+  const suggestFor = async (out: string) => {
+    if (!deck) return;
+    setDetail(null);
+    setReplacing({ out, list: null });
+    try {
+      const res = await buildDeck(deck, 'replace', { ...buildOpts(), out, seed: 1 });
+      learn(res.cards);
+      setReplacing({ out, list: res.proposals });
+    } catch (e) {
+      setReplacing({ out, list: [], error: errText(e) });
     }
   };
   const proxyCards = (ids: string[], what?: string) => void proxies.add(ids.map((oracleId) => ({ oracleId, qty: 1 })), what);
@@ -573,6 +586,7 @@ export function Builder({ id }: { id: string }) {
                 </button>
               ) : detailEntry ? (
                 <>
+                  <button type="button" className="btn btn-primary" onClick={() => void suggestFor(detail)} data-testid="detail-replace">Suggest swaps for this card</button>
                   <button type="button" className="btn btn-danger" onClick={() => remove(detail)} data-testid="detail-remove">Remove from the deck</button>
                   <button type="button" className="btn" onClick={() => lock(detail)} data-testid="detail-lock">{detailEntry.locked ? 'Unlock' : 'Lock in the deck'}</button>
                   {detailCard?.roles.includes('land') && <button type="button" className="btn" onClick={() => add(detail)}>Add another copy ({detailEntry.qty} now)</button>}
@@ -595,6 +609,36 @@ export function Builder({ id }: { id: string }) {
             </>
           }
         />
+      )}
+
+      {replacing && deck && (
+        <Overlay onClose={() => setReplacing(null)} label="Swaps for one card" wide>
+          <div className="p-6" data-testid="replace-panel">
+            <h2 className="text-[1.4rem]">Swaps for {lookup[replacing.out]?.name ?? 'this card'}</h2>
+            <p className="mt-1 text-ash">Best replacements first, by the deck rating after the swap. Ones the engine disagrees with still show, with the reason.</p>
+            {replacing.list === null && <p className="mt-4 text-ash">Looking for replacements...</p>}
+            {replacing.error && <p className="mt-4 text-[var(--bad,#e57373)]">{replacing.error}</p>}
+            {replacing.list && replacing.list.length === 0 && !replacing.error && <p className="mt-4 text-ash">No legal replacement found for this card.</p>}
+            <div className="mt-4 flex flex-col gap-3">
+              {(replacing.list ?? []).map((p) => (
+                <div key={p.in} className="flex items-center gap-4 rounded border border-white/10 p-3" data-testid="replace-row">
+                  <div className="w-24 shrink-0 card"><CardImage id={p.out} name={lookup[p.out]?.frontName ?? ''} size="grid" known={!!lookup[p.out]} /></div>
+                  <span className="text-ash">→</span>
+                  <button type="button" className="w-24 shrink-0 card" onClick={() => setDetail(p.in)} title="Open card"><CardImage id={p.in} name={lookup[p.in]?.frontName ?? ''} size="grid" known={!!lookup[p.in]} /></button>
+                  <div className="min-w-0 flex-1">
+                    <p>{p.reason}</p>
+                    {p.agrees === false && p.objection && <p className="mt-1 text-[0.92rem] text-[#d9b56a]">Not recommended: {p.objection}</p>}
+                    <p className="mt-1 text-ash">Rating {Math.round(p.ratingBefore)} → {Math.round(p.ratingAfter)}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <button type="button" className={p.agrees === false ? 'btn' : 'btn btn-primary'} onClick={() => { mutate((d) => swapCard(d, p.out, p.in)); setReplacing(null); }} data-testid="replace-accept">Swap</button>
+                    <button type="button" className="btn" onClick={() => proxyCards([p.in], `Added ${lookup[p.in]?.name ?? 'the card'} to the proxy list.`)}>Proxy</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Overlay>
       )}
 
       {exported && (
