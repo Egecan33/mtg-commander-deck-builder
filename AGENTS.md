@@ -57,6 +57,11 @@ pnpm e2e             # Playwright, needs a synced data/ directory
 - Scryfall bulk files are gzipped JSON Lines. The Commander Spellbook export is 729 MB uncompressed and must be stream-parsed.
 - EDHREC has no public API and its terms do not permit automated queries. The opt-in integration makes a couple of cached requests per commander and nothing else. Do not widen it, crawl, or commit its data.
 - Do not email or contact any data provider on the project's behalf.
+- MTG Arena sync (`src/server/arena.ts`, `src/engine/text/arenalog.ts`) reads local files only: Arena's `Player.log` and `Raw_CardDatabase*.mtga`. Never log in to Wizards, never read the Arena process's memory, never upload the log.
+
+## Collections
+
+There are several collections (`collections`, `collection_cards`); exactly one is active (`settings.activeCollection`) and `ownedSet()` / `ownedQuantities()` always mean the active one. The old single `collection` table is only the source of the one-time migration into "Physical" (`migrateCollections` in `src/server/db.ts`); do not read or write it. Nothing about collections may change a deck.
 
 ## Tests
 

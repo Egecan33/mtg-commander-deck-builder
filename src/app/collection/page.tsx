@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/card';
-import { useNotify, useStatus } from '../components/Shell';
+import { useCollections, useNotify, useStatus } from '../components/Shell';
 import { VirtualGrid } from '../components/VirtualGrid';
-import { adjustCollection, getCollection, lookupPrinting, replaceCollection, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
-import { fmtInt } from '../lib/ui';
+import { adjustCollection, collectionExportUrl, getCollection, lookupPrinting, replaceCollection, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
+import { fmtDate, fmtInt } from '../lib/ui';
 
 type Owned = CollectionResponse['cards'][number];
 
 export default function CollectionPage() {
   const notify = useNotify();
   const { status } = useStatus();
+  const { collections, active, switchTo, refresh: refreshCollections, arena, arenaBusy, syncArena } = useCollections();
   const [collection, setCollection] = useState<CollectionResponse | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,10 +23,11 @@ export default function CollectionPage() {
   const load = useCallback(async () => {
     try {
       setCollection(await getCollection());
+      void refreshCollections();
     } catch (e) {
       notify.error(e);
     }
-  }, [notify]);
+  }, [notify, refreshCollections]);
   useEffect(() => {
     if (status?.ready) void load();
   }, [status?.ready, load]);
@@ -101,6 +103,60 @@ export default function CollectionPage() {
           </p>
         </div>
 
+        {collections.length > 1 && (
+          <div data-testid="collection-tabs">
+            <div className="flex gap-1.5" role="tablist" aria-label="Collections">
+              {collections.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={c.active}
+                  data-testid={`collection-tab-${c.id}`}
+                  className={`btn flex-1 justify-between ${c.active ? 'btn-primary' : ''}`}
+                  onClick={() => { if (!c.active) void switchTo(c.id); }}
+                >
+                  <span className="font-medium">{c.name}</span>
+                  <span className="text-[0.8rem] opacity-80">{fmtInt(c.count)}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[0.82rem] text-smoke">
+              The selected collection is the one “owned” means everywhere. Switching never changes a deck or the other collection.
+            </p>
+          </div>
+        )}
+
+        {active?.kind === 'arena' && (
+          <div className="rounded-md border border-slag bg-soot px-4 py-3" data-testid="arena-panel">
+            <div className="flex items-center gap-3">
+              <h2 className="text-[1.1rem]">MTG Arena sync</h2>
+              <button type="button" className="btn btn-sm ml-auto" disabled={arenaBusy} onClick={() => void syncArena().then(load)} data-testid="arena-sync">
+                {arenaBusy ? 'Reading Arena' : 'Sync Arena'}
+              </button>
+            </div>
+            <p className="mt-1 text-[0.88rem] text-ash" data-testid="arena-synced">
+              {active.syncedAt ? `Last synced ${fmtDate(active.syncedAt)}.` : 'Never synced.'}{' '}
+              {arena ? (arena.installed ? 'Arena was found on this computer.' : 'Arena is not installed on this computer.') : ''}
+            </p>
+            {arena?.last && !arena.last.ok && (
+              <p className="mt-1.5 text-[0.88rem] text-band-mid" role="status" data-testid="arena-problem">{arena.last.message}</p>
+            )}
+            {arena?.last?.ok && (
+              <p className="mt-1.5 text-[0.88rem] text-ash" data-testid="arena-result">{arena.last.message}</p>
+            )}
+            <details className="mt-2 text-[0.82rem] text-smoke">
+              <summary className="cursor-pointer text-ash">What the sync can and cannot see</summary>
+              <p className="mt-1">
+                It reads only files Arena leaves on this computer (its log and its card database). Nothing is sent anywhere and your Wizards account is never used.
+                Arena stopped writing the whole collection to its log in 2021. With “Detailed Logs (Plugin Support)” on, the log holds your decks and your draft and sealed pools,
+                so those are the cards found: a card you own that is in no deck is missed. Each sync adds to the earlier ones. Arena-only (Alchemy) cards are left out.
+                To fill the gaps, add cards here by hand, or paste a full export from a tracker below.
+              </p>
+            </details>
+          </div>
+        )}
+
         <div className="rounded-md border border-slag bg-soot px-4 py-3" data-testid="collection-count">
           <div className="display text-[1.9rem] font-bold leading-none">{collection ? fmtInt(collection.count) : '–'}</div>
           <div className="mt-1 text-ash">
@@ -168,7 +224,7 @@ export default function CollectionPage() {
         </div>
 
         <div>
-          <h2 className="text-[1.1rem]">Replace the collection</h2>
+          <h2 className="text-[1.1rem]">Replace {active ? `the ${active.name} collection` : 'the collection'}</h2>
           <p className="mt-1 text-[0.88rem] text-ash">
             Paste a CSV export from Moxfield, Archidekt or ManaBox (the name and quantity columns are found automatically), or plain lines like
             “2 Sol Ring” or “3 tdm 123”. This replaces what is saved now.
@@ -199,6 +255,9 @@ export default function CollectionPage() {
               />
               Choose a file
             </label>
+            <a className="btn" href={collectionExportUrl(active?.id)} download data-testid="collection-export" title="Download this collection as a CSV you can import again">
+              Export
+            </a>
             <span className="ml-auto" />
             {confirmClear ? (
               <>

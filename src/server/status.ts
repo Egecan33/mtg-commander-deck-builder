@@ -2,6 +2,7 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import type { StatusResponse, SyncStep } from '@/app/lib/api';
 import { DEFAULT_SETTINGS, getSettings } from './settings';
+import { ownedQuantities } from './collection';
 import { cacheSlot } from './state';
 import { dbPath, getDb, imageDir } from './store';
 import { SYNC_STEPS, syncState } from './sync-runner';
@@ -56,7 +57,7 @@ function readCounts(): StatusResponse['counts'] {
 function smallCounts(): { collection: number; decks: number } {
   const db = getDb();
   const one = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
-  return { collection: one('SELECT count(*) AS n FROM collection'), decks: one('SELECT count(*) AS n FROM decks') };
+  return { collection: ownedQuantities().size, decks: one('SELECT count(*) AS n FROM decks') };
 }
 
 /** The Data page's facts. Never throws: a database that cannot be opened is reported in `error`. */

@@ -56,6 +56,19 @@
  * POST /api/collection  {text}          -> CollectionImportResponse   replaces the collection (CSV or text;
  *        empty text clears it).
  * PATCH /api/collection {oracleId, delta} -> { count, totalQty, qty }   adds (or, negative, takes away) copies of one card.
+ *        All three act on the ACTIVE collection. "Owned" everywhere (green dots, the owned filter,
+ *        owned-only builds, Best from collection) means the active collection too.
+ * GET  /api/collection/export[?id=ID]   -> text/csv download ("Name,Quantity") of the active (or named)
+ *        collection; POST /api/collection reads it back to the same cards and quantities.
+ * GET  /api/collections                 -> CollectionsResponse   every collection with its size; one is active.
+ * PUT  /api/collections {active: ID}    -> CollectionsResponse   switches the active collection. Decks are not touched.
+ * GET  /api/arena                       -> ArenaStatus   is MTG Arena installed here, and what the last sync did.
+ * POST /api/arena  {auto?}              -> ArenaStatus
+ *        Reads the local MTG Arena install (its Player.log and card database; nothing leaves this
+ *        computer and no Wizards server is contacted) and replaces the "MTG Arena" collection with
+ *        the cards found. Never throws for a missing install or an unreadable log: `last.ok` is
+ *        false and `last.message` says what to do. `auto: true` (app start) skips the work when the
+ *        log has not changed since the last sync.
  * GET  /api/printing?q=TEXT             -> PrintingResponse
  *        Quick entry for the collection. `q` is a set code and collector number as printed at the
  *        bottom of a card ("TDM 123", "tdm-123", "123 TDM", "123/281 TDM", "0123 tdm"; rarity,
@@ -268,6 +281,48 @@ export interface ImportRequest { text: string; name?: string; targetBracket?: Br
 export interface ImportResponse { deck: Deck; unresolved: TextLine[]; ignored: TextLine[]; cards: CardLookup }
 export interface ExportResponse { text: string }
 
+/** One of the user's card collections. `kind: 'arena'` is filled by reading the local MTG Arena install. */
+export interface CollectionInfo {
+  id: string;
+  name: string;
+  kind: 'manual' | 'arena';
+  count: number;
+  totalQty: number;
+  /** "Owned" means this collection everywhere in the app. Exactly one is active. */
+  active: boolean;
+  /** When an automatic source last filled it; null for collections kept by hand. */
+  syncedAt: string | null;
+}
+export interface CollectionsResponse { collections: CollectionInfo[] }
+
+/** Why an Arena sync could not fill the collection. */
+export type ArenaProblem = 'not-installed' | 'no-log' | 'detailed-logs-off' | 'no-card-data' | 'no-card-database' | 'unreadable';
+export interface ArenaSyncResult {
+  ok: boolean;
+  at: string;
+  problem: ArenaProblem | null;
+  /** One or two plain sentences: what happened, and what to do when it failed. */
+  message: string;
+  /** Different cards and copies written to the collection (0 when not ok). */
+  cards: number;
+  totalQty: number;
+  /** Arena cards with no Commander-pool card of that name (Alchemy and other digital-only cards). */
+  unmapped: number;
+  /** Where the cards came from, e.g. "12 decks, 3 card pools". */
+  sources: string;
+}
+export interface ArenaStatus {
+  installed: boolean;
+  /** Folder of the install, the log read and the card database, when found. */
+  installPath: string | null;
+  logPath: string | null;
+  cardDatabase: string | null;
+  /** Arena's "Detailed Logs (Plugin Support)" setting as the log reports it; null when unknown. */
+  detailedLogs: boolean | null;
+  /** The last sync of this app run (or the last successful one, from the database). */
+  last: ArenaSyncResult | null;
+  syncedAt: string | null;
+}
 export interface CollectionResponse { count: number; totalQty: number; cards: (ClientCard & { qty: number })[] }
 export interface CollectionImportResponse { count: number; totalQty: number; unresolved: TextLine[] }
 
@@ -393,6 +448,12 @@ export const exportDeck = (deck: Deck) => call<ExportResponse>('POST', '/api/exp
 
 export const getCollection = (signal?: AbortSignal) => call<CollectionResponse>('GET', '/api/collection', undefined, signal);
 export const replaceCollection = (text: string) => call<CollectionImportResponse>('POST', '/api/collection', { text });
+
+export const getCollections = (signal?: AbortSignal) => call<CollectionsResponse>('GET', '/api/collections', undefined, signal);
+export const setActiveCollection = (id: string) => call<CollectionsResponse>('PUT', '/api/collections', { active: id });
+export const collectionExportUrl = (id?: string) => `/api/collection/export${id ? query({ id }) : ''}`;
+export const getArena = (signal?: AbortSignal) => call<ArenaStatus>('GET', '/api/arena', undefined, signal);
+export const syncArena = (auto = false) => call<ArenaStatus>('POST', '/api/arena', { auto });
 
 export const adjustCollection = (oracleId: string, delta: number) =>
   call<{ count: number; totalQty: number; qty: number }>('PATCH', '/api/collection', { oracleId, delta });

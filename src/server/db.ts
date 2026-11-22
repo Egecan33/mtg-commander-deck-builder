@@ -32,6 +32,13 @@ CREATE INDEX IF NOT EXISTS combo_cards_card ON combo_cards(oracle_id);
 CREATE TABLE IF NOT EXISTS card_features (oracle_id TEXT PRIMARY KEY, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS edhrec_cache (key TEXT PRIMARY KEY, fetched_at TEXT NOT NULL, etag TEXT, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS collection (oracle_id TEXT PRIMARY KEY, qty INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS collections (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, position INTEGER NOT NULL, synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS collection_cards (
+  collection_id TEXT NOT NULL, oracle_id TEXT NOT NULL, qty INTEGER NOT NULL,
+  PRIMARY KEY (collection_id, oracle_id)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS decks (id TEXT PRIMARY KEY, name TEXT NOT NULL, json TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS proxy_list (oracle_id TEXT PRIMARY KEY, qty INTEGER NOT NULL, added_at TEXT NOT NULL);
@@ -49,7 +56,27 @@ export function openDb(dbPath: string = process.env.COMMANDER_FORGE_DB ?? DEFAUL
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   db.exec(SCHEMA);
+  migrateCollections(db);
   return db;
+}
+
+/** The collection that holds what was the app's only collection before there were several. */
+export const PHYSICAL_COLLECTION = 'physical';
+export const ARENA_COLLECTION = 'arena';
+
+/**
+ * Creates the built-in collections once. A database from before there were several collections has
+ * its cards in the `collection` table: they are copied into "Physical". The old table is left as it
+ * was and is not read again, so a later start never overwrites what the user changed since.
+ */
+function migrateCollections(db: Db): void {
+  if (db.prepare('SELECT 1 FROM collections WHERE id = ?').get(PHYSICAL_COLLECTION)) return;
+  db.transaction(() => {
+    const add = db.prepare('INSERT OR IGNORE INTO collections(id, name, kind, position) VALUES (?, ?, ?, ?)');
+    add.run(PHYSICAL_COLLECTION, 'Physical', 'manual', 0);
+    add.run(ARENA_COLLECTION, 'MTG Arena', 'arena', 1);
+    db.prepare('INSERT OR IGNORE INTO collection_cards(collection_id, oracle_id, qty) SELECT ?, oracle_id, qty FROM collection WHERE qty >= 1').run(PHYSICAL_COLLECTION);
+  })();
 }
 
 export function writeSyncState(db: Db, step: string, info: Record<string, unknown>): void {

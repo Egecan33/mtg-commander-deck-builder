@@ -4,3 +4,5 @@ export { parseCollection } from './collection';
 export type { ParsedCollection } from './collection';
 export { parsePrintCode } from './printcode';
 export type { PrintCode } from './printcode';
+export { createArenaLogReader, parseArenaLog } from './arenalog';
+export type { ArenaLogData, ArenaLogReader } from './arenalog';

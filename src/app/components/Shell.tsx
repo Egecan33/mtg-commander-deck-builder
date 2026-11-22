@@ -3,7 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { addProxies, getProxies, getStatus, type ProxyItem, type ProxyListResponse, type StatusResponse } from '../lib/api';
+import {
+  addProxies, getArena, getCollections, getProxies, getStatus, setActiveCollection, syncArena,
+  type ArenaStatus, type CollectionInfo, type ProxyItem, type ProxyListResponse, type StatusResponse,
+} from '../lib/api';
 import { errText, fmtDate, isAbort } from '../lib/ui';
 
 // ---------------------------------------------------------------------------------------------
@@ -36,6 +39,26 @@ interface ProxyValue {
 }
 const ProxyContext = createContext<ProxyValue>({ total: null, qty: {}, add: async () => {}, sync: () => {} });
 export const useProxies = (): ProxyValue => useContext(ProxyContext);
+
+// ---------------------------------------------------------------------------------------------
+// Collections: which one is active (it decides what "owned" means on every page) and the MTG Arena sync.
+
+interface CollectionsValue {
+  collections: CollectionInfo[];
+  active: CollectionInfo | null;
+  /** Makes another collection the active one; every page then reloads its data. */
+  switchTo: (id: string) => Promise<void>;
+  /** Re-reads sizes after a page changed a collection. */
+  refresh: () => Promise<void>;
+  arena: ArenaStatus | null;
+  arenaBusy: boolean;
+  /** Reads the local MTG Arena install into the "MTG Arena" collection. */
+  syncArena: () => Promise<void>;
+}
+const CollectionsContext = createContext<CollectionsValue>({
+  collections: [], active: null, switchTo: async () => {}, refresh: async () => {}, arena: null, arenaBusy: false, syncArena: async () => {},
+});
+export const useCollections = (): CollectionsValue => useContext(CollectionsContext);
 
 const NAV = [
   { href: '/', label: 'Decks' },
@@ -112,12 +135,70 @@ export function Shell({ children }: { children: ReactNode }) {
       }
     },
   }), [proxyList, notify]);
+  const [collections, setCollections] = useState<CollectionInfo[]>([]);
+  const [arena, setArena] = useState<ArenaStatus | null>(null);
+  const [arenaBusy, setArenaBusy] = useState(false);
+  // Bumped when "owned" changes under the pages (another collection, or a sync of the active one): they remount and refetch.
+  const [ownedEpoch, setOwnedEpoch] = useState(0);
+  const refreshCollections = useCallback(async () => {
+    try {
+      setCollections((await getCollections()).collections);
+    } catch (e) {
+      notify.error(e);
+    }
+  }, [notify]);
+  const runArenaSync = useCallback(async (auto: boolean) => {
+    setArenaBusy(true);
+    try {
+      const before = auto ? await getArena() : null;
+      const res = await syncArena(auto);
+      setArena(res);
+      const list = (await getCollections()).collections;
+      setCollections(list);
+      const changed = res.last?.ok && res.syncedAt !== before?.syncedAt;
+      if (changed && list.find((c) => c.active)?.kind === 'arena') setOwnedEpoch((n) => n + 1);
+      if (!auto) {
+        if (res.last?.ok) notify.info(res.last.message);
+        else notify.error(res.last?.message ?? 'MTG Arena could not be read.');
+      }
+    } catch (e) {
+      if (!auto) notify.error(e);
+    } finally {
+      setArenaBusy(false);
+    }
+  }, [notify]);
+  // App start: read the collections, then try a quiet Arena sync (it does nothing when Arena is not installed).
+  useEffect(() => {
+    if (!ready) return;
+    void refreshCollections().then(() => runArenaSync(true));
+  }, [ready, refreshCollections, runArenaSync]);
+  const collectionsValue = useMemo<CollectionsValue>(() => ({
+    collections,
+    active: collections.find((c) => c.active) ?? null,
+    refresh: refreshCollections,
+    arena,
+    arenaBusy,
+    syncArena: () => runArenaSync(false),
+    switchTo: async (id) => {
+      try {
+        const list = (await setActiveCollection(id)).collections;
+        setCollections(list);
+        setOwnedEpoch((n) => n + 1);
+        const now = list.find((c) => c.active);
+        if (now) notify.info(`Using the ${now.name} collection: ${now.count.toLocaleString('en-US')} different cards`);
+      } catch (e) {
+        notify.error(e);
+      }
+    },
+  }), [collections, arena, arenaBusy, refreshCollections, runArenaSync, notify]);
+  const activeCollection = collectionsValue.active;
   const showStale = status?.ready && status.stale && !staleHidden && pathname !== '/data';
 
   return (
     <NotifyContext.Provider value={notify}>
       <StatusContext.Provider value={statusValue}>
        <ProxyContext.Provider value={proxyValue}>
+       <CollectionsContext.Provider value={collectionsValue}>
         <div className="app-shell flex h-screen min-w-[1180px] flex-col">
           <header className="no-print flex h-11 shrink-0 items-center gap-7 border-b border-slag bg-anvil px-5">
             <Link href="/" className="display text-[1.15rem] leading-none text-bone">
@@ -143,7 +224,24 @@ export function Shell({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
-            <div className="ml-auto text-[0.78rem] text-smoke">
+            {collections.length > 0 && (
+              <label className="ml-auto flex items-center gap-2 text-[0.82rem] text-ash" title="Which collection counts as “owned”: green dots, owned filters, owned-only builds and Best from collection all follow it.">
+                Collection
+                <select
+                  className="field h-7 py-0 text-[0.82rem]"
+                  data-testid="collection-switcher"
+                  value={activeCollection?.id ?? ''}
+                  onChange={(e) => void collectionsValue.switchTo(e.target.value)}
+                >
+                  {collections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.count.toLocaleString('en-US')})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className={`${collections.length > 0 ? '' : 'ml-auto '}text-[0.78rem] text-smoke`}>
               {status?.ready ? `${status.counts.legal.toLocaleString('en-US')} cards, synced ${fmtDate(status.cardsSyncedAt)}` : status ? 'No card data yet' : ''}
             </div>
           </header>
@@ -167,7 +265,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          <main className="min-h-0 flex-1 overflow-auto">{notReady && pathname !== '/data' ? null : children}</main>
+          <main key={ownedEpoch} className="min-h-0 flex-1 overflow-auto">{notReady && pathname !== '/data' ? null : children}</main>
         </div>
 
         <div className="no-print pointer-events-none fixed bottom-4 left-4 z-[80] flex w-[26rem] flex-col gap-2" aria-live="polite">
@@ -187,6 +285,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           ))}
         </div>
+       </CollectionsContext.Provider>
        </ProxyContext.Provider>
       </StatusContext.Provider>
     </NotifyContext.Provider>
