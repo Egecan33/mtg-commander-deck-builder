@@ -1,6 +1,7 @@
-import type { ImportResponse } from '@/app/lib/api';
+import type { ExportResponse, ImportResponse } from '@/app/lib/api';
+import { notOnArena } from './arena';
 import { isCommanderEligible } from '@/engine/rules';
-import { exportDecklist, parseDecklist } from '@/engine/text';
+import { exportArenaDecklist, exportDecklist, parseDecklist } from '@/engine/text';
 import type { Bracket, Deck } from '@/engine/types';
 import { cardLookup } from './cards';
 import { MAX_NAME } from './decks';
@@ -35,4 +36,11 @@ export function importText(body: Body): ImportResponse {
 /** POST /api/export. */
 export function exportText(deck: Deck): string {
   return exportDecklist(deck, getCardDb());
+}
+
+/** POST /api/export with `format: 'arena'`: the text Arena's deck import reads, and the cards Arena does not have. */
+export function exportArena(deck: Deck): ExportResponse {
+  const text = exportArenaDecklist(deck, getCardDb());
+  const names = text.split('\n').map((l) => /^\d+ (.+)$/.exec(l)?.[1]).filter((n): n is string => !!n);
+  return { text, notOnArena: notOnArena(names) };
 }

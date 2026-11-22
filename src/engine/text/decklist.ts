@@ -295,3 +295,21 @@ export function exportDecklist(deck: Deck, db: CardDb): string {
   sections.push(['Deck', ...deck.main.filter((e) => e.qty > 0).map((e) => line(e.oracleId, e.qty))].join('\n'));
   return sections.join('\n\n') + '\n';
 }
+
+/**
+ * The deck as MTG Arena's "Import" reads it from the clipboard: "Commander", "Companion" and "Deck"
+ * sections of "<qty> <name>" lines. Arena names a two-part card by its front part alone, except
+ * split cards, which keep both halves ("Fire // Ice"). No set codes: Arena then picks a printing
+ * the player owns. Cards the database does not know are left out.
+ */
+export function exportArenaDecklist(deck: Deck, db: CardDb): string {
+  const line = (oracleId: string, qty: number): string[] => {
+    const card = db.get(oracleId);
+    return card && qty > 0 ? [`${qty} ${card.layout === 'split' ? card.name : card.frontName}`] : [];
+  };
+  const sections: string[] = [];
+  if (deck.commanders.length > 0) sections.push(['Commander', ...deck.commanders.flatMap((id) => line(id, 1))].join('\n'));
+  if (deck.companion) sections.push(['Companion', ...line(deck.companion, 1)].join('\n'));
+  sections.push(['Deck', ...deck.main.flatMap((e) => line(e.oracleId, e.qty))].join('\n'));
+  return sections.join('\n\n') + '\n';
+}

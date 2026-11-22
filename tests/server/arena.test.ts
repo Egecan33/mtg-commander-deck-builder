@@ -225,6 +225,41 @@ describe('reading the full collection from the running game', () => {
   });
 });
 
+describe('exporting a deck for Arena', () => {
+  const post = async (body: unknown) => {
+    const { POST } = await import('@/app/api/export/route');
+    const res = await POST(new Request('http://localhost:3210/api/export', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }));
+    return { status: res.status, data: (await res.json()) as { text: string; notOnArena?: string[] | null; error?: string } };
+  };
+  const deck = () => {
+    const id = (name: string) => getCardDb().byName(name)!.oracleId;
+    return {
+      id: null, name: 'T', commanders: [id('Krenko, Mob Boss')], companion: null, chosenColor: null, targetBracket: 3, themeWeights: null,
+      main: [{ oracleId: id('Sol Ring'), qty: 1 }, { oracleId: id('Swords to Plowshares'), qty: 1 }, { oracleId: id('Bonecrusher Giant // Stomp'), qty: 1 }],
+    };
+  };
+
+  it('gives the Arena import text and names the cards Arena does not have', async () => {
+    const { status, data } = await post({ deck: deck(), format: 'arena' });
+    expect(status).toBe(200);
+    expect(data.text).toBe('Commander\n1 Krenko, Mob Boss\n\nDeck\n1 Sol Ring\n1 Swords to Plowshares\n1 Bonecrusher Giant\n');
+    // Krenko's name carries markup in Arena's database and still matches.
+    expect(data.notOnArena).toEqual(['Bonecrusher Giant', 'Swords to Plowshares']);
+  });
+
+  it('cannot say what Arena has when Arena is not on this computer', async () => {
+    rmSync(rawDir, { recursive: true, force: true });
+    expect((await post({ deck: deck(), format: 'arena' })).data.notOnArena).toBeNull();
+  });
+
+  it('keeps the plain export as it was and refuses an unknown format', async () => {
+    const plain = await post({ deck: deck() });
+    expect(plain.data.text).toContain('1 Bonecrusher Giant // Stomp');
+    expect(plain.data.notOnArena).toBeUndefined();
+    expect((await post({ deck: deck(), format: 'pdf' })).status).toBe(400);
+  });
+});
+
 describe('finding Arena', () => {
   it('knows the macOS log folder and the Steam, standalone and Epic installs', () => {
     const c = arenaCandidates('darwin', '/Users/me', {});

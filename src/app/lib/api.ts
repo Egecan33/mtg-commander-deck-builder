@@ -51,7 +51,10 @@
  * POST /api/import      {text, name?, targetBracket?} -> ImportResponse
  *        Parses a plain-text decklist. Lines that name no known card come back in `unresolved`
  *        (1-based line numbers), sideboard/maybeboard lines in `ignored`. Nothing is saved.
- * POST /api/export      {deck}          -> { text }
+ * POST /api/export      {deck, format?} -> ExportResponse
+ *        `format: 'arena'` gives the text MTG Arena's deck import reads from the clipboard (Commander /
+ *        Deck sections, Arena's card names, no set codes) and `notOnArena`: the deck's cards Arena does
+ *        not have, checked against the local Arena install.
  * GET  /api/collection                  -> CollectionResponse
  * POST /api/collection  {text}          -> CollectionImportResponse   replaces the collection (CSV or text;
  *        empty text clears it).
@@ -286,7 +289,11 @@ export type BuildResponse = BuildDeckResponse | BuildProposalsResponse;
 export interface TextLine { line: number; text: string }
 export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket }
 export interface ImportResponse { deck: Deck; unresolved: TextLine[]; ignored: TextLine[]; cards: CardLookup }
-export interface ExportResponse { text: string }
+export interface ExportResponse {
+  text: string;
+  /** Only for `format: 'arena'`: cards of the deck MTG Arena does not have; null when Arena is not installed here, so it is unknown. */
+  notOnArena?: string[] | null;
+}
 
 /** One of the user's card collections. `kind: 'arena'` is filled by reading the local MTG Arena install. */
 export interface CollectionInfo {
@@ -458,7 +465,7 @@ export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOpt
 }
 
 export const importDeck = (request: ImportRequest) => call<ImportResponse>('POST', '/api/import', request);
-export const exportDeck = (deck: Deck) => call<ExportResponse>('POST', '/api/export', { deck });
+export const exportDeck = (deck: Deck, format: 'text' | 'arena' = 'text') => call<ExportResponse>('POST', '/api/export', { deck, format });
 
 export const getCollection = (signal?: AbortSignal) => call<CollectionResponse>('GET', '/api/collection', undefined, signal);
 export const replaceCollection = (text: string) => call<CollectionImportResponse>('POST', '/api/collection', { text });

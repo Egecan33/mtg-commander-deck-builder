@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exportDecklist, parseCollection, parseDecklist } from '@/engine/text';
+import { exportArenaDecklist, exportDecklist, parseCollection, parseDecklist } from '@/engine/text';
 import type { Deck } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
 
@@ -334,5 +334,34 @@ describe('review regressions: collection', () => {
       owned: [{ oracleId: id('Sol Ring'), qty: 2 }],
       unresolved: [{ line: 4, text: 'Binder,1,0,Nope,C21' }],
     });
+  });
+});
+
+describe('exportArenaDecklist', () => {
+  const deck: Deck = {
+    id: null, name: 'Arena', commanders: [id('Krenko, Mob Boss')], companion: null, chosenColor: null, targetBracket: 3, themeWeights: null,
+    main: [
+      { oracleId: id('Sol Ring'), qty: 1, locked: false }, { oracleId: id('Mountain'), qty: 30, locked: false }, { oracleId: id('Fire // Ice'), qty: 1, locked: false },
+      { oracleId: id('Bonecrusher Giant // Stomp'), qty: 1, locked: false }, { oracleId: id('Bala Ged Recovery // Bala Ged Sanctuary'), qty: 1, locked: false },
+      { oracleId: id("Azor's Gateway // Sanctum of the Sun"), qty: 1, locked: false }, { oracleId: id('Lightning Bolt'), qty: 0, locked: false },
+    ],
+  };
+
+  it('writes the sections and names MTG Arena\'s deck import reads', () => {
+    expect(exportArenaDecklist(deck, db)).toBe(
+      ['Commander', '1 Krenko, Mob Boss', '', 'Deck', '1 Sol Ring', '30 Mountain', '1 Fire // Ice', '1 Bonecrusher Giant', '1 Bala Ged Recovery', "1 Azor's Gateway", ''].join('\n'),
+    );
+  });
+
+  it('puts a companion in its own section and leaves unknown cards out', () => {
+    const text = exportArenaDecklist({ ...deck, companion: id('Sol Ring'), main: [{ oracleId: 'not-a-card', qty: 1, locked: false }, { oracleId: id('Mountain'), qty: 2, locked: false }] }, db);
+    expect(text).toBe(['Commander', '1 Krenko, Mob Boss', '', 'Companion', '1 Sol Ring', '', 'Deck', '2 Mountain', ''].join('\n'));
+  });
+
+  it('reads back as the same deck', () => {
+    const back = parseDecklist(exportArenaDecklist(deck, db), db);
+    expect(back.unresolved).toEqual([]);
+    expect(back.commanders).toEqual(deck.commanders);
+    expect(back.main.map((e) => [e.oracleId, e.qty]).sort()).toEqual(deck.main.filter((e) => e.qty > 0).map((e) => [e.oracleId, e.qty]).sort());
   });
 });

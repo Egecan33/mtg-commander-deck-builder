@@ -11,6 +11,7 @@ import { listCollections, setCollectionCards } from './collection';
 import { HttpError } from './http';
 import { ARENA_COLLECTION } from './db';
 import { findPrinting } from './printings';
+import { cacheSlot } from './state';
 import { getCardDb, getDb } from './store';
 
 /**
@@ -342,4 +343,38 @@ export function importArenaCards(cards: unknown): ArenaStatus {
     message: `MTG Arena collection imported: ${plural(owned.size, 'card', 'different cards')}.` + (unmapped ? ` ${plural(unmapped, 'Arena-only card was', 'Arena-only cards were')} left out.` : ''),
   };
   return status(found);
+}
+
+const plainName = (s: string): string => s.replace(/<[^>]*>/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+
+/** Every card name Arena's own database knows (tokens left out), read once per database file. */
+function arenaNames(cardDatabase: string): Set<string> {
+  const stamp = `${cardDatabase}:${statSync(cardDatabase).mtimeMs}`;
+  const slot = cacheSlot<{ stamp: string; names: Set<string> }>('arena-names', () => ({ stamp: '', names: new Set() }));
+  if (slot.stamp === stamp) return slot.names;
+  const arena = new Database(cardDatabase, { readonly: true, fileMustExist: true });
+  try {
+    const rows = arena.prepare('SELECT DISTINCT l.Loc AS name FROM Cards c JOIN Localizations_enUS l ON l.LocId = c.TitleId WHERE c.IsToken = 0').all() as { name: string | null }[];
+    slot.names = new Set(rows.map((r) => plainName(r.name ?? '')).filter(Boolean));
+    slot.stamp = stamp;
+    return slot.names;
+  } finally {
+    arena.close();
+  }
+}
+
+/**
+ * Which of these cards MTG Arena does not have, by name (as Arena spells them: the front part, or
+ * both halves of a split card). null when Arena is not installed here or its database cannot be read.
+ */
+export function notOnArena(names: readonly string[]): string[] | null {
+  try {
+    const { cardDatabase } = locate();
+    if (!cardDatabase) return null;
+    const known = arenaNames(cardDatabase);
+    const front = (n: string) => n.split(' // ')[0]!;
+    return [...new Set(names.filter((n) => !known.has(plainName(n)) && !known.has(plainName(front(n)))))].sort((a, b) => a.localeCompare(b));
+  } catch {
+    return null;
+  }
 }

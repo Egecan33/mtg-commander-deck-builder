@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
-import { useNotify, useProxies, useStatus } from '../../components/Shell';
+import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getDeck, loadEdhrec, updateDeck,
   type AnalyzeResponse, type CardLookup, type ClientCard, type ScoredCard,
@@ -28,6 +28,7 @@ const WEAKEST = 5;
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
+  const { active: activeCollection } = useCollections();
   const proxies = useProxies();
   const { status } = useStatus();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -45,7 +46,7 @@ export function Builder({ id }: { id: string }) {
   const [grouping, setGrouping] = useState<Grouping>('role');
   const [layout, setLayout] = useState<Layout>('grid');
   const [detail, setDetail] = useState<string | null>(null);
-  const [exported, setExported] = useState<{ text: string; copied: boolean } | null>(null);
+  const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
   const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string } | null>(null);
@@ -309,11 +310,28 @@ export function Builder({ id }: { id: string }) {
     setProposals({ ...proposals, asked: true, items: proposals.kind === 'add' ? [] : proposals.items.filter((p) => !list.includes(p)) });
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
-  const doExport = async () => {
+  // "Only my collection" is a choice about the player, not about one deck: it is remembered.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('cf-owned-only') === '1') setOptions((o) => ({ ...o, ownedOnly: true }));
+    } catch {
+      // storage is off: the box just starts unticked
+    }
+  }, []);
+  const setOwnedOnly = (ownedOnly: boolean) => {
+    setOptions((o) => ({ ...o, ownedOnly }));
+    try {
+      localStorage.setItem('cf-owned-only', ownedOnly ? '1' : '0');
+    } catch {
+      // not remembered
+    }
+  };
+
+  const doExport = async (format: 'text' | 'arena' = 'text') => {
     if (!deck) return;
     setBusy('export');
     try {
-      const { text } = await exportDeck(deck);
+      const { text, notOnArena } = await exportDeck(deck, format);
       let copied = false;
       try {
         await navigator.clipboard.writeText(text);
@@ -321,7 +339,7 @@ export function Builder({ id }: { id: string }) {
       } catch {
         // clipboard permission denied: the text is shown for a manual copy
       }
-      setExported({ text, copied });
+      setExported({ text, copied, format, notOnArena });
     } catch (e) {
       notify.error(e);
     } finally {
@@ -460,6 +478,16 @@ export function Builder({ id }: { id: string }) {
           <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport()} data-testid="export">
             Export
           </button>
+          <label
+            className="col-span-2 flex cursor-pointer items-center gap-1.5 text-[0.78rem] text-ash"
+            title="Auto-build, Fill the rest, Reroll, Suggest swaps, Improve, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
+          >
+            <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
+            <span className="truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
+          </label>
+          <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport('arena')} title="Copy the deck in the form MTG Arena imports: in Arena open Decks, Import" data-testid="export-arena">
+            Copy for Arena
+          </button>
         </div>
       </header>
 
@@ -555,6 +583,7 @@ export function Builder({ id }: { id: string }) {
                 lookup={lookup}
                 themeAxes={themeAxes}
                 options={options}
+                collectionName={activeCollection?.name ?? null}
                 setOptions={setOptions}
                 proposals={proposals}
                 busy={busy}
@@ -646,10 +675,25 @@ export function Builder({ id }: { id: string }) {
           <div className="p-6" data-testid="export-dialog">
             <div className="flex items-start">
               <div>
-                <h2 className="text-[1.4rem]">Decklist</h2>
+                <h2 className="text-[1.4rem]">{exported.format === 'arena' ? 'Decklist for MTG Arena' : 'Decklist'}</h2>
                 <p className="mt-1 text-ash" data-testid="export-status">
-                  {exported.copied ? 'Copied to the clipboard. It pastes into Moxfield, Archidekt and most other deck sites.' : 'Select the text and copy it. The browser did not allow copying for you.'}
+                  {!exported.copied
+                    ? 'Select the text and copy it. The browser did not allow copying for you.'
+                    : exported.format === 'arena'
+                      ? 'Copied to the clipboard. In Arena open Decks and press Import.'
+                      : 'Copied to the clipboard. It pastes into Moxfield, Archidekt and most other deck sites.'}
                 </p>
+                {exported.format === 'arena' && exported.notOnArena && exported.notOnArena.length > 0 && (
+                  <p className="mt-2 max-w-[44rem] text-[0.88rem] text-band-mid" data-testid="export-not-on-arena">
+                    {exported.notOnArena.length} {exported.notOnArena.length === 1 ? 'card is' : 'cards are'} not on Arena and will not import: {exported.notOnArena.join(', ')}.
+                  </p>
+                )}
+                {exported.format === 'arena' && exported.notOnArena && exported.notOnArena.length === 0 && (
+                  <p className="mt-2 text-[0.88rem] text-ash" data-testid="export-all-on-arena">Every card of this deck exists on Arena.</p>
+                )}
+                {exported.format === 'arena' && exported.notOnArena === null && (
+                  <p className="mt-2 text-[0.88rem] text-smoke">Arena is not installed on this computer, so the app cannot check which cards Arena has.</p>
+                )}
               </div>
               <button type="button" className="btn btn-quiet btn-sm ml-auto" onClick={() => setExported(null)}>Close</button>
             </div>

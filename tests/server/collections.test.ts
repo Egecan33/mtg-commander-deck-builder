@@ -173,6 +173,32 @@ describe('collection routes', () => {
     expect((await send(collections.PUT, 'PUT', '/api/collections', {})).status).toBe(400);
   });
 
+  it('keeps swap, improve, add-one and replace suggestions inside the active collection when asked to', async () => {
+    const collections = await import('@/app/api/collections/route');
+    const build = await import('@/app/api/build/route');
+    const cdb = getCardDb();
+    const lathril = cdb.byName('Lathril, Blade of the Elves')!.oracleId;
+    const shell = { id: null, name: 'T', commanders: [lathril], companion: null, chosenColor: null, main: [], targetBracket: 3, themeWeights: null };
+    const built = (await send<{ deck: { main: { oracleId: string }[] } }>(build.POST, 'POST', '/api/build', { deck: shell, mode: 'auto', options: { seed: 1 } })).data.deck;
+    // The Arena collection: 40 green or black cards the deck does not run.
+    const inDeck = new Set(built.main.map((e) => e.oracleId));
+    const spare = cdb.all().filter((c) => c.legality === 'legal' && !inDeck.has(c.oracleId) && c.oracleId !== lathril && c.colorIdentity.every((x) => x === 'G' || x === 'B')).slice(0, 40);
+    await send(collections.PUT, 'PUT', '/api/collections', { active: 'arena' });
+    replaceCollection(spare.map((c) => `1 ${c.name}`).join('\n'));
+    const owned = new Set(spare.map((c) => c.oracleId));
+
+    const ins = async (mode: string, options: Record<string, unknown>) =>
+      (await send<{ proposals: { in: string }[] }>(build.POST, 'POST', '/api/build', { deck: built, mode, options: { ownedOnly: true, ...options } })).data.proposals.map((p) => p.in);
+    const out = built.main.find((e) => !cdb.get(e.oracleId)!.typeLine.includes('Land'))!.oracleId;
+    for (const [mode, options] of [['swaps', { count: 8 }], ['improve', {}], ['add', { role: 'ramp' }], ['replace', { out }]] as const) {
+      const got = await ins(mode, options);
+      for (const id of got) expect(owned.has(id), `${mode}: ${cdb.get(id)?.name}`).toBe(true);
+    }
+    // Without the limit the same deck is offered cards from outside the collection.
+    const free = (await send<{ proposals: { in: string }[] }>(build.POST, 'POST', '/api/build', { deck: built, mode: 'replace', options: { out } })).data.proposals.map((p) => p.in);
+    expect(free.some((id) => !owned.has(id))).toBe(true);
+  }, 60_000);
+
   it('downloads the active or a named collection as CSV', async () => {
     const route = await import('@/app/api/collection/export/route');
     replaceCollection('2 Sol Ring');

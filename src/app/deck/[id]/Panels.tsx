@@ -448,9 +448,11 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, setOptions, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, setOptions, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
+  /** Name of the active collection, for the owned-only box. */
+  collectionName: string | null;
   lookup: CardLookup;
   /** The deck's current theme axes, strongest first. */
   themeAxes: string[];
@@ -543,7 +545,7 @@ export function ImprovePanel({
           </label>
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOptions({ ...options, ownedOnly: e.target.checked })} data-testid="improve-owned" />
-            <span>Only cards in my collection</span>
+            <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>
           </label>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
