@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { arenaCandidates, arenaStatus, syncArenaCollection } from '@/server/arena';
+import { arenaCandidates, arenaStatus, importArenaCards, syncArenaCollection } from '@/server/arena';
 import { listCollections, ownedQuantities, replaceCollection, setActiveCollection } from '@/server/collection';
 import { getCardDb } from '@/server/store';
 import { seedDb, useServerDb } from './server-db';
@@ -159,6 +159,24 @@ describe('Arena sync', () => {
     const third = await syncArenaCollection({ auto: true });
     expect(third.last?.ok).toBe(true);
     expect(third.last).not.toBe(first.last);
+  });
+});
+
+describe('importing a full Arena card list', () => {
+  it('replaces the MTG Arena collection with a list of Arena card ids and counts', async () => {
+    await syncArenaCollection();
+    const status = importArenaCards([{ grpId: 60235, qty: 1 }, { grpId: 98688, qty: 3 }, { grpId: 77521, qty: 4 }, { grpId: 68766, qty: 2 }, { grpId: 70464, qty: 0 }]);
+    expect(status.last).toMatchObject({ ok: true, cards: 2, totalQty: 8, unmapped: 1, sources: 'a full card list' });
+    setActiveCollection('arena');
+    // The same card in two printings adds up here: these are real copies, not deck slots.
+    expect(names()).toEqual(['4 Lightning Bolt', '4 Sol Ring']);
+  });
+
+  it('refuses a list that is not card ids with counts, and says when the card database is missing', () => {
+    expect(() => importArenaCards([{ grpId: 'x', qty: 1 }] as never)).toThrow(/grpId/);
+    expect(() => importArenaCards('nope' as never)).toThrow(/list/);
+    rmSync(rawDir, { recursive: true, force: true });
+    expect(importArenaCards([{ grpId: 60235, qty: 1 }]).last).toMatchObject({ ok: false, problem: 'no-card-database' });
   });
 });
 

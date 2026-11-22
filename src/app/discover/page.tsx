@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Bracket } from '@/engine/types';
 import { CardImage } from '../components/card';
 import { useNotify, useProxies, useStatus } from '../components/Shell';
-import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverState, type DiscoverTier } from '../lib/api';
+import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverScope, type DiscoverState, type DiscoverTier } from '../lib/api';
 import { BAND_VAR, BRACKETS, bandOf, bracketName, fmtPrice } from '../lib/ui';
 
 const tierLabel = (t: DiscoverTier) => (t.cap === null ? 'Unlimited' : t.cap === 0 ? 'Owned only' : `Up to ${t.cap} buys`);
@@ -19,6 +19,7 @@ export default function DiscoverPage() {
   const proxies = useProxies();
   const { status } = useStatus();
   const [bracket, setBracket] = useState<Bracket>(3);
+  const [scope, setScope] = useState<DiscoverScope>('owned');
   const [state, setState] = useState<DiscoverState | null>(null);
   const [lookup, setLookup] = useState<CardLookup>({});
   const [open, setOpen] = useState<string | null>(null);
@@ -36,35 +37,35 @@ export default function DiscoverPage() {
       if (mine !== run.current) return;
       setState(s);
       setLookup((cur) => ({ ...cur, ...s.cards }));
-      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket).then(take, (e) => notify.error(e)), 700);
+      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope).then(take, (e) => notify.error(e)), 700);
     };
     setState(null);
     setOpen(null);
     setLazy({});
-    startDiscover(bracket).then(take, (e) => notify.error(e));
+    startDiscover(bracket, scope).then(take, (e) => notify.error(e));
     return () => {
       run.current++;
       if (timer) clearTimeout(timer);
     };
-  }, [ready, bracket, notify]);
+  }, [ready, bracket, scope, notify]);
 
   const expand = (entry: DiscoverEntry) => {
     const id = entry.commander.oracleId;
     if (open === id) return setOpen(null);
     setOpen(id);
     setPicked('0');
-    if (lazy[`${bracket}:${id}`] || state?.status !== 'done') return;
-    setLazy((l) => ({ ...l, [`${bracket}:${id}`]: 'loading' }));
-    getDiscoverTiers(bracket, id).then(
+    if (lazy[`${bracket}:${scope}:${id}`] || state?.status !== 'done') return;
+    setLazy((l) => ({ ...l, [`${bracket}:${scope}:${id}`]: 'loading' }));
+    getDiscoverTiers(bracket, id, scope).then(
       (res) => {
         setLookup((cur) => ({ ...cur, ...res.cards }));
-        setLazy((l) => ({ ...l, [`${bracket}:${id}`]: res.tiers }));
+        setLazy((l) => ({ ...l, [`${bracket}:${scope}:${id}`]: res.tiers }));
       },
       (e) => {
         notify.error(e);
         setLazy((l) => {
           const next = { ...l };
-          delete next[`${bracket}:${id}`];
+          delete next[`${bracket}:${scope}:${id}`];
           return next;
         });
       },
@@ -99,8 +100,15 @@ export default function DiscoverPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-[1.7rem] leading-tight">Best from your collection</h1>
           <p className="mt-1 max-w-[46rem] text-ash">
-            Which commanders you own make the best deck out of cards you already have, and how much better each gets with a few purchases. Basic lands count as owned. Only single commanders are looked at, not partner pairs.
+            {scope === 'owned'
+              ? 'Which commanders you own make the best deck out of cards you already have, and how much better each gets with a few purchases.'
+              : 'Which commanders you do not have would work best with the cards you already own. The commander is the one card to get; open a row to see what a few more would add.'}{' '}
+            Basic lands count as owned. Only single commanders are looked at, not partner pairs.
           </p>
+          <div className="seg mt-3" role="group" aria-label="Whose commanders">
+            <button type="button" aria-pressed={scope === 'owned'} onClick={() => setScope('owned')} data-testid="discover-scope-owned">Commanders I own</button>
+            <button type="button" aria-pressed={scope === 'unowned'} onClick={() => setScope('unowned')} data-testid="discover-scope-unowned">Commanders I don’t own</button>
+          </div>
         </div>
         <div className="shrink-0">
           <div className="mb-1 text-[0.75rem] text-ash">Bracket: {bracketName(bracket)}</div>
@@ -134,17 +142,17 @@ export default function DiscoverPage() {
       {state?.status === 'done' && (
         <p className="mt-5 text-[0.86rem] text-smoke" data-testid="discover-summary">
           {state.considered === 0
-            ? 'No card in your collection can be a commander.'
+            ? scope === 'owned' ? 'No card in your collection can be a commander.' : 'There is no commander you do not own.'
             : state.built < state.considered
-              ? `Showing the best ${state.built} of ${state.considered} commanders you own, in ${(state.ms / 1000).toFixed(0)} s.`
-              : `All ${state.considered} commanders you own, best deck first.`}
+              ? `Showing the best ${state.built} of ${state.considered} commanders you ${scope === 'owned' ? 'own' : 'do not own'}, in ${(state.ms / 1000).toFixed(0)} s.`
+              : `All ${state.considered} commanders you ${scope === 'owned' ? 'own' : 'do not own'}, best deck first.`}
         </p>
       )}
 
       <ol className="mt-3 grid gap-2.5">
         {(state?.entries ?? []).map((entry, i) => {
           const id = entry.commander.oracleId;
-          const extra = lazy[`${bracket}:${id}`];
+          const extra = lazy[`${bracket}:${scope}:${id}`];
           const tiers = [entry.tiers[0], ...(Array.isArray(extra) ? extra : []), entry.tiers[1]];
           const isOpen = open === id;
           const shown = tiers.find((t) => tierKey(t) === picked) ?? tiers[0];

@@ -7,6 +7,7 @@ import type { ArenaProblem, ArenaStatus, ArenaSyncResult } from '@/app/lib/api';
 import { createArenaLogReader, type ArenaLogData } from '@/engine/text';
 import { resolveCardName } from '@/engine/text/decklist';
 import { listCollections, setCollectionCards } from './collection';
+import { HttpError } from './http';
 import { ARENA_COLLECTION } from './db';
 import { findPrinting } from './printings';
 import { getCardDb, getDb } from './store';
@@ -120,7 +121,7 @@ async function readLogs(files: string[]): Promise<ArenaLogData> {
 }
 
 /** Arena card ids -> this app's cards, through Arena's own card database (name first, then set and number). */
-function mapCards(cardDatabase: string, seen: ReadonlyMap<number, number>): { owned: Map<string, number>; unmapped: number } {
+function mapCards(cardDatabase: string, seen: ReadonlyMap<number, number>, printings: 'most' | 'sum' = 'most'): { owned: Map<string, number>; unmapped: number } {
   const arena = new Database(cardDatabase, { readonly: true, fileMustExist: true });
   try {
     const row = arena.prepare(
@@ -146,8 +147,10 @@ function mapCards(cardDatabase: string, seen: ReadonlyMap<number, number>): { ow
         unmapped++;
         continue;
       }
-      // Printings of one card: the most copies seen of any one printing, not their sum.
-      if (qty > (owned.get(oracleId) ?? 0)) owned.set(oracleId, qty);
+      // Printings of one card. From decks: the most copies seen of any one printing (a deck slot is not a
+      // copy). From a full card list: every printing is real copies, so they add up.
+      if (printings === 'sum') owned.set(oracleId, (owned.get(oracleId) ?? 0) + qty);
+      else if (qty > (owned.get(oracleId) ?? 0)) owned.set(oracleId, qty);
     }
     return { owned, unmapped };
   } finally {
@@ -234,4 +237,37 @@ export async function syncArenaCollection(options: { auto?: boolean } = {}): Pro
   } catch (err) {
     return fail('unreadable', `MTG Arena’s files could not be read (${err instanceof Error ? err.message : String(err)}). Nothing was changed.`, found);
   }
+}
+
+/**
+ * Replaces the "MTG Arena" collection with a full list of Arena card ids and counts, as a tracker
+ * or a memory reader gives it (`[{ grpId, qty }]`). Unlike a log sync this is the whole collection,
+ * so it replaces instead of adding. The ids are turned into cards with Arena's local card database.
+ */
+export function importArenaCards(cards: unknown): ArenaStatus {
+  if (!Array.isArray(cards)) throw new HttpError(400, 'cards must be a list of { grpId, qty }.');
+  const seen = new Map<number, number>();
+  for (const c of cards as { grpId?: unknown; qty?: unknown }[]) {
+    const grpId = c?.grpId;
+    const qty = c?.qty;
+    if (typeof grpId !== 'number' || !Number.isInteger(grpId) || grpId <= 0) throw new HttpError(400, 'Every entry needs a grpId that is a positive whole number.');
+    if (typeof qty !== 'number' || !Number.isFinite(qty) || qty < 0) throw new HttpError(400, 'Every entry needs a qty of zero or more.');
+    if (qty >= 1) seen.set(grpId, (seen.get(grpId) ?? 0) + Math.floor(qty));
+  }
+  const m = memory();
+  const at = new Date().toISOString();
+  const found = locate();
+  if (!found.cardDatabase) {
+    m.last = { ok: false, at, problem: 'no-card-database', cards: 0, totalQty: 0, unmapped: 0, sources: '', message: 'Arena’s card database was not found on this computer, so its card numbers cannot be turned into names. Install or start Arena once, then import again.' };
+    return status(found);
+  }
+  const { owned, unmapped } = mapCards(found.cardDatabase, seen, 'sum');
+  setCollectionCards(ARENA_COLLECTION, owned, at);
+  let totalQty = 0;
+  for (const q of owned.values()) totalQty += Math.min(9999, q);
+  m.last = {
+    ok: true, at, problem: null, cards: owned.size, totalQty, unmapped, sources: 'a full card list',
+    message: `MTG Arena collection imported: ${plural(owned.size, 'card', 'different cards')}.` + (unmapped ? ` ${plural(unmapped, 'Arena-only card was', 'Arena-only cards were')} left out.` : ''),
+  };
+  return status(found);
 }

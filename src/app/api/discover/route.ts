@@ -1,8 +1,16 @@
-import { discoverState, readBracket, startDiscover } from '@/server/discover';
+import { discoverState, readBracket, readScope, startDiscover } from '@/server/discover';
 import { handle, json, readBody } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = (req: Request) => handle(() => json(discoverState(readBracket(new URL(req.url).searchParams.get('bracket') ?? 3))));
+export const GET = (req: Request) =>
+  handle(() => {
+    const q = new URL(req.url).searchParams;
+    return json(discoverState(readBracket(q.get('bracket') ?? 3), readScope(q.get('scope'))));
+  });
 
-export const POST = (req: Request) => handle(async () => json(startDiscover(readBracket((await readBody(req)).bracket ?? 3)), 202));
+export const POST = (req: Request) =>
+  handle(async () => {
+    const body = await readBody(req);
+    return json(startDiscover(readBracket(body.bracket ?? 3), readScope(body.scope)), 202);
+  });

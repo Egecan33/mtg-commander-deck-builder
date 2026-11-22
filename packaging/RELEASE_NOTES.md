@@ -1,5 +1,10 @@
 Commander Forge builds, scores, rates and improves Magic: The Gathering Commander decks on your own computer. These downloads include their own Node.js, so there is nothing else to install.
 
+**New in 2.1**
+- Best from collection can now rank the commanders you do not own: which ones your cards already build the best deck around, with the commander as the one card to get, and the usual 5, 10, 15 and 20-card tiers after that.
+- A full Arena card list (`[{grpId, qty}]`, as trackers and memory readers give it) can be posted to `/api/arena` to replace the MTG Arena collection with the whole collection instead of what the log shows.
+- MTG Arena sync fix: Arena's ready-made decks (starter decks, event loaners, championship lists) are no longer counted as cards you own. If you synced with 2.0, clear the MTG Arena collection once and sync again.
+
 **New in 2.0**
 - Several collections. "Physical" and "MTG Arena" are kept apart, and a switcher in the top bar picks the one that "owned" means everywhere: green dots, the owned filter, owned-only builds and Best from collection. Your existing collection becomes "Physical" with every quantity kept; decks are not touched.
 - MTG Arena sync. If Arena is installed (macOS or Windows; standalone, Steam or Epic), the app reads Arena's own local files on start and on "Sync Arena". Nothing leaves your computer and your Wizards account is never used. It needs "Detailed Logs (Plugin Support)" switched on in Arena (Options, Account) and finds the cards in your decks and your draft and sealed pools, not cards that sit in no deck. The README says exactly what it can and cannot see.

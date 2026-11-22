@@ -68,7 +68,8 @@
  *        computer and no Wizards server is contacted) and replaces the "MTG Arena" collection with
  *        the cards found. Never throws for a missing install or an unreadable log: `last.ok` is
  *        false and `last.message` says what to do. `auto: true` (app start) skips the work when the
- *        log has not changed since the last sync.
+ *        log has not changed since the last sync. `{cards: [{grpId, qty}]}` instead replaces the
+ *        collection with a full list of Arena card ids (from a tracker or a memory reader).
  * GET  /api/printing?q=TEXT             -> PrintingResponse
  *        Quick entry for the collection. `q` is a set code and collector number as printed at the
  *        bottom of a card ("TDM 123", "tdm-123", "123 TDM", "123/281 TDM", "0123 tdm"; rarity,
@@ -82,7 +83,10 @@
  * PUT  /api/proxies     {items}         -> ProxyListResponse   replaces the list ([] clears it).
  * POST /api/proxies     {items}         -> ProxyListResponse   adds cards; quantities of a card already listed add up.
  *        items: [{ oracleId, qty }], qty 1..99, at most 500 different cards. An unknown oracle id is a 400.
- * POST /api/discover    {bracket}       -> DiscoverState
+ * POST /api/discover    {bracket, scope?} -> DiscoverState
+ *        `scope: 'unowned'` ranks the commanders that are NOT in the collection by the deck the owned
+ *        cards build around them (the commander is then the one card to get); default 'owned'. GET and
+ *        /tiers take the same `scope`.
  *        "Best from collection": which commanders you own make the best deck from the cards you
  *        own, at that bracket. Starts a background job (or answers at once from the cache, keyed
  *        by collection + bracket) and returns its state; poll with GET while `status` is 'running'.
@@ -341,7 +345,10 @@ export interface DiscoverTier {
   deck: Deck;
 }
 export interface DiscoverEntry { commander: ClientCard; preScore: number; tiers: DiscoverTier[] }
+/** Whose commanders "Best from collection" ranks: the ones in the collection, or the ones that are not. */
+export type DiscoverScope = 'owned' | 'unowned';
 export interface DiscoverState {
+  scope: DiscoverScope;
   status: 'idle' | 'running' | 'done' | 'error' | 'empty';
   bracket: Bracket;
   stage: string; done: number; total: number;
@@ -463,9 +470,11 @@ export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
-export const startDiscover = (bracket: Bracket) => call<DiscoverState>('POST', '/api/discover', { bracket });
-export const getDiscover = (bracket: Bracket, signal?: AbortSignal) => call<DiscoverState>('GET', `/api/discover${query({ bracket })}`, undefined, signal);
-export const getDiscoverTiers = (bracket: Bracket, commander: string) => call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander });
+export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned') => call<DiscoverState>('POST', '/api/discover', { bracket, scope });
+export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', signal?: AbortSignal) =>
+  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned') =>
+  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);

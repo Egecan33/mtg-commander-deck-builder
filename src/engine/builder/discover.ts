@@ -51,6 +51,32 @@ export function preScore(commander: Card, ownedCards: readonly Card[], ctx: Engi
   return sum + LAND_BONUS * Math.min(LAND_BONUS_MAX, lands);
 }
 
+/** Owned cards counted by `quickFit`. */
+const QUICK_TOP = 60;
+
+/**
+ * A much cheaper stand-in for `preScore`, for ranking thousands of commanders before the real
+ * scoring: each owned card the commander's colours allow counts 1, plus how strongly it plays on
+ * the commander's own themes; the best `QUICK_TOP` are summed. Reads precomputed features only.
+ */
+export function quickFit(commander: Card, ownedCards: readonly Card[], db: CardDb): number {
+  const identity = new Set<Color>(commander.colorIdentity);
+  const themes = Object.entries(db.features(commander.oracleId)?.axes ?? {}).map(([axis, w]) => [axis, Math.min(1, w.e + w.p)] as const);
+  const fits: number[] = [];
+  for (const card of ownedCards) {
+    if (card.oracleId === commander.oracleId || isBasicLand(card) || card.legality !== 'legal') continue;
+    if (card.colorIdentity.some((c) => !identity.has(c))) continue;
+    const axes = db.features(card.oracleId)?.axes as Record<string, { e: number; p: number }> | undefined;
+    let fit = 1;
+    if (axes) for (const [axis, weight] of themes) if (axes[axis]) fit += weight * (axes[axis].e + axes[axis].p);
+    fits.push(fit);
+  }
+  fits.sort((a, b) => b - a);
+  let sum = 0;
+  for (let i = 0; i < Math.min(QUICK_TOP, fits.length); i++) sum += fits[i];
+  return sum;
+}
+
 /** The cards of a deck that would have to be bought: not owned and not a basic land (commander included). */
 export function buysOf(deck: Deck, owned: ReadonlySet<string>, db: CardDb): string[] {
   const out: string[] = [];
