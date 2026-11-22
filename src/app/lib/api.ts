@@ -328,6 +328,8 @@ export interface ArenaStatus {
   detailedLogs: boolean | null;
   /** Is the optional memory reader (the mtga-reader package) set up, so the whole collection can be read from the running game. */
   reader: boolean;
+  /** Will the system ask for an administrator password when the reader runs (macOS without a debugger-entitled `node-arena`). */
+  readerNeedsPassword: boolean;
   /** The last sync of this app run (or the last successful one, from the database). */
   last: ArenaSyncResult | null;
   syncedAt: string | null;

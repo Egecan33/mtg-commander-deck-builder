@@ -151,7 +151,7 @@ export default function CollectionPage() {
               </button>
               <p className="mt-1.5 text-[0.82rem] text-smoke">
                 Reads every card you own straight from the running game and replaces this collection with it. Keep Arena open on its home screen.
-                {arena && !arena.reader ? ' Needs the optional reader set up once; pressing the button says how.' : ' Your computer may ask for your password: reading another app needs it.'}
+                {arena && !arena.reader ? ' Needs the optional reader set up once; pressing the button says how.' : arena?.readerNeedsPassword ? ' Your computer will ask for your password: reading another app needs it.' : ''}
               </p>
             </div>
             <details className="mt-2 text-[0.82rem] text-smoke">

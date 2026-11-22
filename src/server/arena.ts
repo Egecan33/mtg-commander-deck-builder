@@ -171,6 +171,8 @@ function readerDir(): string {
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', name);
   return path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share'), 'commander-forge-arena-reader');
 }
+/** A copy of Node allowed to look into the game (on macOS: signed with the debugger entitlement); no password is asked when it is there. */
+const allowedNode = (): string => path.join(readerDir(), process.platform === 'win32' ? 'node-arena.exe' : 'node-arena');
 const readerModule = (): string => path.join(readerDir(), 'node_modules', 'mtga-reader');
 
 // Card ids and counts only: the reader's account call (which carries a login token) is never used.
@@ -188,9 +190,7 @@ const run = (file: string, args: string[]): Promise<string> =>
 /** Runs the reader with the rights the operating system wants for looking into another process. */
 function runReader(): Promise<string> {
   const args = ['-e', READER_CODE, readerModule()];
-  // A copy of Node allowed to do this (on macOS: signed with the debugger entitlement) needs no password.
-  const allowed = path.join(readerDir(), process.platform === 'win32' ? 'node-arena.exe' : 'node-arena');
-  if (existsSync(allowed)) return run(allowed, args);
+  if (existsSync(allowedNode())) return run(allowedNode(), args);
   if (process.platform === 'darwin') {
     // Otherwise macOS asks for an administrator password in its own window; the app never sees it.
     const quote = (a: string) => `'${a.replace(/'/g, `'\\''`)}'`;
@@ -239,6 +239,7 @@ function status(found: Found = locate()): ArenaStatus {
     cardDatabase: found.cardDatabase,
     detailedLogs: m.detailedLogs,
     reader: existsSync(readerModule()),
+    readerNeedsPassword: process.platform === 'darwin' && !existsSync(allowedNode()),
     last: m.last,
     syncedAt: listCollections().find((c) => c.id === ARENA_COLLECTION)?.syncedAt ?? null,
   };

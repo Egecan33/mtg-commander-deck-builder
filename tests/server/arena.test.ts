@@ -184,6 +184,7 @@ describe('reading the full collection from the running game', () => {
   const readerDir = path.join(tmp, 'reader');
   /** A stand-in for the optional mtga-reader package, and for a copy of Node that may read the game. */
   const installReader = (body: string, withBinary = true) => {
+    rmSync(readerDir, { recursive: true, force: true });
     mkdirSync(path.join(readerDir, 'node_modules', 'mtga-reader'), { recursive: true });
     writeFileSync(path.join(readerDir, 'node_modules', 'mtga-reader', 'index.js'), `exports.readCollection = async () => (${body});`);
     if (withBinary) symlinkSync(process.execPath, path.join(readerDir, 'node-arena'));
@@ -217,8 +218,10 @@ describe('reading the full collection from the running game', () => {
   });
 
   it('reports whether the reader is there', () => {
-    installReader('{ count: 0, cards: [] }');
-    expect(arenaStatus().reader).toBe(true);
+    installReader('{ count: 0, cards: [] }', false);
+    expect(arenaStatus()).toMatchObject({ reader: true, readerNeedsPassword: process.platform === 'darwin' });
+    symlinkSync(process.execPath, path.join(readerDir, 'node-arena'));
+    expect(arenaStatus()).toMatchObject({ reader: true, readerNeedsPassword: false });
   });
 });
 
