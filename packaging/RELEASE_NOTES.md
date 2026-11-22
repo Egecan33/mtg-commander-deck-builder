@@ -1,5 +1,11 @@
 Commander Forge builds, scores, rates and improves Magic: The Gathering Commander decks on your own computer. These downloads include their own Node.js, so there is nothing else to install.
 
+**New in 2.0**
+- Several collections. "Physical" and "MTG Arena" are kept apart, and a switcher in the top bar picks the one that "owned" means everywhere: green dots, the owned filter, owned-only builds and Best from collection. Your existing collection becomes "Physical" with every quantity kept; decks are not touched.
+- MTG Arena sync. If Arena is installed (macOS or Windows; standalone, Steam or Epic), the app reads Arena's own local files on start and on "Sync Arena". Nothing leaves your computer and your Wizards account is never used. It needs "Detailed Logs (Plugin Support)" switched on in Arena (Options, Account) and finds the cards in your decks and your draft and sealed pools, not cards that sit in no deck. The README says exactly what it can and cannot see.
+- Export any collection as a CSV that imports back unchanged.
+- Suggest swaps for one chosen deck card.
+
 **Downloads**
 - macOS Apple Silicon (M1 and later): `CommanderForge-<version>-macos-arm64.zip`
 - macOS Intel: `CommanderForge-<version>-macos-x64.zip`
