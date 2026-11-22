@@ -6,6 +6,11 @@
  * and when a deck is saved) and the card pool of every draft and sealed event. Those are the cards
  * this reader finds. It is a lower bound of the collection: a card that sits in no deck and no
  * limited pool is not in the log at all.
+ *
+ * The deck list Arena sends is not only the player's: it also holds Arena's ready-made decks (event
+ * loaners, championship lists, every precon), which the player can play without owning the cards.
+ * Those are told apart by their name, which is a localisation key ("?=?Loc/Decks/Precon/...")
+ * instead of text, and are left out.
  */
 export interface ArenaLogData {
   /** Arena's detailed-logging switch as the log states it; null when the log does not say. */
@@ -26,6 +31,16 @@ export interface ArenaLogReader {
 const DECK_ZONES = ['MainDeck', 'Sideboard', 'CommandZone', 'Companions'] as const;
 const POOL_KEYS = ['CardPool', 'PickedCards'] as const;
 const MAX_DEPTH = 12;
+/** Keys whose whole content is Arena's own decks, never the player's. */
+const NOT_OWNED_KEYS = new Set(['PreconDecks']);
+/** A deck's summary sits next to it under one of these pairs of keys. */
+const SUMMARY_PAIRS: readonly (readonly [string, string])[] = [['Summary', 'Deck'], ['CourseDeckSummary', 'CourseDeck']];
+/** Deck id -> deck maps, each with the list of summaries that names its decks. */
+const DECK_MAPS: readonly (readonly [string, string])[] = [['DeckSummaries', 'DecksInternal'], ['DeckSummariesV2', 'Decks'], ['DeckSummaries', 'Decks']];
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A ready-made deck: its name is a localisation key, not something a player typed. */
+const readyMade = (summary: unknown): boolean => isObj(summary) && typeof summary.Name === 'string' && summary.Name.startsWith('?=?Loc/');
 
 const wholeId = (v: unknown): number | null => {
   const n = typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v;
@@ -65,6 +80,26 @@ export function createArenaLogReader(): ArenaLogReader {
     }
     if (typeof value !== 'object' || value === null) return;
     const obj = value as Record<string, unknown>;
+    const skip = new Set<string>();
+
+    // A deck with its summary beside it: skip the deck when the summary says it is ready-made.
+    for (const [summaryKey, deckKey] of SUMMARY_PAIRS) {
+      if (readyMade(obj[summaryKey]) && isObj(obj[deckKey])) skip.add(deckKey);
+    }
+    // A map of decks by id with their summaries in a list beside it.
+    for (const [summariesKey, decksKey] of DECK_MAPS) {
+      const summaries = obj[summariesKey];
+      const decks = obj[decksKey];
+      if (!Array.isArray(summaries) || !isObj(decks) || skip.has(decksKey)) continue;
+      const notOwned = new Set<string>();
+      for (const sum of summaries) {
+        if (!readyMade(sum)) continue;
+        const id = (sum as Record<string, unknown>).DeckIdInternal ?? (sum as Record<string, unknown>).DeckId;
+        if (typeof id === 'string') notOwned.add(id);
+      }
+      skip.add(decksKey);
+      for (const [id, deck] of Object.entries(decks)) if (!notOwned.has(id)) walk(deck, depth + 1);
+    }
 
     if (Array.isArray(obj.MainDeck)) {
       const list = new Map<number, number>();
@@ -91,6 +126,7 @@ export function createArenaLogReader(): ArenaLogReader {
       fold(list, poolSeen);
     }
     for (const [key, v] of Object.entries(obj)) {
+      if (skip.has(key) || NOT_OWNED_KEYS.has(key)) continue;
       if ((DECK_ZONES as readonly string[]).includes(key) || (POOL_KEYS as readonly string[]).includes(key)) continue;
       if (typeof v === 'object' || typeof v === 'string') walk(v, depth + 1);
     }

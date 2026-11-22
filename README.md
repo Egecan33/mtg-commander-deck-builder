@@ -158,7 +158,7 @@ Commander Forge is unofficial Fan Content permitted under the Fan Content Policy
 Arena stopped writing the whole collection to `Player.log` in August 2021, and nothing replaced it. Tools that still show a full Arena collection (Untapped.gg, MTGA Tool) read it out of the running game's memory, which needs administrator or debugger rights; 17Lands reads the log only and no longer has the collection. Commander Forge reads files only:
 
 - **Needs** "Detailed Logs (Plugin Support)" switched on in Arena (Options, Account), then a restart of Arena. Without it the log holds no card data and the app says so.
-- **Sees** every card in your saved decks and in your draft and sealed pools. Arena starts a new log each time it starts, so every sync adds to the earlier ones and never removes a card.
+- **Sees** every card in the decks you built yourself and in your draft and sealed pools. Arena's ready-made decks (starter decks, event loaners, championship lists) are in the same list and are left out, because the log does not say which of them you own the cards for. Arena starts a new log each time it starts, so every sync adds to the earlier ones and never removes a card.
 - **Does not see** cards you own that sit in no deck and no limited pool, and it trusts deck lists (a deck can hold cards you do not own). Quantities are the most copies seen in one deck or pool.
 - **Leaves out** Arena-only cards (Alchemy and other digital-only designs); rebalanced "A-" versions count as the card they change.
 - To fill the gaps, switch to the MTG Arena collection and add cards by hand or paste a full export from a tracker; the import reads any CSV with name and quantity columns.

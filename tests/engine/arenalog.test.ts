@@ -27,6 +27,16 @@ describe('parseArenaLog', () => {
     ]);
   });
 
+  it('leaves out decks that are not the player\'s own: Arena\'s ready-made and event decks', () => {
+    const cards = parseArenaLog(LOG).cards;
+    for (const id of [55555, 66666, 66667, 77777]) expect(cards.has(id), String(id)).toBe(false);
+  });
+
+  it('reads the older deck keys too, and counts a deck whose name is unknown', () => {
+    const old = '{"DeckSummariesV2":[{"DeckId":"a","Name":"Mine"},{"DeckId":"b","Name":"?=?Loc/Decks/Precon/X"}],"Decks":{"a":{"MainDeck":[{"cardId":1,"quantity":2}]},"b":{"MainDeck":[{"cardId":2,"quantity":2}]},"c":{"MainDeck":[{"cardId":3,"quantity":1}]}}}';
+    expect(sorted(parseArenaLog(old).cards)).toEqual([[1, 2], [3, 1]]);
+  });
+
   it('takes the largest count seen in one deck or pool, not the sum over decks', () => {
     const deck = (qty: number) => `<== StartHook(x)\n{"Decks":{"d${qty}":{"MainDeck":[{"cardId":60235,"quantity":${qty}}]}}}`;
     expect(sorted(parseArenaLog(['DETAILED LOGS: ENABLED', deck(1), deck(3), deck(2)].join('\n')).cards)).toEqual([[60235, 3]]);
