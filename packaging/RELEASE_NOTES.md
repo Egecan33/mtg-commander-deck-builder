@@ -1,5 +1,9 @@
 Commander Forge builds, scores, rates and improves Magic: The Gathering Commander decks on your own computer. These downloads include their own Node.js, so there is nothing else to install.
 
+**New in 2.3**
+- "Only my Physical collection" / "Only my MTG Arena collection": a box beside the deck buttons keeps Auto-build, Fill the rest, Reroll, Suggest swaps, Improve, add-one and replace-a-card inside the collection picked in the top bar. Basic lands are always allowed, and the choice is remembered.
+- "Copy for Arena": copies the deck in the form MTG Arena imports (Decks, Import) and lists any card of the deck that Arena does not have, checked against your own Arena install.
+
 **New in 2.2**
 - "Read my whole Arena collection": a button on the Collection page (with MTG Arena selected) reads every card you own straight from the running game and replaces the MTG Arena collection with it, so cards that sit in no deck are no longer missed. It needs the optional [mtga-reader](https://github.com/mtgatool/mtga-reader) set up once (the README has the one command) and Arena open on its home screen. Only card numbers and counts are read, never your account. macOS asks for your password in its own window, unless you choose to set up the password-free way described in the README.
 
