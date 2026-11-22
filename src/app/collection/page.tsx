@@ -12,7 +12,7 @@ type Owned = CollectionResponse['cards'][number];
 export default function CollectionPage() {
   const notify = useNotify();
   const { status } = useStatus();
-  const { collections, active, switchTo, refresh: refreshCollections, arena, arenaBusy, syncArena } = useCollections();
+  const { collections, active, switchTo, refresh: refreshCollections, arena, arenaBusy, syncArena, readArenaFull } = useCollections();
   const [collection, setCollection] = useState<CollectionResponse | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -145,6 +145,15 @@ export default function CollectionPage() {
             {arena?.last?.ok && (
               <p className="mt-1.5 text-[0.88rem] text-ash" data-testid="arena-result">{arena.last.message}</p>
             )}
+            <div className="mt-3 border-t border-slag pt-3">
+              <button type="button" className="btn btn-primary w-full" disabled={arenaBusy} onClick={() => void readArenaFull()} data-testid="arena-read-full">
+                {arenaBusy ? 'Reading Arena' : 'Read my whole Arena collection'}
+              </button>
+              <p className="mt-1.5 text-[0.82rem] text-smoke">
+                Reads every card you own straight from the running game and replaces this collection with it. Keep Arena open on its home screen.
+                {arena && !arena.reader ? ' Needs the optional reader set up once; pressing the button says how.' : ' Your computer may ask for your password: reading another app needs it.'}
+              </p>
+            </div>
             <details className="mt-2 text-[0.82rem] text-smoke">
               <summary className="cursor-pointer text-ash">What the sync can and cannot see</summary>
               <p className="mt-1">

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  addProxies, getArena, getCollections, getProxies, getStatus, setActiveCollection, syncArena,
+  addProxies, getArena, getCollections, getProxies, getStatus, readArenaMemory, setActiveCollection, syncArena,
   type ArenaStatus, type CollectionInfo, type ProxyItem, type ProxyListResponse, type StatusResponse,
 } from '../lib/api';
 import { errText, fmtDate, isAbort } from '../lib/ui';
@@ -54,9 +54,11 @@ interface CollectionsValue {
   arenaBusy: boolean;
   /** Reads the local MTG Arena install into the "MTG Arena" collection. */
   syncArena: () => Promise<void>;
+  /** Reads the whole collection out of the running game (the system may ask for a password) and replaces the "MTG Arena" collection. */
+  readArenaFull: () => Promise<void>;
 }
 const CollectionsContext = createContext<CollectionsValue>({
-  collections: [], active: null, switchTo: async () => {}, refresh: async () => {}, arena: null, arenaBusy: false, syncArena: async () => {},
+  collections: [], active: null, switchTo: async () => {}, refresh: async () => {}, arena: null, arenaBusy: false, syncArena: async () => {}, readArenaFull: async () => {},
 });
 export const useCollections = (): CollectionsValue => useContext(CollectionsContext);
 
@@ -167,6 +169,23 @@ export function Shell({ children }: { children: ReactNode }) {
       setArenaBusy(false);
     }
   }, [notify]);
+  const readArenaFull = useCallback(async () => {
+    setArenaBusy(true);
+    try {
+      const res = await readArenaMemory();
+      setArena(res);
+      const list = (await getCollections()).collections;
+      setCollections(list);
+      if (res.last?.ok) {
+        notify.info(res.last.message);
+        if (list.find((c) => c.active)?.kind === 'arena') setOwnedEpoch((n) => n + 1);
+      } else notify.error(res.last?.message ?? 'MTG Arena could not be read.');
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setArenaBusy(false);
+    }
+  }, [notify]);
   // App start: read the collections, then try a quiet Arena sync (it does nothing when Arena is not installed).
   useEffect(() => {
     if (!ready) return;
@@ -179,6 +198,7 @@ export function Shell({ children }: { children: ReactNode }) {
     arena,
     arenaBusy,
     syncArena: () => runArenaSync(false),
+    readArenaFull,
     switchTo: async (id) => {
       try {
         const list = (await setActiveCollection(id)).collections;
@@ -190,7 +210,7 @@ export function Shell({ children }: { children: ReactNode }) {
         notify.error(e);
       }
     },
-  }), [collections, arena, arenaBusy, refreshCollections, runArenaSync, notify]);
+  }), [collections, arena, arenaBusy, refreshCollections, runArenaSync, readArenaFull, notify]);
   const activeCollection = collectionsValue.active;
   const showStale = status?.ready && status.stale && !staleHidden && pathname !== '/data';
 

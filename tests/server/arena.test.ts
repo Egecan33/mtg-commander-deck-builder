@@ -1,10 +1,10 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { arenaCandidates, arenaStatus, importArenaCards, syncArenaCollection } from '@/server/arena';
+import { arenaCandidates, arenaStatus, importArenaCards, readArenaMemory, syncArenaCollection } from '@/server/arena';
 import { listCollections, ownedQuantities, replaceCollection, setActiveCollection } from '@/server/collection';
 import { getCardDb } from '@/server/store';
 import { seedDb, useServerDb } from './server-db';
@@ -177,6 +177,48 @@ describe('importing a full Arena card list', () => {
     expect(() => importArenaCards('nope' as never)).toThrow(/list/);
     rmSync(rawDir, { recursive: true, force: true });
     expect(importArenaCards([{ grpId: 60235, qty: 1 }]).last).toMatchObject({ ok: false, problem: 'no-card-database' });
+  });
+});
+
+describe('reading the full collection from the running game', () => {
+  const readerDir = path.join(tmp, 'reader');
+  /** A stand-in for the optional mtga-reader package, and for a copy of Node that may read the game. */
+  const installReader = (body: string, withBinary = true) => {
+    mkdirSync(path.join(readerDir, 'node_modules', 'mtga-reader'), { recursive: true });
+    writeFileSync(path.join(readerDir, 'node_modules', 'mtga-reader', 'index.js'), `exports.readCollection = async () => (${body});`);
+    if (withBinary) symlinkSync(process.execPath, path.join(readerDir, 'node-arena'));
+    process.env.COMMANDER_FORGE_ARENA_READER = readerDir;
+  };
+  afterAll(() => { delete process.env.COMMANDER_FORGE_ARENA_READER; });
+
+  it('imports what the reader finds, as the whole collection', async () => {
+    installReader('{ count: 3, cards: [{ grpId: 60235, qty: 2 }, { grpId: 77521, qty: 4 }, { grpId: 70464, qty: 0 }] }');
+    const status = await readArenaMemory();
+    expect(status.last).toMatchObject({ ok: true, cards: 2, totalQty: 6, sources: 'a full card list' });
+    setActiveCollection('arena');
+    expect(names()).toEqual(['2 Sol Ring', '4 Lightning Bolt']);
+  });
+
+  it('passes on the reader\'s own error and changes nothing', async () => {
+    await syncArenaCollection();
+    installReader("{ error: 'MTGA is in a match' }");
+    const status = await readArenaMemory();
+    expect(status.last).toMatchObject({ ok: false, problem: 'unreadable' });
+    expect(status.last!.message).toMatch(/MTGA is in a match/);
+    expect(listCollections().find((c) => c.id === 'arena')?.count).toBe(6);
+  });
+
+  it('says how to add the reader when it is not installed', async () => {
+    process.env.COMMANDER_FORGE_ARENA_READER = path.join(tmp, 'no-reader-here');
+    const status = await readArenaMemory();
+    expect(status.last).toMatchObject({ ok: false, problem: 'no-reader' });
+    expect(status.last!.message).toMatch(/mtga-reader/);
+    expect(status.reader).toBe(false);
+  });
+
+  it('reports whether the reader is there', () => {
+    installReader('{ count: 0, cards: [] }');
+    expect(arenaStatus().reader).toBe(true);
   });
 });
 

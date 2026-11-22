@@ -163,4 +163,14 @@ Arena stopped writing the whole collection to `Player.log` in August 2021, and n
 - **Leaves out** Arena-only cards (Alchemy and other digital-only designs); rebalanced "A-" versions count as the card they change.
 - To fill the gaps, switch to the MTG Arena collection and add cards by hand or paste a full export from a tracker; the import reads any CSV with name and quantity columns. A list of Arena card ids and counts (`POST /api/arena` with `{"cards": [{"grpId": 60235, "qty": 1}]}`) replaces the collection with exactly that list, which is how a memory reader you run yourself can hand over the whole collection.
 
+### Reading the whole Arena collection
+
+The "Read my whole Arena collection" button on the Collection page (MTG Arena selected) reads every owned card out of the running game and replaces the MTG Arena collection with it. It uses [mtga-reader](https://github.com/mtgatool/mtga-reader) (GPL-3.0), which is not part of Commander Forge; set it up once:
+
+```bash
+mkdir -p "$HOME/Library/Application Support/Commander Forge Arena Reader" && cd "$HOME/Library/Application Support/Commander Forge Arena Reader" && npm install mtga-reader
+```
+
+(On Windows the folder is `%LOCALAPPDATA%\Commander Forge Arena Reader`.) Only card numbers and counts are read, never the account. Looking into another program needs extra rights: macOS asks for an administrator password each time, in its own window. A copy of Node named `node-arena` in that folder is used instead when present, with no password; on macOS it has to be signed with the `com.apple.security.cs.debugger` entitlement, which is your decision to make. Reading game memory is something Wizards' terms do not clearly allow; other trackers do it, and it is off unless you press the button.
+
 `COMMANDER_FORGE_ARENA_LOG_DIR` and `COMMANDER_FORGE_ARENA_RAW_DIR` point the sync at a log folder and at Arena's `Downloads/Raw` folder when they are somewhere unusual.

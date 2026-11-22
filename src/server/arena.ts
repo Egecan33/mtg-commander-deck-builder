@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process';
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -158,6 +159,75 @@ function mapCards(cardDatabase: string, seen: ReadonlyMap<number, number>, print
   }
 }
 
+/**
+ * The optional memory reader. The whole collection exists only inside the running game, and the
+ * mtga-reader package (GPL-3.0, not part of this app) reads it from there. The user installs it
+ * into this folder; when it is missing the app just says so.
+ */
+function readerDir(): string {
+  if (process.env.COMMANDER_FORGE_ARENA_READER) return process.env.COMMANDER_FORGE_ARENA_READER;
+  const name = 'Commander Forge Arena Reader';
+  if (process.platform === 'win32') return path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), name);
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', name);
+  return path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share'), 'commander-forge-arena-reader');
+}
+const readerModule = (): string => path.join(readerDir(), 'node_modules', 'mtga-reader');
+
+// Card ids and counts only: the reader's account call (which carries a login token) is never used.
+const READER_CODE =
+  "const r=require(process.argv[1]);r.readCollection('MTGA').then(c=>process.stdout.write(JSON.stringify(c||{})),e=>process.stdout.write(JSON.stringify({error:String(e&&e.message||e)})))";
+
+const run = (file: string, args: string[]): Promise<string> =>
+  new Promise((resolve, reject) => {
+    execFile(file, args, { maxBuffer: 64 * 1024 * 1024, timeout: 180_000 }, (err, stdout, stderr) => {
+      if (err) reject(new Error((stderr || err.message).trim()));
+      else resolve(stdout);
+    });
+  });
+
+/** Runs the reader with the rights the operating system wants for looking into another process. */
+function runReader(): Promise<string> {
+  const args = ['-e', READER_CODE, readerModule()];
+  // A copy of Node allowed to do this (on macOS: signed with the debugger entitlement) needs no password.
+  const allowed = path.join(readerDir(), process.platform === 'win32' ? 'node-arena.exe' : 'node-arena');
+  if (existsSync(allowed)) return run(allowed, args);
+  if (process.platform === 'darwin') {
+    // Otherwise macOS asks for an administrator password in its own window; the app never sees it.
+    const quote = (a: string) => `'${a.replace(/'/g, `'\\''`)}'`;
+    const command = [process.execPath, ...args].map(quote).join(' ');
+    const script = `do shell script "${command.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with prompt "Commander Forge wants to read your card collection from MTG Arena." with administrator privileges`;
+    return run('osascript', ['-e', script]);
+  }
+  return run(process.execPath, args);
+}
+
+/**
+ * Reads the whole collection out of the running game and makes it the "MTG Arena" collection.
+ * Arena must be open on its home screen. Never throws for anything about Arena or the reader.
+ */
+export async function readArenaMemory(): Promise<ArenaStatus> {
+  const m = memory();
+  const at = new Date().toISOString();
+  const fail = (problem: ArenaProblem, message: string): ArenaStatus => {
+    m.last = { ok: false, at, problem, message, cards: 0, totalQty: 0, unmapped: 0, sources: '' };
+    return status();
+  };
+  if (!existsSync(readerModule())) {
+    return fail('no-reader', `The memory reader is not set up. In a terminal run: mkdir -p "${readerDir()}" && cd "${readerDir()}" && npm install mtga-reader. Then try again.`);
+  }
+  try {
+    const out = JSON.parse(await runReader()) as { error?: string; cards?: unknown };
+    if (out.error || !Array.isArray(out.cards)) {
+      return fail('unreadable', `Arena’s collection could not be read: ${out.error ?? 'the reader returned no cards'}. Open Arena, wait on the home screen (not in a match) and try again.`);
+    }
+    return importArenaCards(out.cards);
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err);
+    const cancelled = /User canceled|\(-128\)/i.test(text);
+    return fail('unreadable', cancelled ? 'Reading was cancelled at the password window. Nothing was changed.' : `Arena’s collection could not be read (${text}). Nothing was changed.`);
+  }
+}
+
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function status(found: Found = locate()): ArenaStatus {
@@ -168,6 +238,7 @@ function status(found: Found = locate()): ArenaStatus {
     logPath: found.logs[0] ?? null,
     cardDatabase: found.cardDatabase,
     detailedLogs: m.detailedLogs,
+    reader: existsSync(readerModule()),
     last: m.last,
     syncedAt: listCollections().find((c) => c.id === ARENA_COLLECTION)?.syncedAt ?? null,
   };

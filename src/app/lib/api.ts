@@ -70,6 +70,9 @@
  *        false and `last.message` says what to do. `auto: true` (app start) skips the work when the
  *        log has not changed since the last sync. `{cards: [{grpId, qty}]}` instead replaces the
  *        collection with a full list of Arena card ids (from a tracker or a memory reader).
+ *        `{memory: true}` reads that full list out of the running game with the optional mtga-reader
+ *        package (see the README); on macOS the system asks for an administrator password unless a
+ *        debugger-entitled copy of Node sits beside the reader.
  * GET  /api/printing?q=TEXT             -> PrintingResponse
  *        Quick entry for the collection. `q` is a set code and collector number as printed at the
  *        bottom of a card ("TDM 123", "tdm-123", "123 TDM", "123/281 TDM", "0123 tdm"; rarity,
@@ -300,7 +303,7 @@ export interface CollectionInfo {
 export interface CollectionsResponse { collections: CollectionInfo[] }
 
 /** Why an Arena sync could not fill the collection. */
-export type ArenaProblem = 'not-installed' | 'no-log' | 'detailed-logs-off' | 'no-card-data' | 'no-card-database' | 'unreadable';
+export type ArenaProblem = 'not-installed' | 'no-log' | 'detailed-logs-off' | 'no-card-data' | 'no-card-database' | 'no-reader' | 'unreadable';
 export interface ArenaSyncResult {
   ok: boolean;
   at: string;
@@ -323,6 +326,8 @@ export interface ArenaStatus {
   cardDatabase: string | null;
   /** Arena's "Detailed Logs (Plugin Support)" setting as the log reports it; null when unknown. */
   detailedLogs: boolean | null;
+  /** Is the optional memory reader (the mtga-reader package) set up, so the whole collection can be read from the running game. */
+  reader: boolean;
   /** The last sync of this app run (or the last successful one, from the database). */
   last: ArenaSyncResult | null;
   syncedAt: string | null;
@@ -461,6 +466,7 @@ export const setActiveCollection = (id: string) => call<CollectionsResponse>('PU
 export const collectionExportUrl = (id?: string) => `/api/collection/export${id ? query({ id }) : ''}`;
 export const getArena = (signal?: AbortSignal) => call<ArenaStatus>('GET', '/api/arena', undefined, signal);
 export const syncArena = (auto = false) => call<ArenaStatus>('POST', '/api/arena', { auto });
+export const readArenaMemory = () => call<ArenaStatus>('POST', '/api/arena', { memory: true });
 
 export const adjustCollection = (oracleId: string, delta: number) =>
   call<{ count: number; totalQty: number; qty: number }>('PATCH', '/api/collection', { oracleId, delta });
