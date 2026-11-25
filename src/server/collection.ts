@@ -45,7 +45,8 @@ export function listCollections(): CollectionInfo[] {
     .prepare(
       `SELECT c.id, c.name, c.kind, c.synced_at AS syncedAt, count(k.oracle_id) AS count, coalesce(sum(k.qty), 0) AS totalQty,
          (SELECT count(*) FROM collection_boxes b WHERE b.collection_id = c.id
-            AND EXISTS (SELECT 1 FROM collection_box_cards x WHERE x.box_id = b.id AND x.qty >= 1)) AS holders
+            AND EXISTS (SELECT 1 FROM collection_box_cards x WHERE x.box_id = b.id AND x.qty >= 1))
+          + CASE WHEN c.kind = 'manual' THEN (SELECT count(*) FROM decks WHERE json_extract(json, '$.built') = 1) ELSE 0 END AS holders
        FROM collections c LEFT JOIN collection_cards k ON k.collection_id = c.id AND k.qty >= 1
        GROUP BY c.id ORDER BY c.position, c.name`,
     )

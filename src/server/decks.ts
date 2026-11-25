@@ -142,7 +142,7 @@ export function listDecks(): DeckTile[] {
     }
     const lookup = cardLookup(deck.commanders);
     tiles.push({
-      id: row.id, name: row.name, updatedAt: row.updated_at, targetBracket: deck.targetBracket,
+      id: row.id, name: row.name, updatedAt: row.updated_at, targetBracket: deck.targetBracket, built: deck.built === true,
       commanders: deck.commanders.map((c) => lookup[c]).filter((c) => c !== undefined),
       ...n,
     });

@@ -239,6 +239,8 @@ export interface DeckTile {
   cardCount: number;
   rating: number; legal: boolean;
   floor: number; playsLike: Bracket;
+  /** The cards are really assembled in this deck (see `Deck.built`). */
+  built: boolean;
 }
 export interface DecksResponse { decks: DeckTile[] }
 export interface DeckResponse { deck: Deck; updatedAt: string; cards: CardLookup }
