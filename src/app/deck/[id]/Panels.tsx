@@ -26,8 +26,20 @@ function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { i
 // ---------------------------------------------------------------------------------------------
 // Above the deck: what it takes from boxes and built decks
 
-/** One line per box or built deck the deck takes cards from ("Takes 3 cards from the Landing Party box"), each opening to the card names. Nothing when there are none. */
-export function HeldSummary({ conflicts, lookup, onOpen }: { conflicts: ConflictReport; lookup: CardLookup; onOpen: (id: string) => void }) {
+/**
+ * One line per box or built deck the deck takes cards from ("Takes 3 cards from the Landing Party box"), each opening to the card names.
+ * A box's cards each get "I took it out" (`onTakeOut`). Nothing when there are none.
+ */
+export function HeldSummary({
+  conflicts, lookup, onOpen, onTakeOut, takingOut = null,
+}: {
+  conflicts: ConflictReport;
+  lookup: CardLookup;
+  onOpen: (id: string) => void;
+  onTakeOut?: (holderId: string, oracleId: string) => void;
+  /** `<holderId>|<oracleId>` of a take-out in progress; every take-out button waits for it. */
+  takingOut?: string | null;
+}) {
   const [open, setOpen] = useState<string[]>([]);
   if (conflicts.byHolder.length === 0) return null;
   return (
@@ -51,12 +63,27 @@ export function HeldSummary({ conflicts, lookup, onOpen }: { conflicts: Conflict
               <span className="shrink-0 text-[0.75rem] text-smoke">{isOpen ? 'Hide' : 'Which cards'}</span>
             </button>
             {isOpen && (
-              <ul className="mb-0.5 ml-6 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5" data-testid="held-holder-cards">
-                {h.oracleIds.map((id) => (
-                  <li key={id}>
-                    <button type="button" className="text-ash hover:text-brass" onClick={() => onOpen(id)}>{lookup[id]?.name ?? 'Unknown card'}</button>
-                  </li>
-                ))}
+              <ul className={`mb-0.5 ml-6 mt-0.5 ${h.kind === 'box' && onTakeOut ? 'grid gap-0.5' : 'flex flex-wrap gap-x-3 gap-y-0.5'}`} data-testid="held-holder-cards">
+                {h.oracleIds.map((id) => {
+                  const name = lookup[id]?.name ?? 'Unknown card';
+                  return (
+                    <li key={id} className="flex items-baseline gap-2">
+                      <button type="button" className="min-w-0 truncate text-left text-ash hover:text-brass" onClick={() => onOpen(id)}>{name}</button>
+                      {h.kind === 'box' && onTakeOut && (
+                        <button
+                          type="button"
+                          className="shrink-0 text-[0.75rem] text-brass hover:underline disabled:text-smoke disabled:no-underline"
+                          disabled={!!takingOut}
+                          onClick={() => onTakeOut(h.holderId, id)}
+                          title={`You took ${name} out of the ${h.name}: it stays in your collection as a free copy. Your total does not change.`}
+                          data-testid="held-take-out"
+                        >
+                          {takingOut === `${h.holderId}|${id}` ? 'Taking it out' : 'I took it out'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </li>

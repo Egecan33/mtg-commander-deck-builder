@@ -12,8 +12,10 @@ import { errText, fmtDate, isAbort } from '../lib/ui';
 // ---------------------------------------------------------------------------------------------
 // Messages: API errors and confirmations. Errors stay until dismissed.
 
-interface Message { id: number; kind: 'error' | 'info'; text: string }
-interface Notify { error: (e: unknown) => void; info: (text: string) => void }
+/** A button on a confirmation, e.g. Undo. Clicking it runs `run` and closes the message. */
+export interface NotifyAction { label: string; run: () => void }
+interface Message { id: number; kind: 'error' | 'info'; text: string; action?: NotifyAction }
+interface Notify { error: (e: unknown) => void; info: (text: string, action?: NotifyAction) => void }
 const NotifyContext = createContext<Notify>({ error: () => {}, info: () => {} });
 export const useNotify = (): Notify => useContext(NotifyContext);
 
@@ -81,16 +83,17 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback((id: number) => setMessages((m) => m.filter((x) => x.id !== id)), []);
   const notify = useMemo<Notify>(() => {
-    const push = (kind: Message['kind'], text: string) => {
+    const push = (kind: Message['kind'], text: string, action?: NotifyAction) => {
       const id = nextId.current++;
-      setMessages((m) => (m.some((x) => x.text === text && x.kind === kind) ? m : [...m.slice(-4), { id, kind, text }]));
-      if (kind === 'info') setTimeout(() => dismiss(id), 4000);
+      setMessages((m) => (m.some((x) => x.text === text && x.kind === kind) ? m : [...m.slice(-4), { id, kind, text, action }]));
+      // A message with an Undo stays a little longer, so there is time to use it.
+      if (kind === 'info') setTimeout(() => dismiss(id), action ? 9000 : 4000);
     };
     return {
       error: (e) => {
         if (!isAbort(e)) push('error', errText(e));
       },
-      info: (text) => push('info', text),
+      info: (text, action) => push('info', text, action),
     };
   }, [dismiss]);
 
@@ -299,6 +302,19 @@ export function Shell({ children }: { children: ReactNode }) {
               }`}
             >
               <span className="min-w-0 flex-1 break-words">{m.text}</span>
+              {m.action && (
+                <button
+                  type="button"
+                  className="shrink-0 font-medium text-brass hover:text-bone"
+                  onClick={() => {
+                    dismiss(m.id);
+                    m.action?.run();
+                  }}
+                  data-testid="message-action"
+                >
+                  {m.action.label}
+                </button>
+              )}
               <button type="button" className="shrink-0 text-ash hover:text-bone" onClick={() => dismiss(m.id)} aria-label="Dismiss message">
                 Dismiss
               </button>

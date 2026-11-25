@@ -14,7 +14,7 @@ import { useProxies } from './Shell';
  * `held`: the boxes and built decks holding the copies the deck would take (the "!").
  */
 export function CardDetail({
-  id, card, score, onClose, actions, note, held,
+  id, card, score, onClose, actions, note, held, heldActions,
 }: {
   id: string;
   card: ClientCard | undefined;
@@ -23,6 +23,8 @@ export function CardDetail({
   actions?: ReactNode;
   note?: ReactNode;
   held?: string[];
+  /** Under the "!" line, e.g. "I took it out of the … box". */
+  heldActions?: ReactNode;
 }) {
   const [face, setFace] = useState<0 | 1>(0);
   const proxies = useProxies();
@@ -83,6 +85,7 @@ export function CardDetail({
               <span>{heldText(held)}. No free copy is left for this deck.</span>
             </p>
           )}
+          {held && held.length > 0 && heldActions && <div className="mt-2 flex flex-wrap gap-1.5 pl-8">{heldActions}</div>}
 
           {score && (
             <section className="mt-5 border-t border-slag pt-4">

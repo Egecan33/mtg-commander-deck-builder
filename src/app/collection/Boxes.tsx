@@ -1,14 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { CardImage } from '../components/card';
 import { useNotify } from '../components/Shell';
 import {
-  addBox, getBox, getBoxes, getProduct, openBoxAsDeck, removeBox, searchProducts, takeFromBox,
+  ApiError, addBox, getBox, getBoxes, getDeck, getProduct, linkBox, openBoxAsDeck, removeBox, searchProducts, takeFromBox,
   type BoxDetailResponse, type BoxInfo, type ProductDetailResponse, type ProductInfo,
 } from '../lib/api';
-import { fmtInt } from '../lib/ui';
+import { fmtInt, isAbort } from '../lib/ui';
 
 const day = (iso: string) => {
   const d = new Date(iso);
@@ -165,6 +166,44 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
   }, [notify, onCount]);
   useEffect(() => { void load(); }, [load, version]);
 
+  // Names of the decks the boxes are linked to ("This deck is my … box" on a deck page). A deck that is gone counts as no link.
+  const [deckNames, setDeckNames] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    const ids = [...new Set((boxes ?? []).flatMap((b) => (b.deckId ? [b.deckId] : [])))];
+    if (ids.length === 0) return;
+    const ctrl = new AbortController();
+    Promise.all(
+      ids.map((id) =>
+        getDeck(id, ctrl.signal).then(
+          (r) => [id, r.deck.name] as const,
+          (e) => [id, e instanceof ApiError && e.status === 404 ? null : undefined] as const,
+        ),
+      ),
+    ).then((pairs) => {
+      if (ctrl.signal.aborted) return;
+      setDeckNames((cur) => {
+        const next = { ...cur };
+        for (const [id, name] of pairs) if (name !== undefined) next[id] = name;
+        return next;
+      });
+    }, (e) => {
+      if (!isAbort(e)) notify.error(e);
+    });
+    return () => ctrl.abort();
+  }, [boxes, notify]);
+  const unlink = async (box: BoxInfo, deckName: string) => {
+    setBusy(true);
+    try {
+      await linkBox(box.id, null);
+      notify.info(`${box.name} is no longer linked to ${deckName}. That deck shows a “!” for its cards again.`);
+      await load();
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // The open box's cards, reloaded whenever the totals may have changed.
   useEffect(() => {
     if (!open) return setDetail(null);
@@ -220,6 +259,23 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
               <span className="block text-[0.8rem] text-smoke">Added {day(b.addedAt)}</span>
               <span className="block text-[0.84rem] text-ash" data-testid="box-sealed">{fmtInt(b.sealed)} of {fmtInt(b.total)} cards still in the box</span>
             </button>
+            {b.deckId && deckNames[b.deckId] && (
+              <div className="mt-1 flex items-center gap-2 text-[0.84rem]" data-testid="box-linked">
+                <span className="min-w-0 flex-1 truncate text-ash">
+                  Linked to <Link href={`/deck/${b.deckId}`} className="text-brass hover:underline">{deckNames[b.deckId]}</Link>
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-quiet shrink-0"
+                  disabled={busy}
+                  onClick={() => void unlink(b, deckNames[b.deckId!] ?? 'the deck')}
+                  title="That deck shows a “!” for this box's cards again. The deck itself does not change."
+                  data-testid="box-unlink"
+                >
+                  Unlink
+                </button>
+              </div>
+            )}
             {confirm?.id === b.id ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.88rem]">
                 <span className="w-full text-ash">{question[confirm.action]}</span>

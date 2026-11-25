@@ -8,7 +8,7 @@ import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
-  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, updateDeck,
+  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
   type AnalyzeResponse, type CardLookup, type ClientCard, type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import {
@@ -73,6 +73,8 @@ export function Builder({ id }: { id: string }) {
   // Is a box of the active collection already linked to this deck (then no second box is offered).
   const [boxLinked, setBoxLinked] = useState<boolean | null>(null);
   const [linking, setLinking] = useState(false);
+  // `<holderId>|<oracleId>` while "I took it out" runs, until the analysis after it arrives.
+  const [takingOut, setTakingOut] = useState<string | null>(null);
   const dirty = useRef(false);
   const saveSeq = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -141,10 +143,12 @@ export function Builder({ id }: { id: string }) {
         learn(res.cards);
         setAnalysis(res);
         setAnalysing(false);
+        setTakingOut(null);
       },
       (e) => {
         if (isAbort(e)) return;
         setAnalysing(false);
+        setTakingOut(null);
         notify.error(`Could not analyse the deck: ${errText(e)}`);
       },
     );
@@ -418,11 +422,36 @@ export function Builder({ id }: { id: string }) {
       setProposals((p) => (p ? { ...p, heldBy: withoutHolder(p.heldBy, gone) } : p));
       setReplacing((r) => (r?.heldBy ? { ...r, heldBy: withoutHolder(r.heldBy, gone) } : r));
       setRev((n) => n + 1);
-      notify.info(`This deck is now your ${match.name} box. Cards still sealed in it no longer count as taken here.`);
+      notify.info(`This deck is now your ${match.name} box. Cards still sealed in it no longer count as taken here.`, { label: 'Undo', run: () => void unlinkMatch(match) });
     } catch (e) {
       notify.error(e);
     } finally {
       setLinking(false);
+    }
+  };
+  const unlinkMatch = async (match: { boxId: string; name: string }) => {
+    try {
+      await linkBox(match.boxId, null);
+      setBoxLinked(false);
+      setRev((n) => n + 1);
+      notify.info(`Unlinked. This deck shows a “!” for the ${match.name} box again.`);
+    } catch (e) {
+      notify.error(e);
+    }
+  };
+  // "I took it out": one copy leaves the box and stays in the collection, so it is free for this deck.
+  const takeOut = async (holderId: string, oracleId: string) => {
+    const holder = analysis?.conflicts.byHolder.find((h) => h.holderId === holderId);
+    if (!holder || holder.kind !== 'box' || takingOut) return;
+    setTakingOut(`${holderId}|${oracleId}`);
+    try {
+      await takeFromBox(holderId.slice('box:'.length), oracleId, 1);
+      // `takingOut` is cleared when the analysis after this arrives, so a second click cannot take another copy meanwhile.
+      setRev((n) => n + 1);
+      notify.info(`Took ${lookup[oracleId]?.name ?? 'the card'} out of the ${holder.name}. That copy is free now.`);
+    } catch (e) {
+      setTakingOut(null);
+      notify.error(e);
     }
   };
 
@@ -472,12 +501,14 @@ export function Builder({ id }: { id: string }) {
   const held = analysis?.conflicts.cards ?? NO_HELD;
   // In the deck: the deck's own conflicts. Outside it: what the browser or a proposal said about adding it.
   const detailHeld = detail ? (inDeck(deck, detail) ? held[detail] : heldHints[detail]) : undefined;
+  // Boxes holding the copy this deck card needs: "I took it out of the … box".
+  const detailBoxes = detail && inDeck(deck, detail) ? (analysis?.conflicts.byHolder ?? []).filter((h) => h.kind === 'box' && h.oracleIds.includes(detail)) : [];
   const manual = activeCollection?.kind === 'manual';
   const offer = analysis?.boxMatch && boxLinked === false ? analysis.boxMatch : null;
   const takes = analysis && analysis.conflicts.byHolder.length > 0;
   const notice = takes || offer ? (
     <>
-      {takes && <HeldSummary conflicts={analysis.conflicts} lookup={lookup} onOpen={openCard} />}
+      {takes && <HeldSummary conflicts={analysis.conflicts} lookup={lookup} onOpen={openCard} takingOut={takingOut} onTakeOut={(holderId, oracleId) => void takeOut(holderId, oracleId)} />}
       {offer && <BoxMatchOffer name={offer.name} busy={linking} onLink={() => void linkMatch()} />}
     </>
   ) : null;
@@ -747,6 +778,24 @@ export function Builder({ id }: { id: string }) {
           card={detailCard}
           score={detailScore}
           held={detailHeld}
+          heldActions={
+            detail && detailBoxes.length > 0
+              ? detailBoxes.map((h) => (
+                  <button
+                    key={h.holderId}
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={!!takingOut}
+                    onClick={() => void takeOut(h.holderId, detail)}
+                    title="One copy leaves the box and stays in your collection, free for this deck. Your total does not change."
+                    data-testid="detail-take-out"
+                    data-box={h.holderId}
+                  >
+                    {takingOut === `${h.holderId}|${detail}` ? 'Taking it out' : `I took it out of the ${h.name}`}
+                  </button>
+                ))
+              : undefined
+          }
           onClose={() => setDetail(null)}
           note={detailEntry?.locked ? 'Locked: auto-build and improve keep this card.' : undefined}
           actions={
