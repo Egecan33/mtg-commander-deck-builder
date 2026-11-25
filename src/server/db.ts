@@ -54,6 +54,16 @@ CREATE TABLE IF NOT EXISTS product_cards (
   PRIMARY KEY (product_id, oracle_id)
 ) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sync_state (step TEXT PRIMARY KEY, finished_at TEXT NOT NULL, info TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS collection_boxes (
+  id TEXT PRIMARY KEY, collection_id TEXT NOT NULL, product_id TEXT NOT NULL, name TEXT NOT NULL, added_at TEXT NOT NULL, deck_id TEXT
+);
+CREATE INDEX IF NOT EXISTS collection_boxes_collection ON collection_boxes(collection_id);
+-- qty: copies still sealed in the box; total: copies it came with; commander: copied from the
+-- product so the box outlives a resync that drops or renames the product.
+CREATE TABLE IF NOT EXISTS collection_box_cards (
+  box_id TEXT NOT NULL, oracle_id TEXT NOT NULL, qty INTEGER NOT NULL, commander INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL,
+  PRIMARY KEY (box_id, oracle_id)
+) WITHOUT ROWID;
 `;
 
 /** Opens (and creates if needed) the SQLite database. Pass ':memory:' for tests. */

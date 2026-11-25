@@ -21,6 +21,7 @@
  * GET  /api/decks/:id                   -> DeckResponse       404 when missing.
  * PUT  /api/decks/:id   {deck}          -> DeckResponse       replaces; 404 when missing.
  * DELETE /api/decks/:id                 -> { ok: true }       404 when missing.
+ *        `deck.built: true` (the cards are really in this deck) is kept; any other value is dropped.
  * POST /api/analyze     {deck}          -> AnalyzeResponse
  *        Rating, bracket report, summary, targets, theme weights and a score for every card in
  *        the deck (commanders, companion and main). `cards` holds a ClientCard for every oracle id
@@ -55,12 +56,36 @@
  *        `format: 'arena'` gives the text MTG Arena's deck import reads from the clipboard (Commander /
  *        Deck sections, Arena's card names, no set codes) and `notOnArena`: the deck's cards Arena does
  *        not have, checked against the local Arena install.
- * GET  /api/collection                  -> CollectionResponse
+ * GET  /api/collection                  -> CollectionResponse   each card's `qty` is the total (loose + boxed),
+ *        `inBoxes` the copies of it still sealed in boxes.
  * POST /api/collection  {text}          -> CollectionImportResponse   replaces the collection (CSV or text;
- *        empty text clears it).
- * PATCH /api/collection {oracleId, delta} -> { count, totalQty, qty }   adds (or, negative, takes away) copies of one card.
+ *        empty text clears it). The collection's boxes are removed too.
+ * PATCH /api/collection {oracleId, delta, toBoxes?} -> CollectionAdjustResponse
+ *        Adds (or, negative, takes away) copies of one card. A removal takes loose copies first; when
+ *        the new total is below the copies sealed in boxes, the difference comes out of boxes, newest
+ *        box first, and `fromBoxes` says which boxes lost how many. The total stops at 0.
+ *        `toBoxes: [{boxId, qty}]` (positive delta only, else 400) puts the added copies back into
+ *        those boxes (Undo sends an earlier `fromBoxes`); boxes that no longer exist are skipped and
+ *        those copies stay loose. A box never takes more than the copies added or than it came with.
  *        All three act on the ACTIVE collection. "Owned" everywhere (green dots, the owned filter,
  *        owned-only builds, Best from collection) means the active collection too.
+ * GET  /api/collection/boxes             -> BoxesResponse   boxes of the ACTIVE collection, newest first.
+ * POST /api/collection/boxes {productId} -> { box: BoxInfo }   (201) adds a sealed product: every card's total
+ *        rises by the product's quantity and the box remembers them. Buying it twice makes two boxes.
+ *        400 when the active collection is an Arena one (boxes only exist in collections kept by
+ *        hand), 404 for an unknown product.
+ * GET  /api/collection/boxes/:id         -> BoxDetailResponse   the box and the cards still sealed in it. 404 when missing.
+ * PATCH /api/collection/boxes/:id {oracleId, take} -> BoxDetailResponse
+ *        Takes `take` (1..999, default 1) copies out of the box and keeps them loose; totals do not change.
+ *        400 for a bad body, 404 for an unknown box, 409 when the box holds fewer copies.
+ * PUT  /api/collection/boxes/:id {deckId} -> { box: BoxInfo }   links the box to the deck that is this box
+ *        (`deckId: null` unlinks). The deck itself is not changed. 404 for an unknown box or deck.
+ * DELETE /api/collection/boxes/:id?mode=sold|opened -> { ok: true }
+ *        sold: the copies still in the box leave the collection, then the box goes. opened: only the
+ *        box goes; its cards stay as loose copies. 400 for another mode, 404 for an unknown box.
+ * POST /api/collection/boxes/:id/deck    -> { deckId }   (201) "Opened, make it a built deck": saves a new
+ *        deck named after the box (cards still sealed in it: commander slots as commanders, the rest
+ *        in main, `built: true`, bracket 3) and removes the box. Totals do not change. 404 when missing.
  * GET  /api/collection/export[?id=ID]   -> text/csv download ("Name,Quantity") of the active (or named)
  *        collection; POST /api/collection reads it back to the same cards and quantities.
  * GET  /api/collections                 -> CollectionsResponse   every collection with its size; one is active.
@@ -311,6 +336,8 @@ export interface CollectionInfo {
   active: boolean;
   /** When an automatic source last filled it; null for collections kept by hand. */
   syncedAt: string | null;
+  /** Boxes of this collection that still hold sealed copies (built decks are counted too once they exist). */
+  holders: number;
 }
 export interface CollectionsResponse { collections: CollectionInfo[] }
 
@@ -346,8 +373,31 @@ export interface ArenaStatus {
   last: ArenaSyncResult | null;
   syncedAt: string | null;
 }
-export interface CollectionResponse { count: number; totalQty: number; cards: (ClientCard & { qty: number })[] }
+export interface CollectionResponse {
+  count: number; totalQty: number;
+  /** `qty` is the total (loose + boxed); `inBoxes` how many of those copies are still sealed in boxes. */
+  cards: (ClientCard & { qty: number; inBoxes: number })[];
+}
 export interface CollectionImportResponse { count: number; totalQty: number; unresolved: TextLine[] }
+/** Copies of one card a removal took out of a box. Sent back as `toBoxes`, they go back into that box. */
+export interface BoxTake { boxId: string; name: string; qty: number }
+export interface CollectionAdjustResponse { count: number; totalQty: number; qty: number; fromBoxes: BoxTake[] }
+
+/** A sealed product kept in a collection. */
+export interface BoxInfo {
+  id: string; productId: string;
+  /** The product's name when the box was added (kept when a resync renames or drops the product). */
+  name: string;
+  addedAt: string;
+  /** The deck that is this box, when linked. The link lives on the box and never changes the deck. */
+  deckId: string | null;
+  /** Copies still in the box, and copies it came with. */
+  sealed: number; total: number;
+}
+export interface BoxesResponse { boxes: BoxInfo[] }
+/** A card still sealed in a box; `commander` marks the product's commander slots. */
+export interface BoxCard { oracleId: string; qty: number; commander: boolean }
+export interface BoxDetailResponse { box: BoxInfo; cards: BoxCard[]; lookup: CardLookup }
 
 export interface ProxyItem { oracleId: string; qty: number }
 export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantities. */ total: number; cards: CardLookup }
@@ -490,8 +540,17 @@ export const getArena = (signal?: AbortSignal) => call<ArenaStatus>('GET', '/api
 export const syncArena = (auto = false) => call<ArenaStatus>('POST', '/api/arena', { auto });
 export const readArenaMemory = () => call<ArenaStatus>('POST', '/api/arena', { memory: true });
 
-export const adjustCollection = (oracleId: string, delta: number) =>
-  call<{ count: number; totalQty: number; qty: number }>('PATCH', '/api/collection', { oracleId, delta });
+/** `toBoxes` (positive `delta` only): an earlier removal's `fromBoxes`, so Undo puts the copies back into the same boxes. */
+export const adjustCollection = (oracleId: string, delta: number, toBoxes?: readonly { boxId: string; qty: number }[]) =>
+  call<CollectionAdjustResponse>('PATCH', '/api/collection', { oracleId, delta, ...(toBoxes?.length ? { toBoxes } : {}) });
+const boxUrl = (id: string) => `/api/collection/boxes/${encodeURIComponent(id)}`;
+export const getBoxes = (signal?: AbortSignal) => call<BoxesResponse>('GET', '/api/collection/boxes', undefined, signal);
+export const addBox = (productId: string) => call<{ box: BoxInfo }>('POST', '/api/collection/boxes', { productId });
+export const getBox = (id: string, signal?: AbortSignal) => call<BoxDetailResponse>('GET', boxUrl(id), undefined, signal);
+export const removeBox = (id: string, mode: 'sold' | 'opened') => call<{ ok: true }>('DELETE', `${boxUrl(id)}${query({ mode })}`);
+export const takeFromBox = (id: string, oracleId: string, take = 1) => call<BoxDetailResponse>('PATCH', boxUrl(id), { oracleId, take });
+export const linkBox = (id: string, deckId: string | null) => call<{ box: BoxInfo }>('PUT', boxUrl(id), { deckId });
+export const openBoxAsDeck = (id: string) => call<{ deckId: string }>('POST', `${boxUrl(id)}/deck`);
 export const searchProducts = (q: string, signal?: AbortSignal) => call<ProductsResponse>('GET', `/api/products${query({ q })}`, undefined, signal);
 export const getProduct = (id: string, signal?: AbortSignal) =>
   call<ProductDetailResponse>('GET', `/api/products/${encodeURIComponent(id)}`, undefined, signal);

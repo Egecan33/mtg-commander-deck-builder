@@ -1,4 +1,4 @@
-import type { CollectionInfo } from '@/app/lib/api';
+import type { BoxTake, CollectionAdjustResponse, CollectionInfo } from '@/app/lib/api';
 import { parseCollection } from '@/engine/text';
 import type { UnresolvedLine } from '@/engine/text';
 import { PHYSICAL_COLLECTION } from './db';
@@ -9,8 +9,8 @@ import { getCardDb, getDb } from './store';
 
 const ACTIVE_KEY = 'activeCollection';
 
-/** Forgets everything that depends on which cards are owned. */
-function forgetOwned(): void {
+/** Forgets everything that depends on which cards are owned, or which of them sit in boxes. */
+export function forgetOwned(): void {
   const caches = serverState().caches;
   for (const name of ['collection', 'collection-set', 'collection-active', 'deck-tiles']) caches.delete(name);
 }
@@ -38,18 +38,21 @@ export function setActiveCollection(id: string): void {
   forgetOwned();
 }
 
-/** Every collection in display order, with its size. */
+/** Every collection in display order, with its size and how many boxes still hold sealed copies. */
 export function listCollections(): CollectionInfo[] {
   const active = activeCollectionId();
   const rows = getDb()
     .prepare(
-      `SELECT c.id, c.name, c.kind, c.synced_at AS syncedAt, count(k.oracle_id) AS count, coalesce(sum(k.qty), 0) AS totalQty
+      `SELECT c.id, c.name, c.kind, c.synced_at AS syncedAt, count(k.oracle_id) AS count, coalesce(sum(k.qty), 0) AS totalQty,
+         (SELECT count(*) FROM collection_boxes b WHERE b.collection_id = c.id
+            AND EXISTS (SELECT 1 FROM collection_box_cards x WHERE x.box_id = b.id AND x.qty >= 1)) AS holders
        FROM collections c LEFT JOIN collection_cards k ON k.collection_id = c.id AND k.qty >= 1
        GROUP BY c.id ORDER BY c.position, c.name`,
     )
-    .all() as { id: string; name: string; kind: string; syncedAt: string | null; count: number; totalQty: number }[];
+    .all() as { id: string; name: string; kind: string; syncedAt: string | null; count: number; totalQty: number; holders: number }[];
   return rows.map((r) => ({
     id: r.id, name: r.name, kind: r.kind === 'arena' ? 'arena' : 'manual', count: r.count, totalQty: r.totalQty, active: r.id === active, syncedAt: r.syncedAt,
+    holders: r.holders,
   }));
 }
 
@@ -78,12 +81,15 @@ function totals(): { count: number; totalQty: number } {
 
 /**
  * Replaces every card of one collection (not necessarily the active one) with `cards`; quantities
- * below one are dropped. `syncedAt` records when an automatic source was last read.
+ * below one are dropped. `syncedAt` records when an automatic source was last read. The new totals
+ * say nothing about boxes, so the collection's boxes are removed too.
  */
 export function setCollectionCards(id: string, cards: ReadonlyMap<string, number>, syncedAt?: string): void {
   const db = getDb();
   if (!db.prepare('SELECT 1 FROM collections WHERE id = ?').get(id)) throw new HttpError(400, `There is no collection "${id}".`);
   db.transaction(() => {
+    db.prepare('DELETE FROM collection_box_cards WHERE box_id IN (SELECT id FROM collection_boxes WHERE collection_id = ?)').run(id);
+    db.prepare('DELETE FROM collection_boxes WHERE collection_id = ?').run(id);
     db.prepare('DELETE FROM collection_cards WHERE collection_id = ?').run(id);
     const ins = db.prepare('INSERT INTO collection_cards(collection_id, oracle_id, qty) VALUES (?, ?, ?)');
     for (const [oracleId, qty] of cards) if (Number.isFinite(qty) && qty >= 1) ins.run(id, oracleId, Math.min(9999, Math.floor(qty)));
@@ -101,20 +107,66 @@ export function replaceCollection(text: string): { count: number; totalQty: numb
   return { ...totals(), unresolved: parsed.unresolved };
 }
 
-/** Adds `delta` copies of one card to the active collection (negative takes copies away; the row goes at zero). Returns the card's new quantity. */
-export function adjustCollection(oracleId: string, delta: number): { count: number; totalQty: number; qty: number } {
+/**
+ * Adds `delta` copies of one card to the active collection (negative takes copies away; the row goes
+ * at zero). Returns the card's new quantity.
+ *
+ * Boxes: a removal takes loose copies first. When the new total is below the copies sealed in the
+ * collection's boxes, the difference comes out of boxes, newest box first (ties by id), and
+ * `fromBoxes` lists every box touched. With a positive delta, `toBoxes` (an earlier removal's
+ * `fromBoxes`) puts the added copies back into those boxes; a box that no longer exists in this
+ * collection, or never held the card, is skipped and those copies stay loose. A box never gets more
+ * than the copies added or than it came with, so sealed copies never exceed the total.
+ */
+export function adjustCollection(oracleId: string, delta: number, toBoxes: readonly { boxId: string; qty: number }[] = []): CollectionAdjustResponse {
   const db = getDb();
   const id = activeCollectionId();
-  const row = db.prepare('SELECT qty FROM collection_cards WHERE collection_id = ? AND oracle_id = ?').get(id, oracleId) as { qty: number } | undefined;
-  const qty = Math.min(9999, Math.max(0, (row?.qty ?? 0) + Math.trunc(delta)));
-  if (qty === 0) db.prepare('DELETE FROM collection_cards WHERE collection_id = ? AND oracle_id = ?').run(id, oracleId);
-  else {
-    db.prepare(
-      'INSERT INTO collection_cards(collection_id, oracle_id, qty) VALUES (?, ?, ?) ON CONFLICT(collection_id, oracle_id) DO UPDATE SET qty = excluded.qty',
-    ).run(id, oracleId, qty);
-  }
+  const fromBoxes: BoxTake[] = [];
+  const qty = db.transaction(() => {
+    const row = db.prepare('SELECT qty FROM collection_cards WHERE collection_id = ? AND oracle_id = ?').get(id, oracleId) as { qty: number } | undefined;
+    const before = row?.qty ?? 0;
+    const after = Math.min(9999, Math.max(0, before + Math.trunc(delta)));
+    if (after === 0) db.prepare('DELETE FROM collection_cards WHERE collection_id = ? AND oracle_id = ?').run(id, oracleId);
+    else {
+      db.prepare(
+        'INSERT INTO collection_cards(collection_id, oracle_id, qty) VALUES (?, ?, ?) ON CONFLICT(collection_id, oracle_id) DO UPDATE SET qty = excluded.qty',
+      ).run(id, oracleId, after);
+    }
+
+    const cell = db.prepare(
+      `SELECT x.qty, x.total FROM collection_box_cards x JOIN collection_boxes b ON b.id = x.box_id
+       WHERE x.box_id = ? AND x.oracle_id = ? AND b.collection_id = ?`,
+    );
+    const setSealed = db.prepare('UPDATE collection_box_cards SET qty = ? WHERE box_id = ? AND oracle_id = ?');
+    let room = after - before; // copies added: the most that may go back into boxes
+    for (const t of toBoxes) {
+      if (room <= 0) break;
+      const c = cell.get(t.boxId, oracleId, id) as { qty: number; total: number } | undefined;
+      if (!c) continue;
+      const n = Math.min(room, Math.max(0, Math.trunc(t.qty)), c.total - c.qty);
+      if (n <= 0) continue;
+      setSealed.run(c.qty + n, t.boxId, oracleId);
+      room -= n;
+    }
+
+    const held = db
+      .prepare(
+        `SELECT b.id AS boxId, b.name, x.qty FROM collection_box_cards x JOIN collection_boxes b ON b.id = x.box_id
+         WHERE b.collection_id = ? AND x.oracle_id = ? AND x.qty >= 1 ORDER BY b.added_at DESC, b.id`,
+      )
+      .all(id, oracleId) as BoxTake[];
+    let excess = held.reduce((s, h) => s + h.qty, 0) - after;
+    for (const h of held) {
+      if (excess <= 0) break;
+      const n = Math.min(excess, h.qty);
+      setSealed.run(h.qty - n, h.boxId, oracleId);
+      fromBoxes.push({ boxId: h.boxId, name: h.name, qty: n });
+      excess -= n;
+    }
+    return after;
+  })();
   forgetOwned();
-  return { ...totals(), qty };
+  return { ...totals(), qty, fromBoxes };
 }
 
 const csvCell = (s: string): string => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);

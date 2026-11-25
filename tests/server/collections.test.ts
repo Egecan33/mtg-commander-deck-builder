@@ -62,8 +62,8 @@ describe('migration from the single collection', () => {
   it('gives a new database both collections, empty, with Physical active', () => {
     useServerDb(openDb(':memory:'));
     expect(listCollections()).toEqual([
-      { id: 'physical', name: 'Physical', kind: 'manual', count: 0, totalQty: 0, active: true, syncedAt: null },
-      { id: 'arena', name: 'MTG Arena', kind: 'arena', count: 0, totalQty: 0, active: false, syncedAt: null },
+      { id: 'physical', name: 'Physical', kind: 'manual', count: 0, totalQty: 0, active: true, syncedAt: null, holders: 0 },
+      { id: 'arena', name: 'MTG Arena', kind: 'arena', count: 0, totalQty: 0, active: false, syncedAt: null, holders: 0 },
     ]);
   });
 });

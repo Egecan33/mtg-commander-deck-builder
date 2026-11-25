@@ -78,6 +78,7 @@ export function sanitizeDeck(input: unknown): Deck {
     }
     if (Object.keys(roleTargets).length > 0) deck.roleTargets = roleTargets;
   }
+  if (input.built === true) deck.built = true;
   return deck;
 }
 

@@ -80,6 +80,11 @@ export interface Deck {
    * becomes [n, n + 2]; roles left out keep the bracket's default band (see `targetsFor`).
    */
   roleTargets?: Partial<Record<Role, number>> | null;
+  /**
+   * The cards are really in this deck (a physical deck that is assembled). Only changes which
+   * copies of the collection count as free, never the deck's cards. Absent means false.
+   */
+  built?: boolean;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
