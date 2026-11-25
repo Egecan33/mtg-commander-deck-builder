@@ -26,16 +26,28 @@
  *        Rating, bracket report, summary, targets, theme weights and a score for every card in
  *        the deck (commanders, companion and main). `cards` holds a ClientCard for every oracle id
  *        the response mentions (deck cards, combo pieces, violation and reason cards).
+ *        `conflicts` (worked out on every request, against the ACTIVE collection): deck cards owned
+ *        in the quantity the deck needs whose free copies do not cover it, because sealed boxes or
+ *        other built decks hold them; the deck itself and the boxes linked to it never count. Basic
+ *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
+ *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
+ *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
+ * Held copies ("!"): the cards, build and proposal responses carry `heldBy` (see HeldBy). A card is
+ *        in it when adding one more copy to the deck (one more than the deck has) would need a copy
+ *        that a box or another built deck holds: owned in that quantity, but not free.
  * POST /api/cards       CardsRequest    -> CardsResponse
  *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged.
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
  *        come last. With `q` set, cards whose name matches come before cards that match only in
- *        type or text. page is 1-based, pageSize 1..200 (default 60).
+ *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
  * POST /api/build       BuildRequest    -> BuildResponse
- *        mode 'auto' | 'fill' -> { deck, cards }; mode 'swaps' | 'improve' | 'add' | 'replace' -> { proposals, cards }.
+ *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' -> { proposals, cards, heldBy }.
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
+ *        `options.freeOnly` (with `ownedOnly`; alone it does nothing): only cards with a free copy for
+ *        this deck count as owned, so the build never takes a copy out of a box or another built deck.
+ *        `heldBy` covers the built deck's cards, or the proposals' `in` cards.
  *        'improve' takes `options.goals` (ImproveGoals) for a directed run: `maxSwaps` (1-40, a hard
  *        cap), `targetBracket` (improve toward another bracket than the deck's; set it on the deck
  *        when the proposals are applied), `emphasizeRoles` (add more of these roles) and
@@ -119,13 +131,15 @@
  * PUT  /api/proxies     {items}         -> ProxyListResponse   replaces the list ([] clears it).
  * POST /api/proxies     {items}         -> ProxyListResponse   adds cards; quantities of a card already listed add up.
  *        items: [{ oracleId, qty }], qty 1..99, at most 500 different cards. An unknown oracle id is a 400.
- * POST /api/discover    {bracket, scope?} -> DiscoverState
+ * POST /api/discover    {bracket, scope?, freeOnly?} -> DiscoverState
  *        `scope: 'unowned'` ranks the commanders that are NOT in the collection by the deck the owned
  *        cards build around them (the commander is then the one card to get); default 'owned'. GET and
  *        /tiers take the same `scope`.
+ *        `freeOnly: true` (GET: `&freeOnly=1`; /tiers: `freeOnly` in the body) counts only cards with a
+ *        free copy as owned: copies held by boxes and built decks are left out. It is a separate result.
  *        "Best from collection": which commanders you own make the best deck from the cards you
  *        own, at that bracket. Starts a background job (or answers at once from the cache, keyed
- *        by collection + bracket) and returns its state; poll with GET while `status` is 'running'.
+ *        by collection + bracket + scope + freeOnly) and returns its state; poll with GET while `status` is 'running'.
  *        Every owned commander gets a full owned-only build when there are at most 40; above that
  *        a cheap pre-score picks the best 40 (`considered` says out of how many). Single commanders
  *        only (no partner pairs). Each entry carries tier 0 (owned cards only, basic lands free)
@@ -149,11 +163,12 @@
  *        (immutable). A file that is not on disk answers 404 with an SVG card-back placeholder
  *        (browsers still draw it in an <img>); a malformed name answers 400.
  */
+import type { ConflictReport } from '@/engine/collection/conflicts';
 import type {
   AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
-export type { ImproveGoals };
+export type { ConflictReport, ImproveGoals };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -165,6 +180,12 @@ export type ClientCard = Pick<
 
 export type ScoredCard = ClientCard & { score: CardScore };
 export type CardLookup = Record<string, ClientCard>;
+/**
+ * oracleId -> names of the boxes and built decks ("Landing Party box", "Krenko, Mob Boss (built)")
+ * holding the copies this deck would have to take: the card is owned in the quantity needed, but its
+ * free copies do not cover it. Cards with a free copy, and cards not owned, are left out.
+ */
+export type HeldBy = Record<string, string[]>;
 
 export type SyncStep = 'cards' | 'printings' | 'products' | 'tags' | 'combos' | 'features' | 'images';
 export type ImageSize = 'display' | 'grid';
@@ -263,6 +284,10 @@ export interface AnalyzeResponse {
   /** Deck oracle ids the database does not know. */
   unknown: string[];
   edhrec: EdhrecStatus;
+  /** Deck cards whose free copies in the ACTIVE collection do not cover the deck, and who holds them. */
+  conflicts: ConflictReport;
+  /** A box not yet linked to a deck that this deck looks like (offer "This deck is my <name> box"); null when none. */
+  boxMatch: { boxId: string; name: string } | null;
 }
 
 export interface CardFilters {
@@ -293,11 +318,17 @@ export interface CardsRequest {
   page?: number;
   pageSize?: number;
 }
-export interface CardsResponse { total: number; page: number; pageSize: number; cards: ScoredCard[] }
+export interface CardsResponse {
+  total: number; page: number; pageSize: number; cards: ScoredCard[];
+  /** For the cards of this page: adding one more copy to the deck would take a held copy. */
+  heldBy: HeldBy;
+}
 
 export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
+  /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
+  freeOnly?: boolean;
   maxPriceUsd?: number | null;
   /** Same seed, same deck. Omit for a fresh build each time. */
   seed?: number;
@@ -311,8 +342,16 @@ export interface BuildRequestOptions {
   out?: string;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
-export interface BuildDeckResponse { deck: Deck; seed: number; cards: CardLookup }
-export interface BuildProposalsResponse { proposals: SwapProposal[]; cards: CardLookup }
+export interface BuildDeckResponse {
+  deck: Deck; seed: number; cards: CardLookup;
+  /** The built deck's cards that take a held copy (as `AnalyzeResponse.conflicts.cards`). */
+  heldBy: HeldBy;
+}
+export interface BuildProposalsResponse {
+  proposals: SwapProposal[]; cards: CardLookup;
+  /** The proposals' `in` cards that would take a held copy when added to the deck. */
+  heldBy: HeldBy;
+}
 export type BuildResponse = BuildDeckResponse | BuildProposalsResponse;
 
 // ---------------------------------------------------------------------------------------------
@@ -420,6 +459,8 @@ export interface DiscoverEntry { commander: ClientCard; preScore: number; tiers:
 export type DiscoverScope = 'owned' | 'unowned';
 export interface DiscoverState {
   scope: DiscoverScope;
+  /** Copies held by boxes and built decks were left out of the owned cards. */
+  freeOnly: boolean;
   status: 'idle' | 'running' | 'done' | 'error' | 'empty';
   bracket: Bracket;
   stage: string; done: number; total: number;
@@ -562,11 +603,12 @@ export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
-export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned') => call<DiscoverState>('POST', '/api/discover', { bracket, scope });
-export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', signal?: AbortSignal) =>
-  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope })}`, undefined, signal);
-export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned') =>
-  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope });
+export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false) =>
+  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly });
+export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal) =>
+  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false) =>
+  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);

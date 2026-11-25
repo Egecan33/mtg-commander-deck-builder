@@ -8,6 +8,7 @@ import type { Card, Color, Deck, Role } from '@/engine/types';
 import { poolIndex, toClientCard, toCommanderCard } from './cards';
 import { ownedSet } from './collection';
 import { getAnalysis } from './context';
+import { heldByFor } from './holders';
 import { HttpError, intParam, isObject } from './http';
 import { getCardDb } from './store';
 
@@ -133,7 +134,7 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
     const i = matches[k];
     out.push({ ...toClientCard(cards[i], db, owned), score: scores[i] });
   }
-  return { total: matches.length, page: pageNo, pageSize, cards: out };
+  return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
 
 /** Eligible commanders, most popular first, filtered by name/text and colour identity. */

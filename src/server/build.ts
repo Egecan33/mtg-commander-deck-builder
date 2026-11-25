@@ -1,10 +1,11 @@
 import type { BuildMode, BuildResponse } from '@/app/lib/api';
 import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, replaceCard, autoBuild, fillRest, improveDeck, suggestSwaps } from '@/engine/builder';
 import { ROLE_LABEL } from '@/engine/targets';
-import type { Bracket, BuildOptions, Deck, ImproveGoals, Role } from '@/engine/types';
+import type { Bracket, BuildOptions, Deck, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { cardLookup } from './cards';
 import { ownedSet } from './collection';
 import { engineContext } from './context';
+import { deckConflicts, freeOwnedSet, heldByFor, selfHolders } from './holders';
 import { HttpError, intParam, isObject } from './http';
 
 const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace'];
@@ -38,7 +39,10 @@ function readGoals(raw: unknown): ImproveGoals | null {
   return goals;
 }
 
-/** POST /api/build. The saved collection is always passed as `owned`; `ownedOnly` decides its use. */
+/**
+ * POST /api/build. The saved collection is always passed as `owned`; `ownedOnly` decides its use.
+ * With `ownedOnly && freeOnly`, `owned` is only the cards with a copy free for this deck.
+ */
 export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildResponse {
   if (!MODES.includes(mode as BuildMode)) throw new HttpError(400, `mode must be one of ${MODES.join(', ')}.`);
   if (rawOptions !== undefined && rawOptions !== null && !isObject(rawOptions)) throw new HttpError(400, 'options must be an object.');
@@ -49,28 +53,31 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
   }
   const seed = typeof o.seed === 'number' && Number.isFinite(o.seed) ? Math.floor(o.seed) >>> 0 : Math.floor(Math.random() * 0x7fffffff);
   const goals = mode === 'improve' ? readGoals(o.goals) : null;
-  const options: BuildOptions = { ownedOnly: o.ownedOnly === true, owned: ownedSet(), maxPriceUsd: (price as number | null | undefined) ?? null, seed, goals };
+  const ownedOnly = o.ownedOnly === true;
+  const owned = ownedOnly && o.freeOnly === true ? freeOwnedSet(selfHolders(deck)) : ownedSet();
+  const options: BuildOptions = { ownedOnly, owned, maxPriceUsd: (price as number | null | undefined) ?? null, seed, goals };
   const { ctx } = engineContext(deck);
+  const held = (proposals: SwapProposal[]) => heldByFor(deck, proposals.map((p) => p.in).filter((id) => id !== ''));
 
   if (mode === 'auto' || mode === 'fill') {
     if (deck.commanders.length === 0) throw new HttpError(400, 'Pick a commander before building.');
     const built = mode === 'auto' ? autoBuild(deck, ctx, options) : fillRest(deck, ctx, options);
     const out: Deck = { ...built, id: deck.id, name: deck.name };
-    return { deck: out, seed, cards: cardLookup([...out.commanders, out.companion, ...out.main.map((e) => e.oracleId)]) };
+    return { deck: out, seed, cards: cardLookup([...out.commanders, out.companion, ...out.main.map((e) => e.oracleId)]), heldBy: deckConflicts(out).cards };
   }
   if (mode === 'add') {
     if (typeof o.role !== 'string' || !ADD_ONE_ROLES.includes(o.role as Role)) throw new HttpError(400, `options.role must be one of: ${ADD_ONE_ROLES.join(', ')}.`);
     const proposals = addOne(deck, ctx, options, o.role as Role, intParam(o.count, 5, 1, 10));
-    return { proposals, cards: cardLookup(proposals.flatMap((p) => [p.out, p.in]).filter((id) => id !== '')) };
+    return { proposals, cards: cardLookup(proposals.flatMap((p) => [p.out, p.in]).filter((id) => id !== '')), heldBy: held(proposals) };
   }
   if (mode === 'replace') {
     if (typeof o.out !== 'string' || !deck.main.some((e) => e.oracleId === o.out)) throw new HttpError(400, 'options.out must be the oracleId of a card in the deck (not a commander).');
     const proposals = replaceCard(deck, ctx, options, o.out, intParam(o.count, 6, 1, 12));
-    return { proposals, cards: cardLookup([o.out, ...proposals.map((p) => p.in)]) };
+    return { proposals, cards: cardLookup([o.out, ...proposals.map((p) => p.in)]), heldBy: held(proposals) };
   }
   const proposals =
     mode === 'swaps'
       ? suggestSwaps(deck, ctx, options, intParam(o.count, 5, 1, MAX_PROPOSAL_COUNT))
       : improveDeck(deck, ctx, options, intParam(o.count, 15, 1, MAX_PROPOSAL_COUNT));
-  return { proposals, cards: cardLookup(proposals.flatMap((p) => [p.out, p.in])) };
+  return { proposals, cards: cardLookup(proposals.flatMap((p) => [p.out, p.in])), heldBy: held(proposals) };
 }

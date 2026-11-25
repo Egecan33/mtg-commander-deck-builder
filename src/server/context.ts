@@ -8,6 +8,7 @@ import { targetsFor } from '@/engine/targets';
 import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
 import { peekEdhrec } from './edhrec';
+import { boxMatchFor, deckConflicts } from './holders';
 import { getSettings } from './settings';
 import { cacheSlot } from './state';
 import { getCardDb } from './store';
@@ -141,7 +142,7 @@ export function getAnalysis(deck: Deck): Analysis {
   return fresh;
 }
 
-/** The body of POST /api/analyze. */
+/** The body of POST /api/analyze. Conflicts and the box match are worked out per request, not cached with the analysis. */
 export function analyzeResponse(deck: Deck): AnalyzeResponse {
   const analysis = getAnalysis(deck);
   const r = analysis.report();
@@ -152,5 +153,5 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
   }
   for (const reason of r.bracket.reasons) for (const id of reason.oracleIds) ids.add(id);
   for (const v of [...r.rating.violations, ...r.bracket.violationsOfTarget]) for (const id of v.oracleIds) ids.add(id);
-  return { ...r, cards: cardLookup(ids), edhrec: analysis.edhrec };
+  return { ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
 }
