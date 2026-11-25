@@ -1,7 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { Readable } from 'node:stream';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { PassThrough, Readable } from 'node:stream';
+import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { parseMtgjsonDeck, storeProducts, type ParsedProduct } from '@/ingest/products';
+import { parseMtgjsonDeck, readProducts, storeProducts, type ParsedProduct } from '@/ingest/products';
 import { readTar } from '@/ingest/tar';
 import { openDb } from '@/server/db';
 
@@ -37,6 +40,43 @@ describe('readTar', () => {
     const chunks = Array.from({ length: Math.ceil(archive.length / 100) }, (_, i) => archive.subarray(i * 100, i * 100 + 100));
     for await (const f of readTar(Readable.from(chunks))) files.push({ name: f.name, data: f.data.toString() });
     expect(files).toEqual([{ name: 'a/x.json', data: '{"a":1}' }, { name: 'a/y.json', data: '{"b":2}' }]);
+  });
+
+  it('destroys the source when the reader stops early', async () => {
+    const source = new PassThrough(); // never ended: only readTar can let it go
+    source.write(Buffer.concat([tarEntry('a/x.json', '{}'), tarEntry('a/y.json', '{}')]));
+    for await (const f of readTar(source)) {
+      expect(f.name).toBe('a/x.json');
+      break;
+    }
+    expect(source.destroyed).toBe(true);
+  });
+
+  it('destroys the source when it throws', async () => {
+    const source = new PassThrough();
+    const header = tarEntry('a/x.json', '{}').subarray(0, 512);
+    header.write('zzzzzzzzzzz\0', 124); // not an octal size
+    source.write(header);
+    await expect(async () => {
+      for await (const f of readTar(source)) void f;
+    }).rejects.toThrow(/file size/);
+    expect(source.destroyed).toBe(true);
+  });
+});
+
+describe('readProducts', () => {
+  it('fails, instead of waiting for ever, when the archive cannot be read', { timeout: 3000 }, async () => {
+    const missing = path.join(mkdtempSync(path.join(tmpdir(), 'cf-products-')), 'missing.tar.gz');
+    await expect(readProducts(missing, () => true, () => {})).rejects.toThrow(/ENOENT/);
+  });
+
+  it('reads products and the MTGJSON version from a gzipped archive', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'cf-products-'));
+    const file = path.join(dir, 'decks.tar.gz');
+    writeFileSync(file, gzipSync(Buffer.concat([tarEntry('decks/LandingParty_TRC.json', JSON.stringify(fixture)), tarEntry('decks/readme.txt', 'x'), Buffer.alloc(1024)])));
+    const { products, version } = await readProducts(file, () => true, () => {});
+    expect(products.map((p) => p.id)).toEqual(['LandingParty_TRC']);
+    expect(version).toBe(fixture.meta.version);
   });
 });
 

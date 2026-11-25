@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream';
 import { createGunzip } from 'node:zlib';
 import { DATA_DIR, writeSyncState, type Db } from '@/server/db';
 import type { Log } from './cards';
@@ -78,6 +79,27 @@ export function storeProducts(db: Db, products: ParsedProduct[]): void {
   })();
 }
 
+/** Every product in a downloaded AllDeckFiles.tar.gz, and the MTGJSON version it carries. */
+export async function readProducts(file: string, known: (oracleId: string) => boolean, log: Log): Promise<{ products: ParsedProduct[]; version: string | null }> {
+  const products: ParsedProduct[] = [];
+  let version: string | null = null;
+  let files = 0;
+  // pipeline (not .pipe) carries a read error into gunzip, so the tar reader fails instead of waiting for ever.
+  const gunzipped = createGunzip();
+  pipeline(createReadStream(file), gunzipped, () => {});
+  for await (const entry of readTar(gunzipped)) {
+    if (!entry.name.endsWith('.json')) continue;
+    files++;
+    if (files % 500 === 0) log(`products read ${files}`);
+    let json: unknown;
+    try { json = JSON.parse(entry.data.toString('utf8')); } catch { continue; }
+    version ??= typeof (json as any)?.meta?.version === 'string' ? (json as any).meta.version : null;
+    const p = parseMtgjsonDeck(entry.name, json, known);
+    if (p) products.push(p);
+  }
+  return { products, version };
+}
+
 /**
  * Fills `products` and `product_cards` from MTGJSON's AllDeckFiles archive: the card list of every
  * fixed-content product (Commander decks, Secret Lair drops, starter decks), so a whole box can be
@@ -90,20 +112,7 @@ export async function syncProducts(db: Db, log: Log): Promise<void> {
   log(`products downloaded ${bytes} bytes`);
 
   const knownIds = new Set((db.prepare('SELECT oracle_id FROM cards').all() as { oracle_id: string }[]).map((r) => r.oracle_id));
-  const known = (id: string) => knownIds.has(id);
-  const products: ParsedProduct[] = [];
-  let version: string | null = null;
-  let files = 0;
-  for await (const entry of readTar(createReadStream(file).pipe(createGunzip()))) {
-    if (!entry.name.endsWith('.json')) continue;
-    files++;
-    if (files % 500 === 0) log(`products read ${files}`);
-    let json: unknown;
-    try { json = JSON.parse(entry.data.toString('utf8')); } catch { continue; }
-    version ??= typeof (json as any)?.meta?.version === 'string' ? (json as any).meta.version : null;
-    const p = parseMtgjsonDeck(entry.name, json, known);
-    if (p) products.push(p);
-  }
+  const { products, version } = await readProducts(file, (id) => knownIds.has(id), log);
 
   storeProducts(db, products);
   const byType: Record<string, number> = {};

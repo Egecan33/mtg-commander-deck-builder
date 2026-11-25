@@ -11,7 +11,8 @@ const cString = (buf: Buffer, start: number, length: number): string => {
 /**
  * Reads a ustar archive (already gunzipped) from a byte stream and yields every regular file with
  * its bytes. Directories, links and extended headers are skipped. Only one file is held in memory
- * at a time.
+ * at a time. The stream is destroyed once reading stops: at the end of the archive, on an error, or
+ * when the caller stops early.
  */
 export async function* readTar(stream: Readable): AsyncGenerator<{ name: string; data: Buffer }> {
   let buf = Buffer.alloc(0);
@@ -28,18 +29,22 @@ export async function* readTar(stream: Readable): AsyncGenerator<{ name: string;
     return out;
   };
 
-  for (;;) {
-    const header = await take(BLOCK);
-    if (!header || header.every((b) => b === 0)) return;
-    const size = parseInt(cString(header, 124, 12).trim() || '0', 8);
-    if (!Number.isFinite(size)) throw new Error('tar: unreadable file size in header');
-    const padded = Math.ceil(size / BLOCK) * BLOCK;
-    const body = await take(padded);
-    if (!body) throw new Error('tar: archive ends inside a file');
-    const type = cString(header, 156, 1);
-    if (type !== '0' && type !== '') continue;
-    const prefix = cString(header, 345, 155);
-    const name = cString(header, 0, 100);
-    yield { name: prefix ? `${prefix}/${name}` : name, data: Buffer.from(body.subarray(0, size)) };
+  try {
+    for (;;) {
+      const header = await take(BLOCK);
+      if (!header || header.every((b) => b === 0)) return;
+      const size = parseInt(cString(header, 124, 12).trim() || '0', 8);
+      if (!Number.isFinite(size)) throw new Error('tar: unreadable file size in header');
+      const padded = Math.ceil(size / BLOCK) * BLOCK;
+      const body = await take(padded);
+      if (!body) throw new Error('tar: archive ends inside a file');
+      const type = cString(header, 156, 1);
+      if (type !== '0' && type !== '') continue;
+      const prefix = cString(header, 345, 155);
+      const name = cString(header, 0, 100);
+      yield { name: prefix ? `${prefix}/${name}` : name, data: Buffer.from(body.subarray(0, size)) };
+    }
+  } finally {
+    stream.destroy();
   }
 }
