@@ -5,9 +5,10 @@ import { syncCards, type Log } from './cards';
 import { syncCombos } from './combos';
 import { syncImages } from './images';
 import { syncPrintings } from './printings';
+import { syncProducts } from './products';
 import { syncTags } from './tags';
 
-export const STEPS = ['cards', 'printings', 'tags', 'combos', 'features', 'images'] as const;
+export const STEPS = ['cards', 'printings', 'products', 'tags', 'combos', 'features', 'images'] as const;
 export type Step = (typeof STEPS)[number];
 
 interface Flags { limit?: number; match?: string; keepRaw: boolean }
@@ -32,6 +33,7 @@ export async function runStep(step: Step, db: Db, log: Log, flags: Flags = { kee
   switch (step) {
     case 'cards': await syncCards(db, log); break;
     case 'printings': await syncPrintings(db, log); break;
+    case 'products': await syncProducts(db, log); break;
     case 'tags': await syncTags(db, log); break;
     case 'combos': await syncCombos(db, log, { keepRaw: flags.keepRaw }); break;
     case 'features': await runFeatures(db, log); break;

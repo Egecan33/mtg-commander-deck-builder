@@ -13,6 +13,7 @@ const STEPS: { id: SyncStep; name: string; what: string }[] = [
   { id: 'combos', name: 'Combos', what: 'Known combos from Commander Spellbook, used for bracket checks and win conditions.' },
   { id: 'features', name: 'Card features', what: 'Worked out on this machine from the three above: roles, themes, mana sources. No download.' },
   { id: 'printings', name: 'Printings', what: 'Set code and collector number of every paper printing, so cards can be added to the collection by the code printed at the bottom.' },
+  { id: 'products', name: 'Products', what: 'Card lists of fixed-content products (Commander decks, Secret Lair drops, starter decks) so a whole box can be added to the collection at once.' },
   { id: 'images', name: 'Card images', what: 'Two sizes of every card face, saved to disk so the app works offline. The long one: tens of thousands of files.' },
 ];
 
@@ -225,6 +226,7 @@ export default function DataPage() {
   const countOf: Record<SyncStep, string> = {
     cards: `${fmtInt(c.legal)} legal, ${fmtInt(c.banned)} banned`,
     printings: `${fmtInt(Number((status.steps.printings?.info as { printings?: number } | undefined)?.printings ?? 0))} printings`,
+    products: `${fmtInt(Number((status.steps.products?.info as { products?: number } | undefined)?.products ?? 0))} products`,
     tags: `${fmtInt(c.tags)} tags`,
     combos: `${fmtInt(c.combos)} combos`,
     features: `${fmtInt(c.features)} cards understood`,

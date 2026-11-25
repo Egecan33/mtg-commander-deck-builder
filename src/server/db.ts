@@ -46,6 +46,13 @@ CREATE TABLE IF NOT EXISTS printings (
   set_code TEXT NOT NULL, collector_number TEXT NOT NULL COLLATE NOCASE, oracle_id TEXT NOT NULL,
   PRIMARY KEY (set_code, collector_number)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, set_code TEXT NOT NULL, type TEXT NOT NULL, release_date TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS product_cards (
+  product_id TEXT NOT NULL, oracle_id TEXT NOT NULL, qty INTEGER NOT NULL, commander INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (product_id, oracle_id)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS sync_state (step TEXT PRIMARY KEY, finished_at TEXT NOT NULL, info TEXT NOT NULL);
 `;
 

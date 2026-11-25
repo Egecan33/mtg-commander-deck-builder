@@ -9,7 +9,7 @@
  * GET  /api/status                      -> StatusResponse
  *        Never fails, also on a missing or empty database (first run): counts are 0, `ready` false.
  * GET  /api/sync?since=N                -> SyncState   (progress lines from index N on)
- * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'all';
+ * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'products'|'tags'|'combos'|'features'|'images'|'all';
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active.
  * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
  *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
@@ -136,7 +136,7 @@ export type ClientCard = Pick<
 export type ScoredCard = ClientCard & { score: CardScore };
 export type CardLookup = Record<string, ClientCard>;
 
-export type SyncStep = 'cards' | 'printings' | 'tags' | 'combos' | 'features' | 'images';
+export type SyncStep = 'cards' | 'printings' | 'products' | 'tags' | 'combos' | 'features' | 'images';
 export type ImageSize = 'display' | 'grid';
 export type ColorLetter = Color | 'C';
 export type ColorMode = 'includes' | 'exact' | 'within';

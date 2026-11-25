@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "date": "2026-11-25",
+    "version": "5.3.0+20261125"
+  },
+  "data": {
+    "name": "Landing Party",
+    "code": "TRC",
+    "type": "Commander Deck",
+    "releaseDate": "2026-11-13",
+    "commander": [
+      {
+        "name": "Commander Spock",
+        "count": 1,
+        "isFoil": true,
+        "identifiers": {
+          "scryfallOracleId": "60644afe-9645-45a1-9eac-70f327daa6a7"
+        }
+      }
+    ],
+    "mainBoard": [
+      {
+        "name": "Captain Kirk, Boldly Going",
+        "count": 1,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "5228fffe-6347-4177-bccb-b15621c7159c"
+        }
+      },
+      {
+        "name": "Balance of Terror",
+        "count": 1,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "0b035f3c-ba21-4a73-b4df-11a7e8c19056"
+        }
+      },
+      {
+        "name": "Merciful Mandate",
+        "count": 1,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "201269a1-8f11-485a-a9be-6447b189b4df"
+        }
+      },
+      {
+        "name": "M'Ress, Crew Coordinator",
+        "count": 1,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "a33f6ec8-5992-43a1-a16c-d8e83c4017fa"
+        }
+      },
+      {
+        "name": "Sol Ring",
+        "count": 1,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "6ad8011d-3471-4369-9d68-b264cc027487"
+        }
+      },
+      {
+        "name": "Forest",
+        "count": 2,
+        "isFoil": false,
+        "identifiers": {
+          "scryfallOracleId": "b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6"
+        }
+      },
+      {
+        "name": "Captain Kirk, Boldly Going",
+        "count": 1,
+        "isFoil": true,
+        "identifiers": {
+          "scryfallOracleId": "5228fffe-6347-4177-bccb-b15621c7159c"
+        }
+      }
+    ]
+  }
+}
