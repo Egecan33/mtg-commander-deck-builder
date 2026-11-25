@@ -63,6 +63,23 @@ describe('holders', () => {
     expect(holdersFor('physical').map((h) => h.id)).toEqual([`box:${box.id}`]);
   });
 
+  it('a box linked to a built deck is held once, by the deck', () => {
+    const box = addBox('LandingParty_TRC');
+    const deck = builtDeck('Landing Party', [['Sol Ring', 1], ['Arcane Signet', 1]]);
+    linkBox(box.id, deck.id!);
+    expect(holdersFor('physical').map((h) => h.id)).toEqual([`deck:${deck.id}`]);
+    expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(1);
+    // Not built any more: the sealed box holds its cards again.
+    saveDeck(sanitizeDeck({ ...deck, built: false }), deck.id!);
+    expect(holdersFor('physical').map((h) => h.id)).toEqual([`box:${box.id}`]);
+    expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(1);
+    // A box linked to a deck that is gone counts as a box again.
+    saveDeck(sanitizeDeck({ ...deck, built: true }), deck.id!);
+    db.prepare('DELETE FROM decks WHERE id = ?').run(deck.id);
+    expect(holdersFor('physical').map((h) => h.id)).toEqual([`box:${box.id}`]);
+    expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(1);
+  });
+
   it('listDecks reports built', () => {
     const built = builtDeck('B', []);
     const plain = saveDeck(sanitizeDeck({ name: 'P', commanders: [oracleIdByName(db, 'Krenko, Mob Boss')], main: [] }))!.deck;

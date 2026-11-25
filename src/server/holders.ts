@@ -20,21 +20,8 @@ export function holdersFor(collectionId: string): Holder[] {
   const kind = (db.prepare('SELECT kind FROM collections WHERE id = ?').get(collectionId) as { kind: string } | undefined)?.kind;
   if (kind !== 'manual') return [];
   const cards = getCardDb();
-  const holders: Holder[] = [];
 
-  const boxes = db.prepare('SELECT id, name FROM collection_boxes WHERE collection_id = ? ORDER BY added_at, id').all(collectionId) as { id: string; name: string }[];
-  const rows = db.prepare('SELECT oracle_id AS oracleId, qty FROM collection_box_cards WHERE box_id = ? AND qty >= 1');
-  for (const b of boxes) {
-    const map = new Map<string, number>();
-    const sealed = rows.all(b.id) as { oracleId: string; qty: number }[];
-    for (const r of sealed) {
-      const c = cards.get(r.oracleId);
-      if (c && isBasicLand(c)) continue;
-      map.set(r.oracleId, r.qty);
-    }
-    if (sealed.length > 0) holders.push({ id: `box:${b.id}`, kind: 'box', name: `${b.name} box`, cards: map });
-  }
-
+  const builtDecks: Holder[] = [];
   const decks = db.prepare("SELECT id, name, json FROM decks WHERE json_extract(json, '$.built') = 1 ORDER BY updated_at, id").all() as { id: string; name: string; json: string }[];
   for (const d of decks) {
     let deck: Deck;
@@ -52,9 +39,28 @@ export function holdersFor(collectionId: string): Holder[] {
     for (const c of deck.commanders) add(c, 1);
     if (deck.companion) add(deck.companion, 1);
     for (const e of deck.main) add(e.oracleId, e.qty);
-    holders.push({ id: `deck:${d.id}`, kind: 'deck', name: `${d.name} (built)`, cards: map });
+    builtDecks.push({ id: `deck:${d.id}`, kind: 'deck', name: `${d.name} (built)`, cards: map });
   }
-  return holders;
+
+  // A box linked to a built deck is that deck: the deck already holds those copies, so the box does not count again.
+  const builtIds = new Set(builtDecks.map((h) => h.id.slice('deck:'.length)));
+  const boxes = db.prepare('SELECT id, name, deck_id AS deckId FROM collection_boxes WHERE collection_id = ? ORDER BY added_at, id').all(collectionId) as {
+    id: string; name: string; deckId: string | null;
+  }[];
+  const rows = db.prepare('SELECT oracle_id AS oracleId, qty FROM collection_box_cards WHERE box_id = ? AND qty >= 1');
+  const holders: Holder[] = [];
+  for (const b of boxes) {
+    if (b.deckId !== null && builtIds.has(b.deckId)) continue;
+    const map = new Map<string, number>();
+    const sealed = rows.all(b.id) as { oracleId: string; qty: number }[];
+    for (const r of sealed) {
+      const c = cards.get(r.oracleId);
+      if (c && isBasicLand(c)) continue;
+      map.set(r.oracleId, r.qty);
+    }
+    if (sealed.length > 0) holders.push({ id: `box:${b.id}`, kind: 'box', name: `${b.name} box`, cards: map });
+  }
+  return [...holders, ...builtDecks];
 }
 
 /** The holders that are this deck itself: `deck:<id>` and the boxes linked to it. A deleted link matches nothing. */
