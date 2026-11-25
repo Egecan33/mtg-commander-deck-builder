@@ -76,6 +76,11 @@
  *        `{memory: true}` reads that full list out of the running game with the optional mtga-reader
  *        package (see the README); on macOS the system asks for an administrator password unless a
  *        debugger-entitled copy of Node sits beside the reader.
+ * GET  /api/products?q=&limit=          -> ProductsResponse
+ *        Physical precon products (digital MTGO/Arena types are hidden), newest release first. `q` is a
+ *        case-insensitive name substring or an exact set code; limit 1..200 (50).
+ * GET  /api/products/:id                -> ProductDetailResponse   the product's cards (`commander` marks the
+ *        commander slots) with `ownedQty` from the ACTIVE collection, and a CardLookup. 404 when unknown.
  * GET  /api/printing?q=TEXT             -> PrintingResponse
  *        Quick entry for the collection. `q` is a set code and collector number as printed at the
  *        bottom of a card ("TDM 123", "tdm-123", "123 TDM", "123/281 TDM", "0123 tdm"; rarity,
@@ -392,6 +397,14 @@ export interface PrintingResponse {
 export interface EdhrecResponse { status: EdhrecStatus; commanderDecks: number; cards: number }
 
 // ---------------------------------------------------------------------------------------------
+export interface ProductInfo { id: string; name: string; setCode: string; type: string; releaseDate: string; /** Summed quantity. */ cardCount: number }
+export interface ProductsResponse { products: ProductInfo[] }
+export interface ProductDetailResponse {
+  product: ProductInfo;
+  cards: { oracleId: string; qty: number; commander: boolean; ownedQty: number }[];
+  lookup: CardLookup;
+}
+
 // Client
 
 export class ApiError extends Error {
@@ -479,6 +492,9 @@ export const readArenaMemory = () => call<ArenaStatus>('POST', '/api/arena', { m
 
 export const adjustCollection = (oracleId: string, delta: number) =>
   call<{ count: number; totalQty: number; qty: number }>('PATCH', '/api/collection', { oracleId, delta });
+export const searchProducts = (q: string, signal?: AbortSignal) => call<ProductsResponse>('GET', `/api/products${query({ q })}`, undefined, signal);
+export const getProduct = (id: string, signal?: AbortSignal) =>
+  call<ProductDetailResponse>('GET', `/api/products/${encodeURIComponent(id)}`, undefined, signal);
 export const lookupPrinting = (q: string, signal?: AbortSignal) => call<PrintingResponse>('GET', `/api/printing${query({ q })}`, undefined, signal);
 
 export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET', '/api/proxies', undefined, signal);
