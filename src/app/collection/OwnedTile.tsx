@@ -12,7 +12,7 @@ export function OwnedTile({ card, onAdjust }: { card: Owned; onAdjust: (card: Ow
       <CardImage id={card.oracleId} name={card.name} />
       {card.qty > 1 && <span className="absolute right-[5%] top-[3.5%] rounded bg-soot/90 px-1 text-[0.8rem] font-semibold leading-[1.35rem]">&times;{card.qty}</span>}
       {card.inBoxes > 0 && (
-        <span className="absolute left-[5%] top-[3.5%] rounded bg-soot/90 px-1.5 text-[0.72rem] leading-[1.35rem] text-brass" data-testid="owned-boxed">
+        <span className="absolute bottom-[3.5%] left-[5%] rounded bg-soot/90 px-1.5 text-[0.72rem] leading-[1.35rem] text-brass transition-opacity group-focus-within:opacity-0 group-hover:opacity-0" data-testid="owned-boxed">
           {card.inBoxes} in a box
         </span>
       )}

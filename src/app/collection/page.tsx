@@ -52,7 +52,7 @@ export default function CollectionPage() {
       setUnresolved(body.trim() ? res.unresolved : null);
       notify.info(body.trim() ? `Collection saved: ${fmtInt(res.count)} different cards` : 'Collection cleared');
       if (body.trim() && res.unresolved.length === 0) setText('');
-      await load();
+      await changed();
     } catch (e) {
       notify.error(e);
     } finally {
@@ -68,6 +68,7 @@ export default function CollectionPage() {
   const [recent, setRecent] = useState<Recent[]>([]);
   const quickRef = useRef<HTMLInputElement>(null);
   const recentKey = useRef(1);
+  const quickBusy = useRef(false); // one quick entry at a time, so a second Enter cannot reuse stale counts
   useEffect(() => {
     const text = quick.trim();
     if (!text) return setFound(null);
@@ -79,7 +80,8 @@ export default function CollectionPage() {
     };
   }, [quick]);
   const quickAdd = async (card: ClientCard | null | undefined, qty: number, ownedQty?: number) => {
-    if (!card) return;
+    if (!card || quickBusy.current) return;
+    quickBusy.current = true;
     try {
       if (mode === 'remove') {
         const have = ownedQty ?? (await lookupPrinting(card.name)).ownedQty;
@@ -97,6 +99,8 @@ export default function CollectionPage() {
       await changed();
     } catch (e) {
       notify.error(e);
+    } finally {
+      quickBusy.current = false;
     }
   };
   const undo = async (item: Recent) => {
