@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { BoxCard, BoxDetailResponse, BoxInfo } from '@/app/lib/api';
+import type { BoxCard, BoxDetailResponse, BoxInfo, OpenBoxResponse } from '@/app/lib/api';
 import type { DeckEntry } from '@/engine/types';
 import { cardLookup } from './cards';
 import { activeCollectionId, forgetOwned } from './collection';
 import type { Db } from './db';
-import { sanitizeDeck, saveDeck } from './decks';
+import { getDeck, sanitizeDeck, saveDeck } from './decks';
 import { HttpError } from './http';
 import { getDb } from './store';
 
@@ -14,7 +14,7 @@ import { getDb } from './store';
  * collection and card: copies sealed in boxes <= the total.
  */
 
-export type { BoxCard, BoxDetailResponse, BoxInfo };
+export type { BoxCard, BoxDetailResponse, BoxInfo, OpenBoxResponse };
 
 const SELECT_BOX = `SELECT b.id, b.product_id AS productId, b.name, b.added_at AS addedAt, b.deck_id AS deckId,
   coalesce(sum(x.qty), 0) AS sealed, coalesce(sum(x.total), 0) AS total
@@ -29,9 +29,9 @@ function boxInfo(db: Db, id: string): BoxInfo | null {
   return (db.prepare(`${SELECT_BOX} WHERE b.id = ? GROUP BY b.id`).get(id) as BoxInfo | undefined) ?? null;
 }
 
-function requireBox(db: Db, id: string): { id: string; collectionId: string; name: string } {
-  const box = db.prepare('SELECT id, collection_id AS collectionId, name FROM collection_boxes WHERE id = ?').get(id) as
-    | { id: string; collectionId: string; name: string }
+function requireBox(db: Db, id: string): { id: string; collectionId: string; name: string; deckId: string | null } {
+  const box = db.prepare('SELECT id, collection_id AS collectionId, name, deck_id AS deckId FROM collection_boxes WHERE id = ?').get(id) as
+    | { id: string; collectionId: string; name: string; deckId: string | null }
     | undefined;
   if (!box) throw new HttpError(404, 'No such box.');
   return box;
@@ -156,19 +156,29 @@ export function removeBox(id: string, mode: 'sold' | 'opened'): void {
 }
 
 /**
- * "Opened, make it a built deck": saves a new deck from the cards still sealed in the box (commander
- * slots as commanders, at most two, the rest in main), marked built, then removes the box. The copies
- * move from the box to the deck, so totals do not change.
+ * "Opened, make it a built deck". A box linked to a deck that exists: that deck is marked built (its
+ * cards are not touched) and the box is removed, so no second deck appears. Otherwise: saves a new
+ * deck from the cards still sealed in the box, marked built, then removes the box. Commander slots
+ * become the commanders when there are at most two; with more, the owner chooses (`chooseCommander`)
+ * and every card goes to main. The copies move from the box to the deck, so totals do not change.
  */
-export function openBoxAsDeck(id: string): { deckId: string } {
+export function openBoxAsDeck(id: string): OpenBoxResponse {
   const db = getDb();
-  const deckId = db.transaction(() => {
+  const res = db.transaction((): OpenBoxResponse => {
     const box = requireBox(db, id);
+    const linked = box.deckId !== null ? getDeck(box.deckId) : null;
+    if (box.deckId !== null && linked) {
+      if (!saveDeck(sanitizeDeck({ ...linked.deck, built: true }), box.deckId)) throw new HttpError(500, 'The deck could not be saved.');
+      deleteBox(db, id);
+      return { deckId: box.deckId, linked: true, chooseCommander: false };
+    }
+    const cards = boxCards(id);
+    const chooseCommander = cards.filter((c) => c.commander).length > 2;
     const commanders: string[] = [];
     const main: DeckEntry[] = [];
-    for (const c of boxCards(id)) {
+    for (const c of cards) {
       let qty = c.qty;
-      if (c.commander && commanders.length < 2) {
+      if (c.commander && !chooseCommander) {
         commanders.push(c.oracleId);
         qty -= 1;
       }
@@ -177,10 +187,10 @@ export function openBoxAsDeck(id: string): { deckId: string } {
     const saved = saveDeck(sanitizeDeck({ name: box.name, commanders, main, targetBracket: 3, built: true }));
     if (!saved?.deck.id) throw new HttpError(500, 'The deck could not be saved.');
     deleteBox(db, id);
-    return saved.deck.id;
+    return { deckId: saved.deck.id, linked: false, chooseCommander };
   })();
   forgetOwned();
-  return { deckId };
+  return res;
 }
 
 /** Moves `qty` copies of one card out of the box; they stay in the collection as loose copies. */

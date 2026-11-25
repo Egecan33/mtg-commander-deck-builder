@@ -95,9 +95,12 @@
  * DELETE /api/collection/boxes/:id?mode=sold|opened -> { ok: true }
  *        sold: the copies still in the box leave the collection, then the box goes. opened: only the
  *        box goes; its cards stay as loose copies. 400 for another mode, 404 for an unknown box.
- * POST /api/collection/boxes/:id/deck    -> { deckId }   (201) "Opened, make it a built deck": saves a new
- *        deck named after the box (cards still sealed in it: commander slots as commanders, the rest
- *        in main, `built: true`, bracket 3) and removes the box. Totals do not change. 404 when missing.
+ * POST /api/collection/boxes/:id/deck    -> OpenBoxResponse   (201) "Opened, make it a built deck". A box
+ *        linked to a deck that exists: that deck is marked built (cards untouched, `linked: true`) and
+ *        the box is removed. Otherwise: saves a new deck named after the box (cards still sealed in
+ *        it: commander slots as commanders when there are at most two, the rest in main; with more,
+ *        no commander, every card in main and `chooseCommander: true`; `built: true`, bracket 3) and
+ *        removes the box. Totals do not change. 404 when missing.
  * GET  /api/collection/export[?id=ID]   -> text/csv download ("Name,Quantity") of the active (or named)
  *        collection; POST /api/collection reads it back to the same cards and quantities.
  * GET  /api/collections                 -> CollectionsResponse   every collection with its size; one is active.
@@ -439,6 +442,14 @@ export interface BoxesResponse { boxes: BoxInfo[] }
 /** A card still sealed in a box; `commander` marks the product's commander slots. */
 export interface BoxCard { oracleId: string; qty: number; commander: boolean }
 export interface BoxDetailResponse { box: BoxInfo; cards: BoxCard[]; lookup: CardLookup }
+/** "Opened, make it a built deck". */
+export interface OpenBoxResponse {
+  deckId: string;
+  /** The box was linked to this deck: the deck was marked built and kept its cards, no new deck was made. */
+  linked: boolean;
+  /** The box had more than two commander slots: the new deck has no commander yet, every card is in main. */
+  chooseCommander: boolean;
+}
 
 export interface ProxyItem { oracleId: string; qty: number }
 export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantities. */ total: number; cards: CardLookup }
@@ -593,7 +604,7 @@ export const getBox = (id: string, signal?: AbortSignal) => call<BoxDetailRespon
 export const removeBox = (id: string, mode: 'sold' | 'opened') => call<{ ok: true }>('DELETE', `${boxUrl(id)}${query({ mode })}`);
 export const takeFromBox = (id: string, oracleId: string, take = 1) => call<BoxDetailResponse>('PATCH', boxUrl(id), { oracleId, take });
 export const linkBox = (id: string, deckId: string | null) => call<{ box: BoxInfo }>('PUT', boxUrl(id), { deckId });
-export const openBoxAsDeck = (id: string) => call<{ deckId: string }>('POST', `${boxUrl(id)}/deck`);
+export const openBoxAsDeck = (id: string) => call<OpenBoxResponse>('POST', `${boxUrl(id)}/deck`);
 export const searchProducts = (q: string, signal?: AbortSignal) => call<ProductsResponse>('GET', `/api/products${query({ q })}`, undefined, signal);
 export const getProduct = (id: string, signal?: AbortSignal) =>
   call<ProductDetailResponse>('GET', `/api/products/${encodeURIComponent(id)}`, undefined, signal);

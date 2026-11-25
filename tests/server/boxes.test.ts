@@ -293,6 +293,48 @@ describe('boxes in a collection', () => {
     expect(status(() => openBoxAsDeck(box.id))).toBe(404);
   });
 
+  it('opening a box linked to a deck marks that deck built and makes no second deck', () => {
+    const box = addBox(PRODUCT);
+    const mine = saveDeck(sanitizeDeck({ name: 'Mine', commanders: [krenko], main: [{ oracleId: solRing, qty: 1 }, { oracleId: cultivate, qty: 1 }] }))!.deck;
+    linkBox(box.id, mine.id!);
+    const decks = () => (db.prepare('SELECT count(*) AS n FROM decks').get() as { n: number }).n;
+    const before = { decks: decks(), totals: sorted(ownedQuantities()) };
+    expect(openBoxAsDeck(box.id)).toEqual({ deckId: mine.id, linked: true, chooseCommander: false });
+    expect(decks()).toBe(before.decks);
+    // Only `built` changes; the deck's cards stay exactly as they were.
+    expect(getDeck(mine.id!)!.deck).toEqual({ ...mine, built: true });
+    expect(sorted(ownedQuantities())).toEqual(before.totals);
+    expect(listBoxes()).toEqual([]);
+  });
+
+  it('opening a box linked to a deleted deck makes a new deck', () => {
+    const box = addBox(PRODUCT);
+    const gone = saveDeck(sanitizeDeck({ name: 'Gone', commanders: [krenko] }))!.deck;
+    linkBox(box.id, gone.id!);
+    db.prepare('DELETE FROM decks WHERE id = ?').run(gone.id);
+    const res = openBoxAsDeck(box.id);
+    expect(res).toMatchObject({ linked: false, chooseCommander: false });
+    expect(res.deckId).not.toBe(gone.id);
+    expect(getDeck(res.deckId)!.deck).toMatchObject({ name: 'Landing Party', commanders: [krenko], built: true });
+  });
+
+  it('a box with more than two commander cards opens with no commander and every card in main', () => {
+    const line = (name: string, qty: number, commander = false) => ({ oracleId: oracleIdByName(db, name), qty, commander });
+    storeTestProducts(db, [{
+      id: 'Trio_TST', name: 'Trio', setCode: 'TST', type: 'Commander Deck', releaseDate: '2026-01-01', unknownCards: 0,
+      cards: [line('Atraxa, Praetors\' Voice', 1, true), line('Atarka, World Render', 2, true), line('Krenko, Mob Boss', 1, true), line('Sol Ring', 1)],
+    }]);
+    const box = addBox('Trio_TST');
+    const res = openBoxAsDeck(box.id);
+    expect(res).toMatchObject({ linked: false, chooseCommander: true });
+    const deck = getDeck(res.deckId)!.deck;
+    expect(deck.commanders).toEqual([]);
+    expect(deck.built).toBe(true);
+    expect(new Map(deck.main.map((e) => [e.oracleId, e.qty]))).toEqual(new Map([
+      [oracleIdByName(db, 'Atraxa, Praetors\' Voice'), 1], [oracleIdByName(db, 'Atarka, World Render'), 2], [krenko, 1], [solRing, 1],
+    ]));
+  });
+
   it('keeps built on a deck only when it is true', () => {
     expect(sanitizeDeck({ name: 'A', built: true }).built).toBe(true);
     expect('built' in sanitizeDeck({ name: 'B', built: 'yes' })).toBe(false);

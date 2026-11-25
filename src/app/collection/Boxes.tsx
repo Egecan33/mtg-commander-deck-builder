@@ -216,8 +216,10 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
     setBusy(true);
     try {
       if (action === 'deck') {
-        const { deckId } = await openBoxAsDeck(box.id);
+        const { deckId, linked, chooseCommander } = await openBoxAsDeck(box.id);
         await onChanged();
+        if (linked) notify.info(`${box.name} is now marked built. Its cards stay as they were in the deck.`);
+        if (chooseCommander) notify.info(`${box.name} has more than two cards that can lead it, so all are in the deck. Choose the commander: open it and press “Make commander”.`);
         router.push(`/deck/${deckId}`);
         return;
       }
@@ -278,14 +280,18 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
             )}
             {confirm?.id === b.id ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.88rem]">
-                <span className="w-full text-ash">{question[confirm.action]}</span>
+                <span className="w-full text-ash">
+                  {confirm.action === 'deck' && b.deckId && deckNames[b.deckId]
+                    ? `Mark ${deckNames[b.deckId]} as built and remove the box? The deck's cards do not change.`
+                    : question[confirm.action]}
+                </span>
                 <button type="button" className={`btn btn-sm ${confirm.action === 'sold' ? 'btn-danger' : 'btn-primary'}`} disabled={busy} onClick={() => void run(b, confirm.action)} data-testid="box-confirm">Yes, do it</button>
                 <button type="button" className="btn btn-quiet btn-sm" onClick={() => setConfirm(null)}>Cancel</button>
               </div>
             ) : (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <button type="button" className="btn btn-sm" title="The box is gone, every card stays in your collection" onClick={() => setConfirm({ id: b.id, action: 'keep' })} data-testid="box-keep">Opened, keep the cards</button>
-                <button type="button" className="btn btn-sm" title="Saves a built deck from the cards still sealed in it" onClick={() => setConfirm({ id: b.id, action: 'deck' })} data-testid="box-deck">Opened, make it a built deck</button>
+                <button type="button" className="btn btn-sm" title={b.deckId && deckNames[b.deckId] ? `Marks ${deckNames[b.deckId]} as built and removes the box` : 'Saves a built deck from the cards still sealed in it'} onClick={() => setConfirm({ id: b.id, action: 'deck' })} data-testid="box-deck">Opened, make it a built deck</button>
                 <button type="button" className="btn btn-sm" title="The cards still in the box leave your collection" onClick={() => setConfirm({ id: b.id, action: 'sold' })} data-testid="box-sold">Sold, remove the cards</button>
               </div>
             )}
