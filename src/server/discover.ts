@@ -20,7 +20,8 @@ const KEPT = 6;
 interface Job { key: string; state: DiscoverState; started: number; lazy: Map<string, DiscoverTier[]> }
 
 // On globalThis, like the rest of the server state, but not dropped with the caches: a result is
-// keyed by the collection and stays valid until the collection changes.
+// keyed by bracket, scope, `freeOnly` and the set of cards it searches (the owned cards, or with
+// `freeOnly` the owned cards with a free copy), so it stays valid until that set changes.
 const KEY = '__commanderForgeDiscover';
 const holder = globalThis as unknown as Record<string, Map<string, Job> | undefined>;
 const jobs = (): Map<string, Job> => (holder[KEY] ??= new Map());

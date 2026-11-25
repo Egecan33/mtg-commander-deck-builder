@@ -33,9 +33,11 @@
  *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
  *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
  *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
- * Held copies ("!"): the cards, build and proposal responses carry `heldBy` (see HeldBy). A card is
- *        in it when adding one more copy to the deck (one more than the deck has) would need a copy
- *        that a box or another built deck holds: owned in that quantity, but not free.
+ * Held copies ("!"): the cards, build and proposal responses carry `heldBy` (see HeldBy). In the card
+ *        browser and in proposals a card is in it when adding one more copy to the deck (one more than
+ *        the deck has) would need a copy that a box or another built deck holds: owned in that
+ *        quantity, but not free. In a built deck (build modes 'auto' and 'fill') the need is the
+ *        copies the deck has, as in `conflicts`.
  * POST /api/cards       CardsRequest    -> CardsResponse
  *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged.
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
@@ -104,7 +106,8 @@
  *        removes the box. Totals do not change. 404 when missing.
  * GET  /api/collection/export[?id=ID]   -> text/csv download ("Name,Quantity") of the active (or named)
  *        collection; POST /api/collection reads it back to the same cards and quantities.
- * GET  /api/collections                 -> CollectionsResponse   every collection with its size; one is active.
+ * GET  /api/collections                 -> CollectionsResponse   every collection with its size and `holders`
+ *        (boxes with sealed copies and built decks that keep copies out of reach); one is active.
  * PUT  /api/collections {active: ID}    -> CollectionsResponse   switches the active collection. Decks are not touched.
  * GET  /api/arena                       -> ArenaStatus   is MTG Arena installed here, and what the last sync did.
  * POST /api/arena  {auto?}              -> ArenaStatus
@@ -381,7 +384,10 @@ export interface CollectionInfo {
   active: boolean;
   /** When an automatic source last filled it; null for collections kept by hand. */
   syncedAt: string | null;
-  /** Boxes of this collection that still hold sealed copies (built decks are counted too once they exist). */
+  /**
+   * Boxes of this collection that still hold sealed copies, plus every built deck for a collection
+   * kept by hand (none for an Arena one). A box linked to a built deck counts once, as that deck.
+   */
   holders: number;
 }
 export interface CollectionsResponse { collections: CollectionInfo[] }
