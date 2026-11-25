@@ -4,7 +4,8 @@ import type { SyncState, SyncStep } from '@/app/lib/api';
 import { HttpError } from './http';
 import { onCardDataChanged } from './store';
 
-export const SYNC_STEPS: readonly SyncStep[] = ['cards', 'printings', 'products', 'tags', 'combos', 'features', 'images'];
+/** In the order `pnpm sync all` runs them (src/ingest/sync.ts STEPS): products last. */
+export const SYNC_STEPS: readonly SyncStep[] = ['cards', 'printings', 'tags', 'combos', 'features', 'images', 'products'];
 /** Progress lines kept in memory; older ones are dropped, `lineCount` keeps counting. */
 export const MAX_LINES = 2000;
 

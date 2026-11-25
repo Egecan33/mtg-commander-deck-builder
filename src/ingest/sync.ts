@@ -8,7 +8,8 @@ import { syncPrintings } from './printings';
 import { syncProducts } from './products';
 import { syncTags } from './tags';
 
-export const STEPS = ['cards', 'printings', 'products', 'tags', 'combos', 'features', 'images'] as const;
+// products runs last: its 264 MB MTGJSON download failing must not stop the steps the app needs most.
+export const STEPS = ['cards', 'printings', 'tags', 'combos', 'features', 'images', 'products'] as const;
 export type Step = (typeof STEPS)[number];
 
 interface Flags { limit?: number; match?: string; keepRaw: boolean }

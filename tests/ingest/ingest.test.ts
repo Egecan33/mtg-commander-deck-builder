@@ -7,10 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { streamVariants, toCombo } from '@/ingest/combos';
 import { downloadToFile, httpGet, readJsonLines, USER_AGENT } from '@/ingest/http';
 import { isWebp, syncImages } from '@/ingest/images';
-import { parseArgs } from '@/ingest/sync';
+import { parseArgs, STEPS } from '@/ingest/sync';
 import { rollUpTags } from '@/ingest/tags';
 import { loadCardDb, invalidateCardDb } from '@/server/carddb';
 import { openDb } from '@/server/db';
+import { SYNC_STEPS } from '@/server/sync-runner';
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), 'cf-ingest-'));
 const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([4, 0, 0, 0]), Buffer.from('WEBP'), Buffer.from('VP8 ')]);
@@ -109,7 +110,11 @@ describe('combos', () => {
 describe('sync arguments', () => {
   it('orders steps, defaults to all, and reads flags', () => {
     expect(parseArgs(['combos', 'cards', 'tags']).steps).toEqual(['cards', 'tags', 'combos']);
-    expect(parseArgs([]).steps).toEqual(['cards', 'printings', 'products', 'tags', 'combos', 'features', 'images']);
+    // products runs last: a failed 264 MB MTGJSON download must not stop tags, combos, features or images.
+    expect(parseArgs([]).steps).toEqual(['cards', 'printings', 'tags', 'combos', 'features', 'images', 'products']);
+    expect(parseArgs(['products', 'cards']).steps).toEqual(['cards', 'products']);
+    // The app's sync runner lists the steps in the same order.
+    expect([...SYNC_STEPS]).toEqual([...STEPS]);
     expect(parseArgs(['all']).steps).toHaveLength(7);
     expect(parseArgs(['images', '--limit', '20', '--match', 'tergrid'])).toEqual({ steps: ['images'], flags: { keepRaw: false, limit: 20, match: 'tergrid' } });
     expect(() => parseArgs(['bogus'])).toThrow(/unknown argument/);

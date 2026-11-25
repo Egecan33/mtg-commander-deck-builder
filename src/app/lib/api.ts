@@ -9,8 +9,9 @@
  * GET  /api/status                      -> StatusResponse
  *        Never fails, also on a missing or empty database (first run): counts are 0, `ready` false.
  * GET  /api/sync?since=N                -> SyncState   (progress lines from index N on)
- * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'products'|'tags'|'combos'|'features'|'images'|'all';
- *        starts `pnpm sync <step>` as a child process. 409 while another run is active.
+ * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'products'|'all';
+ *        starts `pnpm sync <step>` as a child process. 409 while another run is active. 'all' runs
+ *        the steps in that order, products last.
  * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
  *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
