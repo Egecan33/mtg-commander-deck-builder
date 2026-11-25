@@ -82,7 +82,7 @@ pnpm start
 
 Open <http://localhost:3210>.
 
-`pnpm sync all` runs six steps. Rough numbers from a home connection:
+`pnpm sync all` runs seven steps, in this order. Rough numbers from a home connection:
 
 | Step | What it fetches | Size | Time |
 |---|---|---|---|
@@ -92,6 +92,9 @@ Open <http://localhost:3210>.
 | `combos` | Commander Spellbook combo export | 32 MB | ~3 min |
 | `features` | computed locally: roles, themes, mana info | — | seconds |
 | `images` | two WebP sizes per card face | ~4.7 GB | ~40 min |
+| `products` | MTGJSON deck files: the card lists of fixed-content products (Commander decks, Secret Lair drops, starter decks), for adding a whole box to the collection | ~264 MB | a few minutes |
+
+`products` runs last, so a failed MTGJSON download does not stop the other steps.
 
 Everything lands in `data/`, which is gitignored. Run any step alone with `pnpm sync <step>`; all steps resume where they stopped.
 
@@ -146,6 +149,7 @@ This project ships no card images and no bulk data; it downloads them to your ma
 
 - **[Scryfall](https://scryfall.com)** — card data, images and Tagger tags. Not affiliated with or endorsed by Scryfall.
 - **[Commander Spellbook](https://commanderspellbook.com)** — combo data.
+- **[MTGJSON](https://mtgjson.com)** — card lists of fixed-content products.
 - **[EDHREC](https://edhrec.com)** — optional per-commander statistics, opt-in.
 - **Frank Karsten** — mana base mathematics.
 

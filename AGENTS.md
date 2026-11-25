@@ -16,7 +16,7 @@ Read the design before changing behaviour. Its "Anti-goals" section lists the wa
 
 ```bash
 pnpm install
-pnpm sync all        # download card data, tags, combos, features and images into data/
+pnpm sync all        # download card data, printings, tags, combos, features, images and product lists into data/
 pnpm dev             # http://localhost:3210
 pnpm build && pnpm start
 pnpm typecheck
@@ -24,7 +24,7 @@ pnpm test            # Vitest: engine, server, ingest
 pnpm e2e             # Playwright, needs a synced data/ directory
 ```
 
-`pnpm sync` takes step names: `cards`, `tags`, `combos`, `features`, `images`, or `all`. After changing anything in `src/engine/features`, run `pnpm sync features`.
+`pnpm sync` takes step names: `cards`, `printings`, `tags`, `combos`, `features`, `images`, `products`, or `all`. `all` runs them in that order; `products` (MTGJSON, ~264 MB) comes last so its download failing cannot stop the others. After changing anything in `src/engine/features`, run `pnpm sync features`.
 
 ## Layout
 
