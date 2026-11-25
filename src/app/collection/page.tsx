@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/card';
 import { useCollections, useNotify, useStatus } from '../components/Shell';
 import { VirtualGrid } from '../components/VirtualGrid';
-import { adjustCollection, collectionExportUrl, getCollection, lookupPrinting, replaceCollection, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
+import { adjustCollection, collectionExportUrl, getCollection, lookupPrinting, replaceCollection, type BoxTake, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
 import { fmtDate, fmtInt } from '../lib/ui';
+import { AddBox, YourBoxes } from './Boxes';
+import { OwnedTile, type Owned } from './OwnedTile';
 
-type Owned = CollectionResponse['cards'][number];
+/** One line of the quick-entry history. `qty` is negative for a removal; `fromBoxes` are the boxes a removal took copies from. */
+interface Recent { key: number; card: ClientCard; qty: number; fromBoxes: BoxTake[] }
 
 export default function CollectionPage() {
   const notify = useNotify();
@@ -19,6 +22,10 @@ export default function CollectionPage() {
   const [unresolved, setUnresolved] = useState<TextLine[] | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [q, setQ] = useState('');
+  const [boxVersion, setBoxVersion] = useState(0);
+  const [boxCountRaw, setBoxCount] = useState(0);
+
+  const boxCount = active?.kind === 'manual' ? boxCountRaw : 0;
 
   const load = useCallback(async () => {
     try {
@@ -31,6 +38,12 @@ export default function CollectionPage() {
   useEffect(() => {
     if (status?.ready) void load();
   }, [status?.ready, load]);
+
+  // Anything that can change what is in a box: reload the grid and the box list.
+  const changed = useCallback(async () => {
+    setBoxVersion((v) => v + 1);
+    await load();
+  }, [load]);
 
   const save = async (body: string) => {
     setBusy(true);
@@ -51,7 +64,8 @@ export default function CollectionPage() {
   // ---- quick add: the code printed at the bottom of a card, or a name
   const [quick, setQuick] = useState('');
   const [found, setFound] = useState<PrintingResponse | null>(null);
-  const [recent, setRecent] = useState<{ key: number; card: ClientCard; qty: number }[]>([]);
+  const [mode, setMode] = useState<'add' | 'remove'>('add');
+  const [recent, setRecent] = useState<Recent[]>([]);
   const quickRef = useRef<HTMLInputElement>(null);
   const recentKey = useRef(1);
   useEffect(() => {
@@ -64,24 +78,41 @@ export default function CollectionPage() {
       ctrl.abort();
     };
   }, [quick]);
-  const quickAdd = async (card: ClientCard | null | undefined, qty: number) => {
+  const quickAdd = async (card: ClientCard | null | undefined, qty: number, ownedQty?: number) => {
     if (!card) return;
     try {
-      await adjustCollection(card.oracleId, qty);
-      setRecent((r) => [{ key: recentKey.current++, card, qty }, ...r].slice(0, 8));
+      if (mode === 'remove') {
+        const have = ownedQty ?? (await lookupPrinting(card.name)).ownedQty;
+        const taken = Math.min(qty, have);
+        if (taken <= 0) return notify.info(`You do not own ${card.name}`);
+        const res = await adjustCollection(card.oracleId, -taken);
+        setRecent((r) => [{ key: recentKey.current++, card, qty: -taken, fromBoxes: res.fromBoxes }, ...r].slice(0, 8));
+      } else {
+        await adjustCollection(card.oracleId, qty);
+        setRecent((r) => [{ key: recentKey.current++, card, qty, fromBoxes: [] }, ...r].slice(0, 8));
+      }
       setQuick('');
       setFound(null);
       quickRef.current?.focus();
-      await load();
+      await changed();
     } catch (e) {
       notify.error(e);
     }
   };
-  const undo = async (item: { key: number; card: ClientCard; qty: number }) => {
+  const undo = async (item: Recent) => {
     try {
-      await adjustCollection(item.card.oracleId, -item.qty);
+      // Undoing a removal puts the copies back into the boxes they came from.
+      await adjustCollection(item.card.oracleId, -item.qty, item.qty < 0 ? item.fromBoxes : undefined);
       setRecent((r) => r.filter((x) => x.key !== item.key));
-      await load();
+      await changed();
+    } catch (e) {
+      notify.error(e);
+    }
+  };
+  const tileAdjust = async (c: Owned, delta: number) => {
+    try {
+      await adjustCollection(c.oracleId, delta);
+      await changed();
     } catch (e) {
       notify.error(e);
     }
@@ -173,10 +204,22 @@ export default function CollectionPage() {
           </div>
         </div>
 
+        {active?.kind === 'manual' && (
+          <>
+            <AddBox onChanged={changed} />
+            <YourBoxes version={boxVersion} onChanged={changed} onCount={setBoxCount} />
+          </>
+        )}
+
         <div data-testid="quick-add">
-          <h2 className="text-[1.1rem]">Add cards one by one</h2>
-          <p className="mt-1 text-[0.88rem] text-ash">
-            Type the set code and number printed at the bottom of the card (“TDM 123”, “123 tdm”) or its name. Enter adds one; Shift+Enter adds four; “3 tdm 123” adds three.
+          <h2 className="text-[1.1rem]">{mode === 'add' ? 'Add cards one by one' : 'Remove cards one by one'}</h2>
+          <div className="mt-2 flex gap-1.5" role="group" aria-label="Quick entry mode" data-testid="quick-mode">
+            <button type="button" className={`btn btn-sm ${mode === 'add' ? 'btn-primary' : ''}`} aria-pressed={mode === 'add'} onClick={() => setMode('add')} data-testid="quick-mode-add">Add</button>
+            <button type="button" className={`btn btn-sm ${mode === 'remove' ? 'btn-primary' : ''}`} aria-pressed={mode === 'remove'} onClick={() => setMode('remove')} data-testid="quick-mode-remove">Remove</button>
+          </div>
+          <p className="mt-2 text-[0.88rem] text-ash">
+            Type the set code and number printed at the bottom of the card (“TDM 123”, “123 tdm”) or its name. Enter {mode === 'add' ? 'adds' : 'removes'} one; Shift+Enter {mode === 'add' ? 'adds' : 'removes'} four; “3 tdm 123” {mode === 'add' ? 'adds' : 'removes'} three.
+            {mode === 'remove' ? ' Copies that are not in a box go first, then the newest box loses its copies.' : ''}
           </p>
           <input
             ref={quickRef}
@@ -186,7 +229,7 @@ export default function CollectionPage() {
             onKeyDown={(e) => {
               if (e.key !== 'Enter' || !found?.card) return;
               e.preventDefault();
-              void quickAdd(found.card, e.shiftKey ? Math.max(4, found.qty) : found.qty);
+              void quickAdd(found.card, e.shiftKey ? Math.max(4, found.qty) : found.qty, found.ownedQty);
             }}
             placeholder="TDM 123, or a card name"
             spellCheck={false}
@@ -224,7 +267,10 @@ export default function CollectionPage() {
             <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="quick-recent">
               {recent.map((r) => (
                 <li key={r.key} className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate"><span className="text-smoke">+{r.qty}</span> {r.card.name}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-smoke">{r.qty > 0 ? `+${r.qty}` : `\u2212${-r.qty}`}</span> {r.card.name}
+                    {r.fromBoxes.length > 0 && <span className="text-smoke" data-testid="quick-from-box"> from {r.fromBoxes.map((b) => b.name).join(', ')}</span>}
+                  </span>
                   <button type="button" className="text-brass hover:underline" onClick={() => void undo(r)} data-testid="quick-undo">Undo</button>
                 </li>
               ))}
@@ -236,7 +282,7 @@ export default function CollectionPage() {
           <h2 className="text-[1.1rem]">Replace {active ? `the ${active.name} collection` : 'the collection'}</h2>
           <p className="mt-1 text-[0.88rem] text-ash">
             Paste a CSV export from Moxfield, Archidekt or ManaBox (the name and quantity columns are found automatically), or plain lines like
-            “2 Sol Ring” or “3 tdm 123”. This replaces what is saved now.
+            “2 Sol Ring” or “3 tdm 123”. This replaces what is saved now.{boxCount > 0 ? ` Its ${boxCount} ${boxCount === 1 ? 'box is' : 'boxes are'} removed too.` : ''}
           </p>
           <textarea
             className="field mt-2 h-56 w-full"
@@ -264,12 +310,13 @@ export default function CollectionPage() {
               />
               Choose a file
             </label>
-            <a className="btn" href={collectionExportUrl(active?.id)} download data-testid="collection-export" title="Download this collection as a CSV you can import again">
+            <a className="btn" href={collectionExportUrl(active?.id)} download data-testid="collection-export" title="Download this collection as a CSV you can import again. Boxes are not part of the CSV.">
               Export
             </a>
             <span className="ml-auto" />
             {confirmClear ? (
               <>
+                {boxCount > 0 && <span className="text-[0.8rem] text-smoke" data-testid="clear-boxes-note">Its {boxCount} {boxCount === 1 ? 'box is' : 'boxes are'} removed too.</span>}
                 <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={() => void save('')} data-testid="collection-clear-confirm">Clear it</button>
                 <button type="button" className="btn btn-quiet btn-sm" onClick={() => setConfirmClear(false)}>Keep</button>
               </>
@@ -320,12 +367,7 @@ export default function CollectionPage() {
               resetKey={q}
               testId="collection-grid"
               empty={collection ? <p className="p-4 text-ash">No owned card has that name.</p> : null}
-              render={(c) => (
-                <div className="card" title={c.name} data-testid="owned-card" data-name={c.name}>
-                  <CardImage id={c.oracleId} name={c.name} />
-                  {c.qty > 1 && <span className="absolute right-[5%] top-[3.5%] rounded bg-soot/90 px-1 text-[0.8rem] font-semibold leading-[1.35rem]">&times;{c.qty}</span>}
-                </div>
-              )}
+              render={(c) => <OwnedTile card={c} onAdjust={(card, d) => void tileAdjust(card, d)} />}
             />
           )}
         </div>
