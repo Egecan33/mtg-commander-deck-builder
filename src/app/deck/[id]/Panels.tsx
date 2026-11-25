@@ -3,21 +3,85 @@
 import { useRef, useState, type ReactNode } from 'react';
 import type { Bracket, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
 import { CardImage, ColorPip, Gauge } from '../../components/card';
-import type { AnalyzeResponse, CardLookup } from '../../lib/api';
+import { HeldMark, heldText } from '../../components/held';
+import type { AnalyzeResponse, CardLookup, ConflictReport, HeldBy } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules } from '../../lib/ui';
 
 export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve';
 
-function Thumb({ id, lookup, onOpen, width = 54, dim = false, label }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string }) {
+function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string; held?: string[] }) {
   const card = lookup[id];
   const name = card?.name ?? 'Unknown card';
   return (
-    <button type="button" className="relative shrink-0 cursor-zoom-in" style={{ width }} onClick={() => onOpen(id)} title={label ? `${name} (${label})` : name} data-testid="thumb">
+    <button type="button" className="relative shrink-0 cursor-zoom-in" style={{ width }} onClick={() => onOpen(id)} title={label ? `${name} (${label})` : held?.length ? `${name}: ${heldText(held)}` : name} data-testid="thumb">
       <span className={`card block ${dim ? 'opacity-45 outline-dashed outline-1 outline-smoke' : ''}`}>
         <CardImage id={id} name={name} known={!!card} />
       </span>
+      <HeldMark names={held} small className="absolute right-[6%] top-[4%]" />
       {label && <span className="absolute inset-x-0 -bottom-1 mx-auto w-fit rounded bg-soot px-1 text-[0.65rem] leading-4 text-band-mid">{label}</span>}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Above the deck: what it takes from boxes and built decks
+
+/** One line per box or built deck the deck takes cards from ("Takes 3 cards from the Landing Party box"), each opening to the card names. Nothing when there are none. */
+export function HeldSummary({ conflicts, lookup, onOpen }: { conflicts: ConflictReport; lookup: CardLookup; onOpen: (id: string) => void }) {
+  const [open, setOpen] = useState<string[]>([]);
+  if (conflicts.byHolder.length === 0) return null;
+  return (
+    <ul className="grid gap-1 rounded-md border border-ember/50 bg-[#2b1810] px-2.5 py-1.5 text-[0.85rem]" data-testid="held-summary">
+      {conflicts.byHolder.map((h) => {
+        const n = h.oracleIds.length;
+        const isOpen = open.includes(h.holderId);
+        return (
+          <li key={h.holderId} data-testid="held-holder" data-kind={h.kind}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 text-left hover:text-bone"
+              aria-expanded={isOpen}
+              onClick={() => setOpen(isOpen ? open.filter((x) => x !== h.holderId) : [...open, h.holderId])}
+              title={h.kind === 'box' ? 'Copies still sealed in this box' : 'Copies in this assembled deck'}
+            >
+              <span aria-hidden className="display inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ember text-[0.72rem] font-bold leading-none text-[#15110a]">!</span>
+              <span className="min-w-0 flex-1" data-testid="held-holder-line">
+                Takes {n} {n === 1 ? 'card' : 'cards'} from {h.kind === 'box' ? 'the ' : ''}{h.name}
+              </span>
+              <span className="shrink-0 text-[0.75rem] text-smoke">{isOpen ? 'Hide' : 'Which cards'}</span>
+            </button>
+            {isOpen && (
+              <ul className="mb-0.5 ml-6 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5" data-testid="held-holder-cards">
+                {h.oracleIds.map((id) => (
+                  <li key={id}>
+                    <button type="button" className="text-ash hover:text-brass" onClick={() => onOpen(id)}>{lookup[id]?.name ?? 'Unknown card'}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** "This deck is my Landing Party box": links the sealed box to this deck, so the deck stops counting that box against itself. */
+export function BoxMatchOffer({ name, busy, onLink }: { name: string; busy: boolean; onLink: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-brass-deep bg-[#2a2212] px-2.5 py-1.5 text-[0.85rem]" data-testid="box-match-offer">
+      <span className="min-w-0 flex-1 text-ash">This deck matches your sealed {name} box.</span>
+      <button
+        type="button"
+        className="btn btn-sm btn-primary shrink-0"
+        disabled={busy}
+        onClick={onLink}
+        title="Link the box to this deck: its sealed cards stop counting as taken here. The deck itself does not change."
+        data-testid="box-match"
+      >
+        This deck is my {name} box
+      </button>
+    </div>
   );
 }
 
@@ -441,6 +505,8 @@ export interface ProposalSet {
   bracket: Bracket; items: SwapProposal[]; asked: boolean;
   /** kind 'add': what was asked for, e.g. "a win condition". */
   noun?: string;
+  /** Incoming cards that would take a copy a box or another built deck holds. */
+  heldBy: HeldBy;
 }
 
 const delta = (p: SwapProposal) => Math.round((p.ratingAfter - p.ratingBefore) * 10) / 10;
@@ -448,11 +514,17 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, setOptions, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, showFreeOnly, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
   /** Name of the active collection, for the owned-only box. */
   collectionName: string | null;
+  /** The active collection can have boxes and built decks, so "Use free copies only" applies. */
+  showFreeOnly: boolean;
+  /** "Use free copies only" (with owned-only: copies held by boxes and other built decks do not count). */
+  freeOnly: boolean;
+  /** Sets (and remembers) "Use free copies only". */
+  onFreeOnly: (on: boolean) => void;
   lookup: CardLookup;
   /** The deck's current theme axes, strongest first. */
   themeAxes: string[];
@@ -547,6 +619,12 @@ export function ImprovePanel({
             <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOptions({ ...options, ownedOnly: e.target.checked })} data-testid="improve-owned" />
             <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>
           </label>
+          {showFreeOnly && (
+            <label className={`flex items-center gap-2 pl-6 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`} title="Leave out copies that are sealed in a box or in another built deck">
+              <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => onFreeOnly(e.target.checked)} data-testid="improve-free-only" />
+              <span>Use free copies only</span>
+            </label>
+          )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" className="btn btn-primary" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('improve')} data-testid="improve-run">
@@ -608,8 +686,9 @@ export function ImprovePanel({
               <ol className="grid gap-2.5">
                 {items.map((p) => {
                   const d = delta(p);
+                  const held = proposals.heldBy[p.in];
                   return (
-                    <li key={`${p.out}>${p.in}`} className={`rounded-md border bg-soot p-2.5 ${p.agrees === false ? 'border-dashed border-band-mid/70' : 'border-slag'}`} data-testid="proposal" data-out={lookup[p.out]?.name ?? ''} data-in={lookup[p.in]?.name} data-agrees={p.agrees === false ? 'no' : 'yes'}>
+                    <li key={`${p.out}>${p.in}`} className={`rounded-md border bg-soot p-2.5 ${p.agrees === false ? 'border-dashed border-band-mid/70' : 'border-slag'}`} data-testid="proposal" data-out={lookup[p.out]?.name ?? ''} data-in={lookup[p.in]?.name} data-agrees={p.agrees === false ? 'no' : 'yes'} data-held={held ? true : undefined}>
                       <div className="flex items-center gap-2">
                         {p.out ? (
                           <Thumb id={p.out} lookup={lookup} onOpen={onOpen} width={78} />
@@ -624,7 +703,7 @@ export function ImprovePanel({
                             {signed(d)}
                           </span>
                         </div>
-                        <Thumb id={p.in} lookup={lookup} onOpen={onOpen} width={78} />
+                        <Thumb id={p.in} lookup={lookup} onOpen={onOpen} width={78} held={held} />
                         <div className="ml-1 flex min-w-0 flex-1 flex-col gap-1.5">
                           <button type="button" className="btn btn-sm btn-primary" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
                           {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={() => onReject(p)} data-testid="proposal-reject">Reject</button>}
@@ -634,6 +713,7 @@ export function ImprovePanel({
                       <p className="mt-2 text-[0.84rem]">
                         {p.out ? <><span className="text-ash">{lookup[p.out]?.name ?? 'Unknown'}</span> out, </> : null}<span className="font-medium">{lookup[p.in]?.name ?? 'Unknown'}</span> in.
                       </p>
+                      {held && <p className="text-[0.82rem] text-ember" data-testid="proposal-held">No free copy of {lookup[p.in]?.name ?? 'this card'}: {heldText(held).replace(/^In /, 'in ')}.</p>}
                       <p className="text-[0.84rem] text-ash" data-testid="proposal-reason">{p.reason}</p>
                       {p.agrees === false && p.objection && (
                         <p className="mt-1.5 border-l-2 border-band-mid pl-2 text-[0.82rem] text-band-mid" data-testid="proposal-objection">

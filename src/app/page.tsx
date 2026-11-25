@@ -141,6 +141,7 @@ export default function DecksPage() {
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
                     <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
+                    {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
                     {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
                     {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
                   </div>

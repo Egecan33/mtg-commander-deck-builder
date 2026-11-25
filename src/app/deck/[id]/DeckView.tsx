@@ -3,7 +3,8 @@
 import { useMemo, type ReactNode } from 'react';
 import type { CardScore, Deck, DeckEntry } from '@/engine/types';
 import { CardImage, Mana, ScoreBadge } from '../../components/card';
-import type { CardLookup, ClientCard } from '../../lib/api';
+import { HeldMark, heldText } from '../../components/held';
+import type { CardLookup, ClientCard, HeldBy } from '../../lib/api';
 import { ROLE_GROUPS, TYPE_GROUPS, roleGroup, typeGroup } from '../../lib/ui';
 
 export type Grouping = 'role' | 'type';
@@ -20,14 +21,18 @@ const LockIcon = ({ open = false }: { open?: boolean }) => (
 
 /** The deck as card images, grouped by what the cards do or by card type; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, grouping, layout, setGrouping, setLayout, onRemove, onAdd, onLock, onOpen, tools,
+  deck, lookup, scoreOf, weakest, held, grouping, layout, setGrouping, setLayout, onRemove, onAdd, onLock, onOpen, tools, notice,
 }: {
   /** Extra actions for the whole deck, shown under the header. */
   tools?: ReactNode;
+  /** Shown above the cards (what the deck takes from boxes and built decks, the box offer). */
+  notice?: ReactNode;
   deck: Deck;
   lookup: CardLookup;
   scoreOf: (id: string) => CardScore | undefined;
   weakest: Set<string>;
+  /** Deck cards whose free copies do not cover the deck, with the boxes and built decks holding them. */
+  held: HeldBy;
   grouping: Grouping;
   layout: Layout;
   setGrouping: (g: Grouping) => void;
@@ -77,6 +82,7 @@ export function DeckView({
       </div>
 
       {tools && <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">{tools}</div>}
+      {notice && <div className="grid gap-1.5 px-3 pb-2">{notice}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4" data-testid="deck-scroll">
         {empty && (
@@ -106,6 +112,7 @@ export function DeckView({
                     const name = card?.name ?? 'Unknown card';
                     const weak = weakest.has(id);
                     const illegal = zone === 'main' && !!score?.gate;
+                    const holders = held[id];
                     return (
                       <div
                         key={id}
@@ -116,10 +123,12 @@ export function DeckView({
                         data-zone={zone}
                         data-weak={weak || undefined}
                         data-locked={(zone === 'main' && entry.locked) || undefined}
-                        title={illegal ? `${name}: ${score?.gate?.message}` : weak ? `${name}: one of the weakest cards in the deck` : name}
+                        data-held={holders ? true : undefined}
+                        title={illegal ? `${name}: ${score?.gate?.message}` : weak ? `${name}: one of the weakest cards in the deck` : holders ? `${name}: ${heldText(holders)}` : name}
                       >
                         <button type="button" className="block h-full w-full cursor-zoom-in" onClick={() => onOpen(id)} aria-label={`Details for ${name}`}>
                           <CardImage id={id} name={name} known={!!card} />
+                          <HeldMark names={holders} className={`absolute right-[5%] ${entry.qty > 1 ? 'top-[19%]' : 'top-[3.5%]'}`} />
                         </button>
                         <div className="pointer-events-none absolute bottom-[3.5%] left-[5%] flex items-center gap-1">
                           <ScoreBadge score={score} />
@@ -164,13 +173,14 @@ export function DeckView({
                     const score = scoreOf(id);
                     const name = card?.name ?? `Unknown card (${id.slice(0, 8)})`;
                     return (
-                      <li key={id} className="group flex h-8 items-center gap-2 px-2 hover:bg-anvil" data-testid="deck-row" data-name={name}>
+                      <li key={id} className="group flex h-8 items-center gap-2 px-2 hover:bg-anvil" data-testid="deck-row" data-name={name} data-held={held[id] ? true : undefined}>
                         <span className="w-5 text-right text-smoke">{entry.qty}</span>
                         <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-brass" onClick={() => onOpen(id)}>
                           {name}
                           {weakest.has(id) && <span className="ml-2 text-[0.75rem] text-band-mid">weakest</span>}
                           {zone === 'main' && score?.gate && <span className="ml-2 text-[0.75rem] text-band-low">{score.gate.message}</span>}
                         </button>
+                        <HeldMark names={held[id]} small />
                         {card?.manaCost && <Mana cost={card.manaCost} size="0.95rem" />}
                         <ScoreBadge score={score} />
                         {zone === 'main' ? (

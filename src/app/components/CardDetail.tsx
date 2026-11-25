@@ -5,14 +5,16 @@ import type { CardScore } from '@/engine/types';
 import type { ClientCard } from '../lib/api';
 import { BAND_VAR, PART_LABEL, ROLE_LABEL, bandOf, fmtPrice } from '../lib/ui';
 import { CardImage, Mana, Overlay, ScoreBadge } from './card';
+import { HeldMark, heldText } from './held';
 import { useProxies } from './Shell';
 
 /**
  * The card at full size with why it scores what it scores. Two-faced cards flip.
  * `actions` is whatever the caller lets you do with the card (add, remove, lock, pick).
+ * `held`: the boxes and built decks holding the copies the deck would take (the "!").
  */
 export function CardDetail({
-  id, card, score, onClose, actions, note,
+  id, card, score, onClose, actions, note, held,
 }: {
   id: string;
   card: ClientCard | undefined;
@@ -20,6 +22,7 @@ export function CardDetail({
   onClose: () => void;
   actions?: ReactNode;
   note?: ReactNode;
+  held?: string[];
 }) {
   const [face, setFace] = useState<0 | 1>(0);
   const proxies = useProxies();
@@ -73,6 +76,12 @@ export function CardDetail({
               <span className="chip">{fmtPrice(card.priceUsd)}</span>
               {card.owned && <span className="chip border-band-top text-band-top">In your collection</span>}
             </div>
+          )}
+          {held && held.length > 0 && (
+            <p className="mt-3 flex items-center gap-2 text-[0.9rem] text-ember" data-testid="detail-held">
+              <HeldMark names={held} />
+              <span>{heldText(held)}. No free copy is left for this deck.</span>
+            </p>
           )}
 
           {score && (

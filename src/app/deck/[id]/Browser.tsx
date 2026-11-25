@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react';
 import type { Deck } from '@/engine/types';
 import { CardImage, ColorPip, ScoreBadge } from '../../components/card';
+import { HeldMark, heldText } from '../../components/held';
 import { useNotify } from '../../components/Shell';
 import { VirtualGrid, usePaged } from '../../components/VirtualGrid';
-import { browseCards, type CardSort, type ScoredCard } from '../../lib/api';
+import { browseCards, type CardSort, type HeldBy, type ScoredCard } from '../../lib/api';
 import {
   AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, entryOf, fmtInt, toFilters, type BrowserQuery,
 } from '../../lib/ui';
@@ -19,13 +20,16 @@ const SORTS: { id: CardSort; label: string }[] = [
   { id: 'price', label: 'Price' },
 ];
 
+/** A browser result. `held`: adding one more copy would take a copy a box or another built deck holds (their names). */
+export type BrowserCard = ScoredCard & { held?: string[] };
+
 /**
  * The whole legal card pool, scored for this deck, as a wall of card images. `settled` is the deck
  * as last sent for analysis (so scores match the rating); `deck` is the live one, used only to mark
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, onAdd, onRemove, onOpen, searchRef,
+  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef,
 }: {
   deck: Deck;
   settled: Deck;
@@ -33,9 +37,11 @@ export function Browser({
   query: BrowserQuery;
   setQuery: (next: BrowserQuery | ((q: BrowserQuery) => BrowserQuery)) => void;
   extraAxes: string[];
+  /** The deck's own conflicts: a card already in the deck shows its "!" from these. */
+  held: HeldBy;
   onAdd: (card: ScoredCard) => void;
   onRemove: (id: string) => void;
-  onOpen: (card: ScoredCard) => void;
+  onOpen: (card: BrowserCard) => void;
   searchRef: RefObject<HTMLInputElement | null>;
 }) {
   const notify = useNotify();
@@ -52,12 +58,13 @@ export function Browser({
 
   const filters = useMemo(() => toFilters(query), [query]);
   const queryKey = JSON.stringify([query.q.trim(), filters, query.sort]);
-  const paged = usePaged<ScoredCard>(
+  const paged = usePaged<BrowserCard>(
     `${queryKey}|${rev}`,
     PAGE,
     async (page, signal) => {
       const res = await browseCards({ deck: settled, q: query.q.trim() || undefined, filters, sort: query.sort, page, pageSize: PAGE }, signal);
-      return { total: res.total, items: res.cards };
+      // The page's "!" travels with its cards, so it is replaced together with them.
+      return { total: res.total, items: res.cards.map((c) => (res.heldBy[c.oracleId] ? { ...c, held: res.heldBy[c.oracleId] } : c)) };
     },
     notify.error,
   );
@@ -174,6 +181,8 @@ export function Browser({
             const commander = deck.commanders.includes(c.oracleId);
             const isIn = !!entry || commander;
             const gate = isIn ? null : c.score.gate;
+            // In the deck: does the deck take a held copy. Not in it: would adding it take one.
+            const holders = isIn || deck.companion === c.oracleId ? held[c.oracleId] : c.held;
             return (
               <div
                 className={`card group ${gate ? 'gated' : ''} ${isIn ? 'outline outline-2 outline-brass' : ''}`}
@@ -183,10 +192,12 @@ export function Browser({
                 data-score={c.score.score}
                 data-gated={gate ? gate.code : undefined}
                 data-in-deck={isIn || undefined}
-                title={gate ? `${c.name}: ${gate.message}` : c.name}
+                data-held={holders ? true : undefined}
+                title={gate ? `${c.name}: ${gate.message}` : holders ? `${c.name}: ${heldText(holders)}` : c.name}
               >
                 <button type="button" className="block h-full w-full cursor-zoom-in" onClick={() => onOpen(c)} aria-label={`Details for ${c.name}`}>
                   <CardImage id={c.oracleId} name={c.name} />
+                  {!gate && <HeldMark names={holders} className="absolute right-[5%] top-[3.5%]" />}
                 </button>
                 <div className="pointer-events-none absolute bottom-[3.5%] left-[5%] flex items-center gap-1">
                   <ScoreBadge score={c.score} />

@@ -5,18 +5,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
+import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
-  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getDeck, loadEdhrec, updateDeck,
-  type AnalyzeResponse, type CardLookup, type ClientCard, type ScoredCard,
+  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, updateDeck,
+  type AnalyzeResponse, type CardLookup, type ClientCard, type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
   type BrowserQuery,
 } from '../../lib/ui';
-import { Browser } from './Browser';
+import { Browser, type BrowserCard } from './Browser';
 import { DeckView, type Grouping, type Layout } from './DeckView';
-import { ADD_ONE, BracketPanel, GOAL_CHIPS, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet } from './Panels';
+import {
+  ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet,
+} from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'rating', label: 'Rating' },
@@ -25,6 +28,19 @@ const PANELS: { id: PanelId; label: string }[] = [
   { id: 'improve', label: 'Improve' },
 ];
 const WEAKEST = 5;
+const NO_HELD: HeldBy = {};
+
+/** `map` without the holder `name` (a box just linked to this deck); cards it was the only holder of drop out. */
+function withoutHolder(map: HeldBy, name: string): HeldBy {
+  let changed = false;
+  const next: HeldBy = {};
+  for (const [oracleId, names] of Object.entries(map)) {
+    const kept = names.filter((n) => n !== name);
+    if (kept.length !== names.length) changed = true;
+    if (kept.length) next[oracleId] = kept;
+  }
+  return changed ? next : map;
+}
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
@@ -49,7 +65,14 @@ export function Builder({ id }: { id: string }) {
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
-  const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string } | null>(null);
+  const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string; heldBy?: HeldBy } | null>(null);
+  const [freeOnlyPref, setFreeOnly] = useFreeOnly();
+  const freeOnly = freeOnlyPref ?? false;
+  // "!" of cards outside the deck, from where they were last seen (a browser result, a proposal).
+  const [heldHints, setHeldHints] = useState<HeldBy>({});
+  // Is a box of the active collection already linked to this deck (then no second box is offered).
+  const [boxLinked, setBoxLinked] = useState<boolean | null>(null);
+  const [linking, setLinking] = useState(false);
   const dirty = useRef(false);
   const saveSeq = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -86,6 +109,18 @@ export function Builder({ id }: { id: string }) {
     );
     return () => ctrl.abort();
   }, [id, learn]);
+
+  // A deck that already is a box's deck gets no "This deck is my … box" offer.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    getBoxes(ctrl.signal).then(
+      (res) => setBoxLinked(res.boxes.some((b) => b.deckId === id)),
+      (e) => {
+        if (!isAbort(e)) setBoxLinked(false);
+      },
+    );
+    return () => ctrl.abort();
+  }, [id]);
 
   // ---- every change: wait 200 ms, then analyse and save
   useEffect(() => {
@@ -167,15 +202,33 @@ export function Builder({ id }: { id: string }) {
   const lock = useCallback((cardId: string) => mutate((d) => toggleLock(d, cardId)), [mutate]);
 
   const openCard = useCallback(
-    (card: ScoredCard | string) => {
+    (card: BrowserCard | string) => {
       if (typeof card !== 'string') {
         learn([card]);
         setHints((h) => ({ ...h, [card.oracleId]: card.score }));
+        setHeldHints((h) => {
+          if (!card.held && !h[card.oracleId]) return h;
+          const next = { ...h };
+          if (card.held) next[card.oracleId] = card.held;
+          else delete next[card.oracleId];
+          return next;
+        });
         setDetail(card.oracleId);
       } else setDetail(card);
     },
     [learn],
   );
+  /** Remembers the "!" of proposed incoming cards, for the card detail. */
+  const learnHeld = useCallback((ids: string[], heldBy: HeldBy) => {
+    setHeldHints((h) => {
+      const next = { ...h };
+      for (const oracleId of ids) {
+        if (heldBy[oracleId]) next[oracleId] = heldBy[oracleId];
+        else delete next[oracleId];
+      }
+      return next;
+    });
+  }, []);
 
   // A card opened from a panel (a combo piece, a proposal) has no score yet: ask the browser for it.
   const detailCard = detail ? lookup[detail] : undefined;
@@ -214,7 +267,11 @@ export function Builder({ id }: { id: string }) {
   // ---- build actions
   const buildOpts = () => {
     const price = Number(options.maxPrice);
-    return { ownedOnly: options.ownedOnly || undefined, maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null };
+    return {
+      ownedOnly: options.ownedOnly || undefined,
+      freeOnly: (options.ownedOnly && freeOnly) || undefined,
+      maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
+    };
   };
   const rebuild = async (mode: 'auto' | 'fill', label: string, seed?: number) => {
     if (!deck) return;
@@ -223,7 +280,13 @@ export function Builder({ id }: { id: string }) {
       const res = await buildDeck(deck, mode, { ...buildOpts(), seed });
       learn(res.cards);
       setProposals(null);
-      mutate((d) => ({ ...res.deck, id: d.id, name: d.name }));
+      mutate((d) => {
+        // A rebuild changes the cards, never whether the deck is built.
+        const next: Deck = { ...res.deck, id: d.id, name: d.name };
+        if (d.built) next.built = true;
+        else delete next.built;
+        return next;
+      });
       notify.info(mode === 'fill' ? 'Filled the deck to 100 cards' : 'Built a new 100-card deck. Locked cards were kept.');
     } catch (e) {
       notify.error(e);
@@ -251,7 +314,8 @@ export function Builder({ id }: { id: string }) {
         res = await buildDeck({ ...deck, targetBracket: bracket }, 'swaps', { ...buildOpts(), count: 8 });
       }
       learn(res.cards);
-      setProposals({ kind, bracket, items: res.proposals, asked: false });
+      learnHeld(res.proposals.map((p) => p.in), res.heldBy);
+      setProposals({ kind, bracket, items: res.proposals, asked: false, heldBy: res.heldBy });
     } catch (e) {
       notify.error(e);
     } finally {
@@ -265,7 +329,8 @@ export function Builder({ id }: { id: string }) {
     try {
       const res = await buildDeck(deck, 'add', { ...buildOpts(), role, count: 5 });
       learn(res.cards);
-      setProposals({ kind: 'add', bracket: deck.targetBracket, items: res.proposals, asked: false, noun: ADD_ONE.find((a) => a.role === role)?.noun });
+      learnHeld(res.proposals.map((p) => p.in), res.heldBy);
+      setProposals({ kind: 'add', bracket: deck.targetBracket, items: res.proposals, asked: false, noun: ADD_ONE.find((a) => a.role === role)?.noun, heldBy: res.heldBy });
     } catch (e) {
       notify.error(e);
     } finally {
@@ -279,7 +344,8 @@ export function Builder({ id }: { id: string }) {
     try {
       const res = await buildDeck(deck, 'replace', { ...buildOpts(), out, seed: 1 });
       learn(res.cards);
-      setReplacing({ out, list: res.proposals });
+      learnHeld(res.proposals.map((p) => p.in), res.heldBy);
+      setReplacing({ out, list: res.proposals, heldBy: res.heldBy });
     } catch (e) {
       setReplacing({ out, list: [], error: errText(e) });
     }
@@ -327,6 +393,39 @@ export function Builder({ id }: { id: string }) {
     }
   };
 
+  // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
+  const toggleBuilt = () => {
+    if (!deck) return;
+    const on = !deck.built;
+    mutate((d) => {
+      const next = { ...d };
+      if (on) next.built = true;
+      else delete next.built;
+      return next;
+    });
+    notify.info(on ? 'Marked as built. Other decks now show a “!” on the cards this deck holds.' : 'No longer built. Its cards count as free copies again.');
+  };
+  const linkMatch = async () => {
+    const match = analysis?.boxMatch;
+    if (!match || linking) return;
+    setLinking(true);
+    try {
+      await linkBox(match.boxId, id);
+      setBoxLinked(true);
+      // That box no longer counts against this deck: drop it from the "!" already on screen, then analyse again.
+      const gone = `${match.name} box`;
+      setHeldHints((h) => withoutHolder(h, gone));
+      setProposals((p) => (p ? { ...p, heldBy: withoutHolder(p.heldBy, gone) } : p));
+      setReplacing((r) => (r?.heldBy ? { ...r, heldBy: withoutHolder(r.heldBy, gone) } : r));
+      setRev((n) => n + 1);
+      notify.info(`This deck is now your ${match.name} box. Cards still sealed in it no longer count as taken here.`);
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setLinking(false);
+    }
+  };
+
   const doExport = async (format: 'text' | 'arena' = 'text') => {
     if (!deck) return;
     setBusy('export');
@@ -370,6 +469,18 @@ export function Builder({ id }: { id: string }) {
   const needsColor = rating?.violations.some((v) => v.code === 'needs-color') || deck.chosenColor !== null;
   const detailEntry = detail ? entryOf(deck, detail) : undefined;
   const detailIsCommander = !!detail && deck.commanders.includes(detail);
+  const held = analysis?.conflicts.cards ?? NO_HELD;
+  // In the deck: the deck's own conflicts. Outside it: what the browser or a proposal said about adding it.
+  const detailHeld = detail ? (inDeck(deck, detail) ? held[detail] : heldHints[detail]) : undefined;
+  const manual = activeCollection?.kind === 'manual';
+  const offer = analysis?.boxMatch && boxLinked === false ? analysis.boxMatch : null;
+  const takes = analysis && analysis.conflicts.byHolder.length > 0;
+  const notice = takes || offer ? (
+    <>
+      {takes && <HeldSummary conflicts={analysis.conflicts} lookup={lookup} onOpen={openCard} />}
+      {offer && <BoxMatchOffer name={offer.name} busy={linking} onLink={() => void linkMatch()} />}
+    </>
+  ) : null;
   const canCommand = !!detailCard && /Legendary|can be your commander/i.test(detailCard.typeLine) && deck.commanders.length < 2 && !detailIsCommander;
 
   return (
@@ -398,6 +509,19 @@ export function Builder({ id }: { id: string }) {
           />
           <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1">
             <span className={`chip ${count === 100 ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / 100</span>
+            {manual && (
+              <button
+                type="button"
+                className={`chip ${deck.built ? 'border-brass text-bone' : 'hover:text-bone'}`}
+                aria-pressed={!!deck.built}
+                title="The cards are really in this deck"
+                onClick={toggleBuilt}
+                data-testid="deck-built"
+              >
+                <span aria-hidden className={`h-2.5 w-2.5 rounded-[2px] border ${deck.built ? 'border-brass bg-brass' : 'border-smoke'}`} />
+                Built
+              </button>
+            )}
             {rating && (
               <button
                 type="button"
@@ -478,13 +602,24 @@ export function Builder({ id }: { id: string }) {
           <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport()} data-testid="export">
             Export
           </button>
-          <label
-            className="col-span-2 flex cursor-pointer items-center gap-1.5 text-[0.78rem] text-ash"
-            title="Auto-build, Fill the rest, Reroll, Suggest swaps, Improve, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
-          >
-            <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
-            <span className="truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
-          </label>
+          <div className="col-span-2 flex min-w-0 flex-col justify-center text-[0.78rem] leading-tight text-ash">
+            <label
+              className="flex cursor-pointer items-center gap-1.5"
+              title="Auto-build, Fill the rest, Reroll, Suggest swaps, Improve, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
+            >
+              <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
+              <span className="truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
+            </label>
+            {manual && (
+              <label
+                className={`flex items-center gap-1.5 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
+                title={options.ownedOnly ? 'Builds and suggestions leave out copies sealed in a box or in another built deck' : 'Tick “Only my collection” first'}
+              >
+                <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => setFreeOnly(e.target.checked)} data-testid="free-only" />
+                <span className="truncate">Use free copies only</span>
+              </label>
+            )}
+          </div>
           <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport('arena')} title="Copy the deck in the form MTG Arena imports: in Arena open Decks, Import" data-testid="export-arena">
             Copy for Arena
           </button>
@@ -499,6 +634,7 @@ export function Builder({ id }: { id: string }) {
           query={query}
           setQuery={setQuery}
           extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+          held={held}
           onAdd={add}
           onRemove={remove}
           onOpen={openCard}
@@ -509,6 +645,8 @@ export function Builder({ id }: { id: string }) {
           lookup={lookup}
           scoreOf={scoreOf}
           weakest={weakest}
+          held={held}
+          notice={notice}
           grouping={grouping}
           layout={layout}
           setGrouping={setGrouping}
@@ -584,6 +722,9 @@ export function Builder({ id }: { id: string }) {
                 themeAxes={themeAxes}
                 options={options}
                 collectionName={activeCollection?.name ?? null}
+                showFreeOnly={manual}
+                freeOnly={freeOnly}
+                onFreeOnly={setFreeOnly}
                 setOptions={setOptions}
                 proposals={proposals}
                 busy={busy}
@@ -605,6 +746,7 @@ export function Builder({ id }: { id: string }) {
           id={detail}
           card={detailCard}
           score={detailScore}
+          held={detailHeld}
           onClose={() => setDetail(null)}
           note={detailEntry?.locked ? 'Locked: auto-build and improve keep this card.' : undefined}
           actions={
@@ -649,13 +791,19 @@ export function Builder({ id }: { id: string }) {
             {replacing.error && <p className="mt-4 text-[var(--bad,#e57373)]">{replacing.error}</p>}
             {replacing.list && replacing.list.length === 0 && !replacing.error && <p className="mt-4 text-ash">No legal replacement found for this card.</p>}
             <div className="mt-4 flex flex-col gap-3">
-              {(replacing.list ?? []).map((p) => (
-                <div key={p.in} className="flex items-center gap-4 rounded border border-white/10 p-3" data-testid="replace-row">
+              {(replacing.list ?? []).map((p) => {
+                const inHeld = replacing.heldBy?.[p.in];
+                return (
+                <div key={p.in} className="flex items-center gap-4 rounded border border-white/10 p-3" data-testid="replace-row" data-held={inHeld ? true : undefined}>
                   <div className="w-24 shrink-0 card"><CardImage id={p.out} name={lookup[p.out]?.frontName ?? ''} size="grid" known={!!lookup[p.out]} /></div>
                   <span className="text-ash">→</span>
-                  <button type="button" className="w-24 shrink-0 card" onClick={() => setDetail(p.in)} title="Open card"><CardImage id={p.in} name={lookup[p.in]?.frontName ?? ''} size="grid" known={!!lookup[p.in]} /></button>
+                  <button type="button" className="w-24 shrink-0 card" onClick={() => setDetail(p.in)} title="Open card">
+                    <CardImage id={p.in} name={lookup[p.in]?.frontName ?? ''} size="grid" known={!!lookup[p.in]} />
+                    <HeldMark names={inHeld} className="absolute right-[5%] top-[3.5%]" />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <p>{p.reason}</p>
+                    {inHeld && <p className="mt-1 text-[0.92rem] text-ember">No free copy of {lookup[p.in]?.name ?? 'this card'}: {heldText(inHeld).replace(/^In /, 'in ')}.</p>}
                     {p.agrees === false && p.objection && <p className="mt-1 text-[0.92rem] text-[#d9b56a]">Not recommended: {p.objection}</p>}
                     <p className="mt-1 text-ash">Rating {Math.round(p.ratingBefore)} → {Math.round(p.ratingAfter)}</p>
                   </div>
@@ -664,7 +812,8 @@ export function Builder({ id }: { id: string }) {
                     <button type="button" className="btn" onClick={() => proxyCards([p.in], `Added ${lookup[p.in]?.name ?? 'the card'} to the proxy list.`)}>Proxy</button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </Overlay>

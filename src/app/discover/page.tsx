@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { Bracket } from '@/engine/types';
 import { CardImage } from '../components/card';
-import { useNotify, useProxies, useStatus } from '../components/Shell';
+import { useFreeOnly } from '../components/held';
+import { useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
 import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverScope, type DiscoverState, type DiscoverTier } from '../lib/api';
 import { BAND_VAR, BRACKETS, bandOf, bracketName, fmtPrice } from '../lib/ui';
 
@@ -18,6 +19,11 @@ export default function DiscoverPage() {
   const router = useRouter();
   const proxies = useProxies();
   const { status } = useStatus();
+  const { active } = useCollections();
+  const [freeOnlyPref, setFreeOnly] = useFreeOnly();
+  // Boxes and built decks only exist in a collection kept by hand. null until known, so the search starts once.
+  const manual = active?.kind === 'manual';
+  const freeOnly = freeOnlyPref === null ? null : manual && freeOnlyPref;
   const [bracket, setBracket] = useState<Bracket>(3);
   const [scope, setScope] = useState<DiscoverScope>('owned');
   const [state, setState] = useState<DiscoverState | null>(null);
@@ -30,42 +36,44 @@ export default function DiscoverPage() {
 
   const ready = status?.ready === true;
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || freeOnly === null) return;
     const mine = ++run.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const take = (s: DiscoverState) => {
       if (mine !== run.current) return;
       setState(s);
       setLookup((cur) => ({ ...cur, ...s.cards }));
-      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope).then(take, (e) => notify.error(e)), 700);
+      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e)), 700);
     };
     setState(null);
     setOpen(null);
     setLazy({});
-    startDiscover(bracket, scope).then(take, (e) => notify.error(e));
+    startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
     return () => {
       run.current++;
       if (timer) clearTimeout(timer);
     };
-  }, [ready, bracket, scope, notify]);
+  }, [ready, bracket, scope, freeOnly, notify]);
 
+  const lazyKey = (id: string) => `${bracket}:${scope}:${freeOnly ? 'free' : 'all'}:${id}`;
   const expand = (entry: DiscoverEntry) => {
     const id = entry.commander.oracleId;
     if (open === id) return setOpen(null);
     setOpen(id);
     setPicked('0');
-    if (lazy[`${bracket}:${scope}:${id}`] || state?.status !== 'done') return;
-    setLazy((l) => ({ ...l, [`${bracket}:${scope}:${id}`]: 'loading' }));
-    getDiscoverTiers(bracket, id, scope).then(
+    const key = lazyKey(id);
+    if (lazy[key] || state?.status !== 'done') return;
+    setLazy((l) => ({ ...l, [key]: 'loading' }));
+    getDiscoverTiers(bracket, id, scope, !!freeOnly).then(
       (res) => {
         setLookup((cur) => ({ ...cur, ...res.cards }));
-        setLazy((l) => ({ ...l, [`${bracket}:${scope}:${id}`]: res.tiers }));
+        setLazy((l) => ({ ...l, [key]: res.tiers }));
       },
       (e) => {
         notify.error(e);
         setLazy((l) => {
           const next = { ...l };
-          delete next[`${bracket}:${scope}:${id}`];
+          delete next[key];
           return next;
         });
       },
@@ -105,9 +113,17 @@ export default function DiscoverPage() {
               : 'Which commanders you do not have would work best with the cards you already own. The commander is the one card to get; open a row to see what a few more would add.'}{' '}
             Basic lands count as owned. Only single commanders are looked at, not partner pairs.
           </p>
-          <div className="seg mt-3" role="group" aria-label="Whose commanders">
-            <button type="button" aria-pressed={scope === 'owned'} onClick={() => setScope('owned')} data-testid="discover-scope-owned">Commanders I own</button>
-            <button type="button" aria-pressed={scope === 'unowned'} onClick={() => setScope('unowned')} data-testid="discover-scope-unowned">Commanders I don’t own</button>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div className="seg" role="group" aria-label="Whose commanders">
+              <button type="button" aria-pressed={scope === 'owned'} onClick={() => setScope('owned')} data-testid="discover-scope-owned">Commanders I own</button>
+              <button type="button" aria-pressed={scope === 'unowned'} onClick={() => setScope('unowned')} data-testid="discover-scope-unowned">Commanders I don’t own</button>
+            </div>
+            {manual && (
+              <label className="flex cursor-pointer items-center gap-1.5 text-[0.86rem] text-ash" title="Leave out copies sealed in a box or in a built deck, so the decks only use cards that are free">
+                <input type="checkbox" checked={!!freeOnly} disabled={freeOnly === null} onChange={(e) => setFreeOnly(e.target.checked)} data-testid="free-only" />
+                Use free copies only
+              </label>
+            )}
           </div>
         </div>
         <div className="shrink-0">
@@ -152,17 +168,23 @@ export default function DiscoverPage() {
       <ol className="mt-3 grid gap-2.5">
         {(state?.entries ?? []).map((entry, i) => {
           const id = entry.commander.oracleId;
-          const extra = lazy[`${bracket}:${scope}:${id}`];
+          const extra = lazy[lazyKey(id)];
           const tiers = [entry.tiers[0], ...(Array.isArray(extra) ? extra : []), entry.tiers[1]];
           const isOpen = open === id;
           const shown = tiers.find((t) => tierKey(t) === picked) ?? tiers[0];
+          // Free copies only: a commander you own whose every copy is held counts as one to get.
+          const heldCommander = scope === 'unowned' && !!freeOnly && entry.commander.owned;
           return (
             <li key={id} className="rounded-md border border-slag bg-anvil" data-testid="discover-entry" data-name={entry.commander.name}>
               <button type="button" className="flex w-full items-center gap-4 p-3 text-left" onClick={() => expand(entry)} aria-expanded={isOpen}>
                 <span className="w-6 text-right text-smoke">{i + 1}</span>
-                <span className="card w-[4.2rem] shrink-0"><CardImage id={id} name={entry.commander.name} known /></span>
+                <span className="card w-[4.2rem] shrink-0">
+                  <CardImage id={id} name={entry.commander.name} known />
+                  {heldCommander && <span className="pointer-events-none absolute left-[3%] top-[2%] h-2.5 w-2.5 rounded-full bg-band-top ring-2 ring-soot" title="In your collection" data-testid="owned-dot" />}
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="display block truncate text-[1.15rem]">{entry.commander.name}</span>
+                  {heldCommander && <span className="block text-[0.8rem] text-ember" data-testid="discover-held-note">Owned, but held by a box or a built deck</span>}
                   <span className="text-[0.8rem] text-smoke">{isOpen ? 'Pick a tier to see what to buy' : 'Click for the 5, 10, 15 and 20-buy tiers'}</span>
                 </span>
                 {[entry.tiers[0], entry.tiers[1]].map((t) => (
