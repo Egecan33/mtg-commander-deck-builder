@@ -81,6 +81,10 @@
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
+ *        `filters.package`: only cards of that package (role or Scryfall tagger tag, as in `packages`; lands in none),
+ *        read at the deck's bracket. Every card then carries `also`: the names of the deck's other planned packages
+ *        it is in, and with sort score descending the cards come in dual-purpose order (score plus a bonus per
+ *        other package, gated cards last).
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
@@ -254,7 +258,11 @@ export type ClientCard = Pick<
   'oracleId' | 'name' | 'frontName' | 'manaCost' | 'cmc' | 'typeLine' | 'colorIdentity' | 'imageFaces' | 'gameChanger' | 'priceUsd'
 > & { roles: Role[]; owned: boolean };
 
-export type ScoredCard = ClientCard & { score: CardScore };
+export type ScoredCard = ClientCard & {
+  score: CardScore;
+  /** Only with `filters.package`: the names of the deck's other planned packages this card is also in. */
+  also?: string[];
+};
 export type CardLookup = Record<string, ClientCard>;
 /**
  * oracleId -> names of the boxes and built decks ("Landing Party box", "Krenko, Mob Boss (built)")
@@ -398,6 +406,8 @@ export interface CardFilters {
   maxPrice?: number;
   /** true: only cards in the deck; false: only cards not in it. */
   inDeck?: boolean;
+  /** Only cards of this package (see `packages` under POST /api/analyze); unknown ids are a 400. */
+  package?: PackageId;
 }
 export type CardSort = 'score' | 'name' | 'mv' | 'price' | 'popularity';
 export interface CardsRequest {

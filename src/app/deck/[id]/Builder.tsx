@@ -106,6 +106,10 @@ export function Builder({ id }: { id: string }) {
   const networkNow = net.network;
   useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
+  const themePackages = useMemo(
+    () => (analysis?.packages.packages ?? []).filter((p) => p.kind === 'theme').map((p) => ({ id: p.id, name: p.name })),
+    [analysis],
+  );
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
@@ -1015,6 +1019,7 @@ export function Builder({ id }: { id: string }) {
             query={query}
             setQuery={setQuery}
             extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+            themePackages={themePackages}
             held={held}
             onAdd={addFromBrowser}
             onRemove={remove}

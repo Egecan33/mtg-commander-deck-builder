@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as api from '@/app/lib/api';
+import { overlapKey } from '@/engine/builder';
 import { deckNetwork } from '@/engine/network';
 import { deckKey, engineContext } from '@/server/context';
 import type { AnalyzeResponse, CardsResponse, DeckResponse, ImportResponse, ScoredCard } from '@/app/lib/api';
@@ -1083,5 +1084,34 @@ describe('GET /api/packages', () => {
       await request('DELETE', `/api/decks/${held.deck.id}`);
       await clear();
     }
+  });
+});
+
+describe('package filter on the card browser', () => {
+  it("filters.package keeps the package's members", async () => {
+    const deck = shell(['Talrand, Sky Summoner'], { main: [{ oracleId: id('Island'), qty: 99, locked: false }] });
+    const r = await call<CardsResponse>('POST', '/api/cards', { deck, filters: { package: 'fn:pillow-fort' }, pageSize: 200 });
+    expect(r.total).toBeGreaterThanOrEqual(1);
+    const db = getCardDb();
+    expect(r.cards.some((c) => c.score.gate === null)).toBe(true);
+    for (const c of r.cards) {
+      if (c.score.gate === null) expect(c.colorIdentity.every((k) => k === 'U'), c.name).toBe(true);
+      expect(db.tagSlugs?.(c.oracleId).some((t) => ['pillowfort', 'tax-attack', 'fog', 'pseudo-fog'].includes(t)), c.name).toBe(true);
+      expect(c.also).toBeDefined();
+    }
+  });
+
+  it('with a package filter, dual-purpose cards rank first and say so', async () => {
+    const deck = await imported('upgraded', 3);
+    const r = await call<CardsResponse>('POST', '/api/cards', { deck, filters: { package: 'ramp', inDeck: false }, pageSize: 200 });
+    const keys = r.cards.filter((c) => !c.score.gate).map((c) => overlapKey(c.score.score, c.also!.length));
+    for (let i = 1; i < keys.length; i++) expect(keys[i]).toBeLessThanOrEqual(keys[i - 1]);
+    expect(gatedLast(r.cards)).toBe(true);
+    expect(r.cards.some((c) => c.also!.includes('Card draw'))).toBe(true);
+  });
+
+  it('an unknown package is a 400', async () => {
+    const deck = shell(['Talrand, Sky Summoner']);
+    expect((await request('POST', '/api/cards', { deck, filters: { package: 'fn:nope' } })).status).toBe(400);
   });
 });

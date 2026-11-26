@@ -1,4 +1,4 @@
-import type { AxisId, Bracket, Color, Deck, DeckEntry, DeckRating, Fix, Role, Violation } from '@/engine/types';
+import type { AxisId, Bracket, Color, Deck, DeckEntry, DeckRating, Fix, PackageId, Role, Violation } from '@/engine/types';
 import type { CardFilters, CardSort, ClientCard, ColorLetter, ColorMode } from './api';
 
 // ---------------------------------------------------------------------------------------------
@@ -178,6 +178,8 @@ export function roleGroup(card: ClientCard): string {
 export interface BrowserQuery {
   q: string;
   role: Role | '';
+  /** A package of the deck's plan or the catalogue: only its members. Chosen in the role menu, so it clears `role`. */
+  package: PackageId | '';
   axis: AxisId | '';
   colors: ColorLetter[];
   colorMode: ColorMode;
@@ -193,7 +195,7 @@ export interface BrowserQuery {
   fromFix: string | null;
 }
 export const DEFAULT_QUERY: BrowserQuery = {
-  q: '', role: '', axis: '', colors: [], colorMode: 'includes', mvMin: '', mvMax: '', type: '',
+  q: '', role: '', package: '', axis: '', colors: [], colorMode: 'includes', mvMin: '', mvMax: '', type: '',
   owned: false, legalOnly: true, hideInDeck: true, maxPrice: '', sort: 'score', fromFix: null,
 };
 
@@ -204,6 +206,7 @@ const num = (s: string): number | undefined => {
 export function toFilters(q: BrowserQuery): CardFilters {
   const f: CardFilters = {};
   if (q.role) f.role = q.role;
+  if (q.package) f.package = q.package;
   if (q.axis) f.axis = q.axis;
   if (q.colors.length) {
     f.colors = q.colors;
@@ -237,7 +240,7 @@ export function queryForFix(fix: Fix): BrowserQuery | null {
 }
 export function activeFilterCount(q: BrowserQuery): number {
   let n = 0;
-  if (q.role) n++;
+  if (q.role || q.package) n++;
   if (q.axis) n++;
   if (q.colors.length) n++;
   if (q.mvMin || q.mvMax) n++;

@@ -1,7 +1,10 @@
 import type {
   CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
+import { overlapKey } from '@/engine/builder';
 import { normalizeName } from '@/engine/carddb';
+import { inPackage, packageDef, tagsOf } from '@/engine/packages';
+import type { PackageDef } from '@/engine/packages';
 import { canPair } from '@/engine/rules';
 import { AXIS_MEMBER, ROLES } from '@/engine/summary';
 import type { Card, Color, Deck, Role } from '@/engine/types';
@@ -61,10 +64,17 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const f = (query.filters ?? {}) as CardFilters;
   if (f.role !== undefined && !ROLES.includes(f.role)) throw new HttpError(400, `Unknown role "${String(f.role)}".`);
 
+  let pkg: PackageDef | null = null;
+  if (f.package !== undefined && f.package !== null) {
+    pkg = typeof f.package === 'string' ? packageDef(f.package) : null;
+    if (!pkg) throw new HttpError(400, `Unknown package "${String(f.package)}".`);
+  }
+
   const db = getCardDb();
   const index = poolIndex(db);
   const { cards, names, haystacks, typeLines, ranks } = index;
-  const pool = getAnalysis(deck).pool();
+  const analysis = getAnalysis(deck);
+  const pool = analysis.pool();
   const { scores } = pool;
 
   const byRank = (a: number, b: number) => ranks[a] - ranks[b] || (names[a] < names[b] ? -1 : names[a] > names[b] ? 1 : 0);
@@ -97,6 +107,10 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const words = tokens(query.q);
   const phrase = words.join(' ');
 
+  // A package filter: the deck's other planned packages each card is also in
+  const others = pkg ? analysis.report().packages.packages.map((p) => packageDef(p.id)).filter((d): d is PackageDef => d !== null && d.id !== pkg!.id) : [];
+  const alsoOf = new Map<number, string[]>();
+
   // Search tiers: 0 the name is the query, 1 the name contains it, 2 it matches in type or text.
   const tiers: number[][] = [[], [], []];
   for (const i of order) {
@@ -109,6 +123,12 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
     if (deckIds && deckIds.has(card.oracleId) !== inDeck) continue;
     if (colorOk && !colorOk(card)) continue;
     if (type && !typeLines[i].includes(type)) continue;
+    if (pkg) {
+      const feat = db.features(card.oracleId);
+      const tags = tagsOf(db, card.oracleId);
+      if (!feat || !inPackage(pkg, card, feat, tags, deck.targetBracket)) continue;
+      alsoOf.set(i, others.filter((d) => inPackage(d, card, feat, tags, deck.targetBracket)).map((d) => d.name));
+    }
     if (role || axis) {
       const feat = db.features(card.oracleId);
       if (role && !feat?.roles.includes(role)) continue;
@@ -126,13 +146,20 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
     const name = names[i];
     tiers[name === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(i);
   }
+  // With a package filter and the score order, dual-purpose cards come first (gated cards stay last)
+  if (pkg && sort === 'score' && dir === 'desc') {
+    const key = (i: number) => overlapKey(scores[i].score, alsoOf.get(i)?.length ?? 0);
+    for (const tier of tiers) tier.sort((a, b) => (scores[a].gate ? 1 : 0) - (scores[b].gate ? 1 : 0) || key(b) - key(a));
+  }
   const matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
 
   const { start, end } = page(matches.length, pageNo, pageSize);
   const out: ScoredCard[] = [];
   for (let k = start; k < end; k++) {
     const i = matches[k];
-    out.push({ ...toClientCard(cards[i], db, owned), score: scores[i] });
+    const card: ScoredCard = { ...toClientCard(cards[i], db, owned), score: scores[i] };
+    if (pkg) card.also = alsoOf.get(i) ?? [];
+    out.push(card);
   }
   return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
