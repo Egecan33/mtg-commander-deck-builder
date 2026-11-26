@@ -23,7 +23,7 @@ function countImages(size: string): number {
 
 const emptyCounts = (): StatusResponse['counts'] => ({
   cards: 0, legal: 0, banned: 0, gameChangers: 0, features: 0, tags: 0, combos: 0,
-  images: { display: 0, grid: 0 }, collection: 0, decks: 0,
+  images: { display: 0, grid: 0 }, collection: 0, decks: 0, brawl: 0,
 });
 
 function readCounts(): StatusResponse['counts'] {
@@ -39,9 +39,12 @@ function readCounts(): StatusResponse['counts'] {
       "SELECT count(*) AS cards, " +
         "coalesce(sum(json_extract(json, '$.legality') = 'legal'), 0) AS legal, " +
         "coalesce(sum(json_extract(json, '$.legality') = 'banned'), 0) AS banned, " +
-        "coalesce(sum(json_extract(json, '$.gameChanger') = 1), 0) AS gameChangers FROM cards",
+        "coalesce(sum(json_extract(json, '$.gameChanger') = 1), 0) AS gameChangers, " +
+        // The Brawl pool (MTG Arena): on Arena and legal in Brawl, meld results left out as in the pool itself.
+        "coalesce(sum(json_extract(json, '$.arenaRarity') IS NOT NULL AND json_extract(json, '$.brawlLegality') = 'legal' " +
+        "AND json_extract(json, '$.isMeldResult') = 0), 0) AS brawl FROM cards",
     )
-    .get() as { cards: number; legal: number; banned: number; gameChangers: number };
+    .get() as { cards: number; legal: number; banned: number; gameChangers: number; brawl: number };
   slot.counts = {
     ...cards,
     features: one('SELECT count(*) AS n FROM card_features'),

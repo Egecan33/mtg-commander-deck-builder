@@ -1,19 +1,21 @@
 import { createHash } from 'node:crypto';
-import type { AnalyzeResponse, EdhrecStatus } from '@/app/lib/api';
+import type { AnalyzeResponse, ArenaReport, EdhrecStatus } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
 import { targetsFor } from '@/engine/targets';
 import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import { overBudget, toCraft, wildcardsNeeded } from '@/engine/wildcards';
 import type { ServerCardDb } from './carddb';
 import { cardLookup, poolIndex } from './cards';
-import { deckFormat } from './collection';
+import { deckCollection, deckFormat, ownedSet } from './collection';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
 import { getSettings } from './settings';
 import { cacheSlot } from './state';
 import { getCardDb } from './store';
+import { getWildcards } from './wildcards';
 
 /** Scored pools kept in memory. Each holds a CardScore per legal card, so the number stays small. */
 export const MAX_ANALYSES = 6;
@@ -156,5 +158,20 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
   }
   for (const reason of r.bracket.reasons) for (const id of reason.oracleIds) ids.add(id);
   for (const v of [...r.rating.violations, ...r.bracket.violationsOfTarget]) for (const id of v.oracleIds) ids.add(id);
-  return { format: deckFormat(deck), ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
+  return {
+    format: deckFormat(deck), ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck),
+    arena: arenaReport(deck, analysis.ctx),
+  };
+}
+
+/**
+ * A Brawl deck's wildcard line: what its cards not owned (in the active collection) need per rarity,
+ * what its collection has, and the printing to craft each one. Null for a Commander deck.
+ */
+export function arenaReport(deck: Deck, ctx: EngineContext): ArenaReport | null {
+  if (deckFormat(deck) !== 'brawl') return null;
+  const owned = ownedSet();
+  const needed = wildcardsNeeded(deck, ctx.db, owned);
+  const have = getWildcards(deckCollection(deck)).wildcards;
+  return { needed, have, over: overBudget(needed, have), toCraft: toCraft(deck, ctx.db, owned), noData: ctx.db.all().length === 0 };
 }
