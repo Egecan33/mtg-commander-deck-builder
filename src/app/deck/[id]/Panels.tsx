@@ -648,6 +648,8 @@ export function ThemesPanel({
   const rest = AXIS_IDS.filter((a) => !ids.includes(a));
   const { focused, axes: focusAxes } = analysis.themeFocus;
   const focusLabels = focusAxes.filter((a) => a !== 'typal').map(axisLabel);
+  // The button names as many themes as the focus keeps (a strong third theme stays in it).
+  const focusCount = ['', 'this one', 'these two', 'these three', 'these four', 'these five'][focusLabels.length] ?? `these ${focusLabels.length}`;
 
   return (
     <div data-testid="panel-themes">
@@ -711,7 +713,7 @@ export function ThemesPanel({
             title={focused ? 'Already focused' : `Keep ${focusLabels.join(', ')} at full weight and turn every other theme down to a quarter`}
             data-testid="theme-focus"
           >
-            Focus on these two
+            Focus on {focusCount || 'these'}
           </button>
           <button type="button" className="btn" disabled={!deck.themeWeights} onClick={() => { order.current = []; onReset(); }} data-testid="theme-reset">
             Reset to the commander
