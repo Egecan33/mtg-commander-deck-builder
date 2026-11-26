@@ -298,9 +298,8 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
  *
  * 1. Legal and complete first. Every card that breaks a rule (banned, outside the colour identity,
  *    over the copy limit, unknown) is replaced by the best `replaceCard` proposal the engine agrees
- *    with, or removed when there is none. Over 100 cards, the weakest unlocked cards are cut; under
- *    100, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not 100
- *    cards, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
+ *    with, or removed when there is none. Over the deck size (100, or 60 in Standard Brawl), the weakest unlocked cards are cut; under
+ *    it, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not full, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
  *    is capped at 40 and cannot be played (`note` then says what it cost). One card pool serves
  *    every replacement of the call.
  * 2. A deck that breaks its own target bracket's rules (the bracket report's violations of the
@@ -339,7 +338,7 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   let pool: Pool | null = null;
   const poolOf = (): Pool => (pool ??= buildPool(deck, ctx, plain));
 
-  // 1. Legal, then 100 cards.
+  // 1. Legal, then a full deck.
   if (start.violations.length > 0) {
     current = repairRules(current, ctx, poolOf, changes);
     if (validateDeck(current, ctx.db).some((v) => v.code === 'size')) {

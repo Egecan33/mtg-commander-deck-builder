@@ -1,5 +1,5 @@
 import { rateDeck } from '../rating';
-import { formatOf, isLegalIn } from '../format';
+import { deckSizeFor, formatOf, isLegalIn } from '../format';
 import { canLead, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
@@ -49,12 +49,14 @@ export function preScore(commander: Card, ownedCards: readonly Card[], ctx: Engi
   }
   scores.sort((a, b) => b - a);
   let sum = 0;
-  for (let i = 0; i < Math.min(PRESCORE_TOP, scores.length); i++) sum += scores[i];
+  for (let i = 0; i < Math.min(topFor(PRESCORE_TOP, ctx.db), scores.length); i++) sum += scores[i];
   return sum + LAND_BONUS * Math.min(LAND_BONUS_MAX, lands);
 }
 
 /** Owned cards counted by `quickFit`. */
 const QUICK_TOP = 60;
+/** How many of the best cards a ranking sums: 60 for a 99-card deck, fewer in Standard Brawl's 59. */
+const topFor = (n: number, db: CardDb): number => (formatOf(db) === 'standardbrawl' ? Math.round((n * (deckSizeFor(db) - 1)) / 99) : n);
 
 /**
  * A much cheaper stand-in for `preScore`, for ranking thousands of commanders before the real
@@ -75,7 +77,7 @@ export function quickFit(commander: Card, ownedCards: readonly Card[], db: CardD
   }
   fits.sort((a, b) => b - a);
   let sum = 0;
-  for (let i = 0; i < Math.min(QUICK_TOP, fits.length); i++) sum += fits[i];
+  for (let i = 0; i < Math.min(topFor(QUICK_TOP, db), fits.length); i++) sum += fits[i];
   return sum;
 }
 
