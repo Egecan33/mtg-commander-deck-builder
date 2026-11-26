@@ -514,7 +514,8 @@ export function Builder({ id }: { id: string }) {
   };
   /**
    * "Put it in instead of": takes the proposal's card out and puts the detail's card in through the
-   * normal save, closes the detail and shows "Put in X, took out Y" with Undo above the deck.
+   * normal save, closes the detail and shows "Put in X, took out Y" with Undo above the deck. The
+   * plain-add proposal (`out` '', "Add without cutting") only puts it in: "Put in X".
    */
   const putIn = (p: SwapProposal) => {
     const before = deckRef.current;

@@ -393,8 +393,10 @@ const SWAPIN_SHOWN = 5;
  * "Put it in instead of" in the card detail of a card that is not in the deck (or one more basic land):
  * up to five deck cards it could replace, best rating after the swap first, each with its rating
  * change, the engine's objection when it disagrees (still allowed) and the "!" of the copy the new
- * card would take; each row's Swap applies it. Under 100 cards "Add without cutting" comes first; at
- * 100 the plain add stays as a quiet "Add it anyway". When the list is empty it says why.
+ * card would take; each row's Swap applies it. Under 100 cards "Add without cutting" comes first and
+ * applies the plain-add proposal through `onSwap` (so it gets the same result panel and Undo; before
+ * the list is there it falls back to `add.onAdd`); at 100 the plain add stays as a quiet "Add it
+ * anyway". When the list is empty it says why.
  */
 export function PutItIn({
   card, count, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
@@ -412,8 +414,9 @@ export function PutItIn({
   /** The deck's own "!" (cards it takes from boxes and built decks). */
   deckHeld: HeldBy;
   scoreOf: (id: string) => CardScore | undefined;
+  /** Applies a proposal: a swap, or the plain add (`out` ''). */
   onSwap: (p: SwapProposal) => void;
-  /** The plain add, for a card not in the deck yet. */
+  /** The plain add, for a card not in the deck yet ("Add it anyway", and "Add without cutting" while the list loads). */
   add?: { onAdd: () => void; disabled: boolean };
   /** Scrolls the section into view once its list is there (opened from the card search's "+" on a full deck). */
   reveal?: boolean;
@@ -449,7 +452,14 @@ export function PutItIn({
 
       {add && open && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-          <button type="button" className="btn btn-sm btn-primary" disabled={add.disabled} onClick={add.onAdd} title={`Put ${card.name} in an open slot; nothing is cut`} data-testid="detail-add">
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            disabled={add.disabled}
+            onClick={() => (plain ? onSwap(plain) : add.onAdd())}
+            title={`Put ${card.name} in an open slot; nothing is cut. Undo takes it out again.`}
+            data-testid="detail-add"
+          >
             Add without cutting
           </button>
           {plain && <RatingChange p={plain} />}
