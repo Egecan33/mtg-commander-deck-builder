@@ -72,7 +72,7 @@ export function ComboRow({
             Put it in
           </button>
         )}
-        <a className="text-[13px] text-brass hover:underline" href={spellbookUrl(found.combo.id)} target="_blank" rel="noopener" data-testid="combo-link">
+        <a className="text-[13px] text-brass hover:underline" href={spellbookUrl(found.combo.id)} target="_blank" rel="noopener noreferrer" data-testid="combo-link">
           View on Commander Spellbook
         </a>
       </div>
