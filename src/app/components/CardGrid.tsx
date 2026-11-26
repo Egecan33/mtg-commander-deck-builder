@@ -11,8 +11,9 @@ export const TILE_GAP: Record<TileSize, number> = { S: 8, M: 10, L: 12 };
 
 /** An even grid of CardTiles of one size. Inside a capped Section it shows only the first cards. */
 export function CardGrid({ size = 'M', children, testId, className = '' }: { size?: TileSize; children: ReactNode; testId?: string; className?: string }) {
-  const limit = useSectionLimit();
-  const items = limit === null ? children : Children.toArray(children).slice(0, limit);
+  const tiles = Children.toArray(children);
+  const limit = useSectionLimit(tiles.length);
+  const items = limit === null ? children : tiles.slice(0, limit);
   return (
     <div
       className={`grid ${className}`}
