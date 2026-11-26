@@ -1252,7 +1252,7 @@ export function Builder({ id }: { id: string }) {
                 type="button"
                 role="tab"
                 aria-selected={panel === p.id}
-                className={`display flex-auto whitespace-nowrap border-b-2 px-2 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                className={`display flex-auto whitespace-nowrap border-b-2 px-1 py-2.5 text-[0.82rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                 onClick={() => setPanel(p.id)}
                 data-testid={`tab-${p.id}`}
               >
