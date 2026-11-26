@@ -45,7 +45,7 @@ export function DeckTileView({ deck: d, footer }: { deck: DeckTile; footer?: Rea
                     : d.commanders.map((c, i) => (
                         <span key={c.oracleId}>
                           {i > 0 && ' and '}
-                          <Link href={d.commanders.length === 2 ? commanderHref(d.commanders[0], d.commanders[1]) : commanderHref(c)} className="hover:text-bone hover:underline" title="Open the commander page" data-testid="deck-tile-commander">
+                          <Link href={d.commanders.length === 2 ? commanderHref(d.commanders[0], d.commanders[1], d.chosenColor) : commanderHref(c, undefined, d.chosenColor)} className="hover:text-bone hover:underline" title="Open the commander page" data-testid="deck-tile-commander">
                             {c.name}
                           </Link>
                         </span>

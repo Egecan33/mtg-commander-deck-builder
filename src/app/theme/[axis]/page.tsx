@@ -14,6 +14,7 @@ import { Section } from '../../components/Section';
 import { useNotify } from '../../components/Shell';
 import { ApiError, getTheme, type ColorLetter, type ThemeResponse } from '../../lib/api';
 import { useFilters } from '../../lib/filters';
+import { safeDecode } from '../../lib/links';
 import { isAbort } from '../../lib/ui';
 
 export default function ThemePage() {
@@ -27,7 +28,7 @@ export default function ThemePage() {
   useEffect(() => {
     if (!ready) return;
     const ctrl = new AbortController();
-    getTheme(decodeURIComponent(axis), { colors: colors.length ? colors : undefined, bracket }, ctrl.signal).then(
+    getTheme(safeDecode(axis), { colors: colors.length ? colors : undefined, bracket }, ctrl.signal).then(
       (r) => { setData(r); setMissing(null); },
       (e) => { if (isAbort(e)) return; if (e instanceof ApiError && e.status === 404) setMissing(e.message); else notify.error(e); },
     );

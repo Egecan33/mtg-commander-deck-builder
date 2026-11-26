@@ -404,6 +404,8 @@ export interface PartnersResponse { commander: CommanderCard; partners: Commande
 export interface DeckTile {
   id: string; name: string; updatedAt: string;
   commanders: ClientCard[];
+  /** The colour chosen for a colour-choice commander. */
+  chosenColor?: Color | null;
   targetBracket: Bracket;
   cardCount: number;
   rating: number; legal: boolean;

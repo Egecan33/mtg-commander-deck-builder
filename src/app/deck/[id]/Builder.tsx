@@ -815,7 +815,7 @@ export function Builder({ id }: { id: string }) {
             const first = lookup[deck.commanders[0]];
             const second = deck.commanders.length === 2 ? lookup[deck.commanders[1]] : undefined;
             const self = lookup[c];
-            const href = self ? first && second ? commanderHref(first, second) : commanderHref(self) : null;
+            const href = self ? first && second ? commanderHref(first, second, deck.chosenColor) : commanderHref(self, undefined, deck.chosenColor) : null;
             const image = <CardImage id={c} name={self?.name ?? 'Commander'} known={!!self} />;
             return href ? (
               <Link key={c} href={href} className="card block w-[3.9rem]" title="Open the commander page" aria-label={`Open the commander page for ${self?.name ?? 'the commander'}`} data-testid="commander-thumb">
