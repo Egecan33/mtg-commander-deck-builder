@@ -657,6 +657,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   score(card: Card): CardScore;
   scoreAll(filter?: (c: Card) => boolean): CardScore[];
   quality(card: Card): number | null;
+  commanderLink(card: Card): number | null;
 } {
   const { db } = ctx;
   const bracket = (Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)))) as Bracket;
@@ -1034,5 +1035,19 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
     return stat.qualityPts / weights.quality;
   }
 
-  return { score, scoreAll, quality };
+  /**
+   * How well a card works with the commander and the theme, 0..1: its static synergy share, plus up
+   * to a quarter for its EDHREC lift when cached. Null when the card is gated; 0 for a land.
+   */
+  function commanderLink(card: Card): number | null {
+    const stat = statOf(card);
+    if (stat.gate) return null;
+    if (stat.land) return 0;
+    let link = stat.syn;
+    const entry = ctx.edhrec?.cards?.[card.oracleId];
+    if (entry && typeof entry.lift === 'number' && Number.isFinite(entry.lift) && cache.lifts) link += 0.25 * percentile(cache.lifts, entry.lift);
+    return clamp01(link);
+  }
+
+  return { score, scoreAll, quality, commanderLink };
 }

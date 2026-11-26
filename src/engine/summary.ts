@@ -117,6 +117,17 @@ export const NAMED_THEME_WEIGHT = 0.5;
 /** Weight of the any-type typal axis next to a named creature type (same share as the commander path). */
 const ANY_TYPE_SHARE = 0.8;
 
+/**
+ * The creature types a commander's own theme names: every `typal:<type>` axis tied for the highest
+ * `typal:*` weight, when that weight is at least NAMED_THEME_WEIGHT; else none.
+ */
+export function namedTypes(weights: Record<AxisId, number>): AxisId[] {
+  let top = 0;
+  for (const [axis, w] of Object.entries(weights)) if (axis.startsWith('typal:') && finite(w) > top) top = finite(w);
+  if (top < NAMED_THEME_WEIGHT) return [];
+  return Object.keys(weights).filter((axis) => axis.startsWith('typal:') && finite(weights[axis]) === top).sort();
+}
+
 export interface ResolvedTheme {
   weights: Record<AxisId, number>;
   /** 'user' = the deck's own sliders, 'commander' = read off the command zone, 'deck' = inferred from the 99. */
