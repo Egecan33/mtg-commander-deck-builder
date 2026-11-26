@@ -2,7 +2,7 @@ import { analyzeBracket, findCombos } from '../brackets';
 import { deckSizeFor, gateBracketOf } from '../format';
 import { cardSourceNeeds } from '../mana';
 import { rateDeck } from '../rating';
-import { allowedIdentity, copyLimit, isBasicLand, validateDeck } from '../rules';
+import { allowedIdentity, copyLimit, hasType, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, summarizeDeck } from '../summary';
 import { scaleTargets, targetsFor } from '../targets';
@@ -121,7 +121,7 @@ export const isGraveyardHate = (oracleText: string): boolean => GRAVEYARD_HATE.t
 /** Cards that win on a condition of their own (Laboratory Maniac, Approach of the Second Sun). */
 const ALT_WIN = /\byou win the game\b/i;
 
-export function matches(c: Pick<Candidate, 'card' | 'f' | 'land'>, filter: Filter): boolean {
+export function matches(c: Pick<Candidate, 'card' | 'f' | 'land'> & Partial<Pick<Candidate, 'kind'>>, filter: Filter): boolean {
   const { f, card, land } = c;
   if (filter.role === 'graveyard-hate' && !GRAVEYARD_HATE.test(card.oracleText)) return false;
   if (filter.land && !land) return false;
@@ -140,6 +140,10 @@ export function matches(c: Pick<Candidate, 'card' | 'f' | 'land'>, filter: Filte
     if (!ok || land) return false;
   }
   if (filter.maxMv !== undefined && (land || !(card.cmc <= filter.maxMv))) return false;
+  if (filter.creature && (land || !hasType(card, 'Creature'))) return false;
+  // "A one-mana creature that helps the plan" (targets.ts `isOneDrop`): a candidate's `kind.oneDrop` reads
+  // "connected" as theme fit or typal membership, since the network the rating uses does not exist yet.
+  if (filter.creature && filter.maxMv !== undefined && filter.maxMv <= 1 && c.kind && !c.kind.oneDrop) return false;
   return true;
 }
 

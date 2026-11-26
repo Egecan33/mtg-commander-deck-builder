@@ -5,7 +5,7 @@ import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights } from '../summary';
 import type { AxisId, BuildOptions, Card, CardDb, CardFeatures, Color, Deck, DeckEntry, EngineContext, Role, Wildcards } from '../types';
 import { mulberry32 } from '../random';
-import { kindOf, makePlan } from './plan';
+import { kindOf, makePlan, themeFit } from './plan';
 import type { Kind, Plan } from './plan';
 
 export const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -109,18 +109,7 @@ export function bracketAdjust(card: Card, f: CardFeatures, bracket: number): num
   return -(costs[f.powerTier] ?? 0) - (f.roles.includes('tutor') ? LOW_BRACKET_TUTOR_COST : 0);
 }
 
-/** Theme fit of a card under the deck's theme weights (same reading as the rating's synergy sub-score). */
-export function themeFit(f: CardFeatures, weights: Record<AxisId, number>): number {
-  let best = 0;
-  for (const axis in f.axes) {
-    const w = weights[axis];
-    if (!(w > 0)) continue;
-    const a = f.axes[axis];
-    const v = Math.min(1, w) * Math.max(a.e, a.p);
-    if (v > best) best = v;
-  }
-  return Math.min(1, best);
-}
+export { themeFit };
 
 const CARD_TYPES = ['Creature', 'Artifact', 'Enchantment', 'Instant', 'Sorcery', 'Planeswalker', 'Battle'] as const;
 /** Companions whose condition is on the whole deck, by front name (the rules engine holds the conditions themselves). */
@@ -251,7 +240,7 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
   const plan = makePlan(deck, ctx);
   const weights = resolveThemeWeights(deck, ctx) ?? {};
   const candidate = (card: Card, f: CardFeatures, j: number, base: number): Candidate => ({
-    card, f, land: isLandCard(f), jitter: j, base, kind: kindOf(card, f, plan),
+    card, f, land: isLandCard(f), jitter: j, base, kind: kindOf(card, f, plan, db.tagSlugs?.(card.oracleId) ?? []),
     adjust: bracketAdjust(card, f, plan.bracket), theme: themeFit(f, weights),
   });
   const allowedColors = allowedIdentity(deck, db);

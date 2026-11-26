@@ -1,7 +1,8 @@
 import { bracketOf, deckSizeFor, formatOf } from '../format';
 import { hasType, isEveryCreatureType } from '../rules';
 import { AXIS_MEMBER, deckCards, resolveThemeWeights } from '../summary';
-import type { Bracket, Card, CardFeatures, Deck, EngineContext } from '../types';
+import { ONE_DROP_MIN, ONE_DROP_THEME_FIT, isOneDrop } from '../targets';
+import type { AxisId, Bracket, Card, CardFeatures, Deck, EngineContext } from '../types';
 
 type PerBracket = readonly [number, number, number, number, number];
 
@@ -22,6 +23,9 @@ const SPELL_BONUS_FLOOR = 8;
 /** Creatures a deck that is neither typal nor spellslinger wants, by bracket. */
 const CREATURE_TARGET: PerBracket = [24, 24, 22, 18, 12];
 const CREATURE_BONUS = 7;
+/** Score bonus for a one-drop that helps the plan while the deck is under the shared minimum (targets.ts `ONE_DROP_MIN`). */
+const ONE_DROP_BONUS = 20;
+const ONE_DROP_BONUS_FLOOR = 12;
 const CREATURE_BONUS_FLOOR = 2;
 
 /**
@@ -55,11 +59,13 @@ export interface Plan {
   creatureTarget: number;   // 0 for typal and spellslinger decks
   fastTarget: number;       // 0 below Bracket 4
   tutorCap: number;         // the build's own cap on tutors (Brackets 1-2)
+  oneDropTarget: number;    // one-drops that help the plan (`ONE_DROP_MIN`); 0 for a spellslinger deck
+  weights: Record<AxisId, number>; // the deck's resolved theme weights
   packSize: number;         // copies of an any-number card the theme wants; 0 = none
 }
 
-export interface Kind { member: boolean; generic: boolean; spell: boolean; creature: boolean; fast: boolean; tutor?: boolean }
-export interface Tally { tribe: number; generic: number; spells: number; creatures: number; fast: number; tutors: number }
+export interface Kind { member: boolean; generic: boolean; spell: boolean; creature: boolean; fast: boolean; tutor?: boolean; oneDrop?: boolean }
+export interface Tally { tribe: number; generic: number; spells: number; creatures: number; fast: number; tutors: number; oneDrops?: number }
 
 export function makePlan(deck: Deck, ctx: EngineContext): Plan {
   const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, ctx.db)) || 3))) as Bracket;
@@ -84,31 +90,48 @@ export function makePlan(deck: Deck, ctx: EngineContext): Plan {
     fastTarget: scaled(FAST_TARGET[bracket - 1]!),
     tutorCap: TUTOR_CAP[bracket - 1]!,
     packSize: scaled(PACK_SIZE[bracket - 1]!),
+    oneDropTarget: spellslinger ? 0 : ONE_DROP_MIN,
+    weights,
   };
 }
 
+/** Theme fit of a card under the deck's theme weights (same reading as the rating's synergy sub-score). */
+export function themeFit(f: CardFeatures, weights: Record<AxisId, number>): number {
+  let best = 0;
+  for (const axis in f.axes) {
+    const w = weights[axis];
+    if (!(w > 0)) continue;
+    const a = f.axes[axis];
+    const v = Math.min(1, w) * Math.max(a.e, a.p);
+    if (v > best) best = v;
+  }
+  return Math.min(1, best);
+}
+
 /** Which of the plan's kinds a card is. */
-export function kindOf(card: Card, f: CardFeatures, plan: Plan): Kind {
+export function kindOf(card: Card, f: CardFeatures, plan: Plan, tags: readonly string[] = []): Kind {
   const creature = hasType(card, 'Creature');
   const member = plan.tribe !== null && creature && (f.creatureTypes.includes(plan.tribe) || isEveryCreatureType(card));
   const any = f.axes.typal;
   const generic = !member && ((any !== undefined && Math.max(any.e, any.p) >= AXIS_MEMBER) || CHOOSES_TYPE.test(card.oracleText));
   const fast = f.roles.includes('fast-mana') && !f.roles.includes('land');
-  return { member, generic, spell: hasType(card, 'Instant') || hasType(card, 'Sorcery'), creature, fast, tutor: f.roles.includes('tutor') && !f.roles.includes('land') };
+  const oneDrop = isOneDrop(card, f, tags, plan.bracket, member || themeFit(f, plan.weights) >= ONE_DROP_THEME_FIT);
+  return { member, generic, spell: hasType(card, 'Instant') || hasType(card, 'Sorcery'), creature, fast, tutor: f.roles.includes('tutor') && !f.roles.includes('land'), oneDrop };
 }
 
 export function tallyDeck(deck: Deck, ctx: EngineContext, plan: Plan): Tally {
-  const t: Tally = { tribe: 0, generic: 0, spells: 0, creatures: 0, fast: 0, tutors: 0 };
+  const t: Tally = { tribe: 0, generic: 0, spells: 0, creatures: 0, fast: 0, tutors: 0, oneDrops: 0 };
   const commanders = new Set(deck.commanders);
   for (const { card, features, qty } of deckCards(deck, ctx.db).cards) {
     if (commanders.has(card.oracleId)) continue;
-    const k = kindOf(card, features, plan);
+    const k = kindOf(card, features, plan, ctx.db.tagSlugs?.(card.oracleId) ?? []);
     if (k.member) t.tribe += qty;
     if (k.generic) t.generic += qty;
     if (k.spell) t.spells += qty;
     if (k.creature) t.creatures += qty;
     if (k.fast) t.fast += qty;
     if (k.tutor) t.tutors += qty;
+    if (k.oneDrop) t.oneDrops = (t.oneDrops ?? 0) + qty;
   }
   return t;
 }
@@ -126,6 +149,9 @@ export function planBonus(k: Kind, t: Tally, plan: Plan): number | null {
   }
   if (k.creature && t.creatures < plan.creatureTarget) {
     bonus += CREATURE_BONUS_FLOOR + (CREATURE_BONUS - CREATURE_BONUS_FLOOR) * ((plan.creatureTarget - t.creatures) / plan.creatureTarget);
+  }
+  if (k.oneDrop && (t.oneDrops ?? 0) < plan.oneDropTarget) {
+    bonus += ONE_DROP_BONUS_FLOOR + (ONE_DROP_BONUS - ONE_DROP_BONUS_FLOOR) * ((plan.oneDropTarget - (t.oneDrops ?? 0)) / plan.oneDropTarget);
   }
   if (k.fast && t.fast < plan.fastTarget) {
     bonus += FAST_BONUS_FLOOR + (FAST_BONUS - FAST_BONUS_FLOOR) * ((plan.fastTarget - t.fast) / plan.fastTarget);
