@@ -41,7 +41,7 @@ function Thumb({ id, lookup, held }: { id: string; lookup: CardLookup; held?: re
 /**
  * What an action changed: the title with the rating before → after, the changes grouped by their
  * reason (out → in), and Undo / Dismiss. Test ids derive from `testId`: "fix-panel" gives
- * "fix-undo" and "fix-dismiss".
+ * "fix-undo", "fix-dismiss" and "fix-message" (the note; "fix-note" is the rating panel's).
  */
 export function ResultPanel({
   title, before, after, changes, lookup, heldBy, note, onUndo, onDismiss, testId = 'result-panel',
@@ -86,7 +86,7 @@ export function ResultPanel({
           </button>
         </div>
       </div>
-      {note && <p className="mt-2 max-w-[70ch] text-[13px] text-bone" data-testid={`${base}-note`}>{note}</p>}
+      {note && <p className="mt-2 max-w-[70ch] text-[13px] text-bone" data-testid={`${base}-message`}>{note}</p>}
 
       {groups.length > 0 && (
         <ul className="mt-2.5 grid gap-3" data-testid={`${base}-changes`}>
