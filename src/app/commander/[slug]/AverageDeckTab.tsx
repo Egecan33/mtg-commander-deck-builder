@@ -1,9 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CardDetail } from '@/app/components/CardDetail';
 import { EmptyState } from '@/app/components/EmptyState';
+import { NetworkSummary } from '@/app/components/network/NetworkSummary';
+import { NetworkView } from '@/app/components/network/NetworkView';
+import { useNetwork } from '@/app/components/network/useNetwork';
 import { useNotify } from '@/app/components/Shell';
 import { createDeck } from '@/app/lib/api';
 import { setFilters } from '@/app/lib/filters';
@@ -20,6 +23,10 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
   const [detail, setDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'cards' | 'network'>('cards');
+  const [focus, setFocus] = useState<number | null>(null);
+  const net = useNetwork(avg.deck ?? null, view === 'network');
+  const networkNow = net.network;
+  useEffect(() => setFocus(null), [networkNow]);
   if (avg.error) return <EmptyState message={`Could not build the average deck: ${avg.error}`} />;
   if (avg.empty) {
     return (
@@ -60,7 +67,25 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
         <button type="button" aria-pressed={view === 'cards'} onClick={() => setView('cards')} data-testid="average-view-cards">Cards</button>
         <button type="button" aria-pressed={view === 'network'} onClick={() => setView('network')} data-testid="average-view-network">Network</button>
       </div>
-      {view === 'network' && <EmptyState testId="average-network-pending" message="The network view of this deck is not built yet. It arrives with the deck network work." />}
+      {view === 'network' && (
+        <div className="grid grid-cols-[minmax(0,1fr)_26rem] gap-4" data-testid="average-network">
+          <div className="min-w-0">
+            <NetworkView
+              network={net.network}
+              error={net.error}
+              focusCluster={focus}
+              onOpen={setDetail}
+              onRetry={net.reload}
+              onEmpty={() => setView('cards')}
+            />
+          </div>
+          <div className="min-w-0 rounded-lg border border-slag bg-anvil">
+            {net.network
+              ? <NetworkSummary network={net.network} focus={focus} onFocus={setFocus} onOpen={setDetail} />
+              : <p className="p-4 text-ash" data-testid="panel-network">Reading how the cards connect</p>}
+          </div>
+        </div>
+      )}
       {view === 'cards' && <DeckView
         deck={deck}
         lookup={analysis.cards}
