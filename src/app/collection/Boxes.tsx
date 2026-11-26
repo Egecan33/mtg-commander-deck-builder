@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardImage } from '../components/card';
 import { useNotify } from '../components/Shell';
 import {
   ApiError, addBox, getBox, getBoxes, getDeck, getProduct, linkBox, openBoxAsDeck, removeBox, searchProducts, takeFromBox,
-  type BoxDetailResponse, type BoxInfo, type ProductDetailResponse, type ProductInfo,
+  type BoxCard, type BoxDetailResponse, type BoxInfo, type ProductDetailResponse, type ProductInfo,
 } from '../lib/api';
 import { fmtInt, isAbort } from '../lib/ui';
 
@@ -23,7 +23,7 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
   const [results, setResults] = useState<ProductInfo[] | null>(null);
   const [picked, setPicked] = useState<ProductDetailResponse | null>(null);
   const [busy, setBusy] = useState(false);
-  const [added, setAdded] = useState<{ box: BoxInfo }[]>([]);
+  const [added, setAdded] = useState<{ box: BoxInfo; undone?: boolean }[]>([]);
 
   useEffect(() => {
     const text = q.trim();
@@ -48,7 +48,7 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
     setBusy(true);
     try {
       const { box } = await addBox(picked.product.id);
-      setAdded((a) => [{ box }, ...a].slice(0, 5));
+      setAdded((a) => [{ box }, ...a.filter((x) => !x.undone)].slice(0, 5));
       setPicked(null);
       setQ('');
       setResults(null);
@@ -59,14 +59,27 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
       setBusy(false);
     }
   };
-  // Undo of an added box is the same as selling it: its cards leave again.
+  // Undo of an added box is the same as selling it: its cards leave again. One at a time, and the
+  // row stays in place (without its button) until the pointer leaves the list, so a second click
+  // cannot reach the next row's Undo.
+  const undoRun = useRef(false);
+  const [undoing, setUndoing] = useState<string | null>(null);
   const undo = async (box: BoxInfo) => {
+    if (undoRun.current) return;
+    undoRun.current = true;
+    setUndoing(box.id);
     try {
       await removeBox(box.id, 'sold');
-      setAdded((a) => a.filter((x) => x.box.id !== box.id));
+      setAdded((a) => a.map((x) => (x.box.id === box.id ? { ...x, undone: true } : x)));
       await onChanged();
     } catch (e) {
-      notify.error(e);
+      if (e instanceof ApiError && e.status === 404) {
+        setAdded((a) => a.map((x) => (x.box.id === box.id ? { ...x, undone: true } : x)));
+        notify.info(`${box.name} is no longer in your boxes, so there is nothing to undo`);
+      } else notify.error(e);
+    } finally {
+      undoRun.current = false;
+      setUndoing(null);
     }
   };
 
@@ -130,11 +143,24 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
         </div>
       )}
       {added.length > 0 && (
-        <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="box-recent">
-          {added.map(({ box }) => (
-            <li key={box.id} className="flex items-center gap-2">
+        <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="box-recent" onPointerLeave={() => setAdded((a) => (a.some((x) => x.undone) ? a.filter((x) => !x.undone) : a))}>
+          {added.map(({ box, undone }) => (
+            <li key={box.id} className={`flex items-center gap-2 ${undone ? 'text-smoke line-through' : ''}`}>
               <span className="min-w-0 flex-1 truncate"><span className="text-smoke">Added</span> {box.name}</span>
-              <button type="button" className="text-brass hover:underline" title="Takes the box and its cards out again, as if sold" onClick={() => void undo(box)} data-testid="box-undo">Undo</button>
+              {undone ? (
+                <span className="text-smoke no-underline">Undone</span>
+              ) : (
+                <button
+                  type="button"
+                  className="text-brass hover:underline disabled:text-smoke disabled:no-underline"
+                  title="Takes the box and its cards out again, as if sold"
+                  disabled={undoing !== null}
+                  onClick={() => void undo(box)}
+                  data-testid="box-undo"
+                >
+                  {undoing === box.id ? 'Undoing' : 'Undo'}
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -144,6 +170,21 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
 }
 
 type Action = 'keep' | 'deck' | 'sold';
+
+/** A card whose last sealed copy was just taken out of box `boxId`; it keeps its cell for a moment. */
+interface TakenCard { boxId: string; card: BoxCard; name: string; known: boolean }
+
+/** The box's cards with the ones just taken out back in their cells (commander slots first, then by oracle id, like the server). */
+function withTaken(cards: BoxCard[], taken: TakenCard[]): { card: BoxCard; gone?: TakenCard }[] {
+  const out: { card: BoxCard; gone?: TakenCard }[] = cards.map((card) => ({ card }));
+  const before = (a: BoxCard, b: BoxCard) => (a.commander !== b.commander ? a.commander : a.oracleId < b.oracleId);
+  for (const t of taken) {
+    if (cards.some((c) => c.oracleId === t.card.oracleId)) continue;
+    const i = out.findIndex((x) => before(t.card, x.card));
+    out.splice(i < 0 ? out.length : i, 0, { card: t.card, gone: t });
+  }
+  return out;
+}
 
 /** "Your boxes": the sealed products of this collection, each with what is left in it. */
 export function YourBoxes({ version, onChanged, onCount }: { version: number; onChanged: () => Promise<void> | void; onCount?: (n: number) => void }) {
@@ -234,12 +275,28 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
       setConfirm(null);
     }
   };
-  const takeOut = async (box: BoxInfo, oracleId: string) => {
+  // One take-out at a time, held until the collection has reloaded. A card whose last sealed copy
+  // came out keeps its cell ("Taken out") until the pointer leaves the card list, so the next card
+  // cannot slide under a second click.
+  const takeRun = useRef(false);
+  const [taking, setTaking] = useState<string | null>(null);
+  const [taken, setTaken] = useState<TakenCard[]>([]);
+  const takeOut = async (box: BoxInfo, card: BoxCard, name: string, known: boolean) => {
+    if (takeRun.current) return;
+    takeRun.current = true;
+    setTaking(card.oracleId);
     try {
-      setDetail(await takeFromBox(box.id, oracleId, 1));
+      const next = await takeFromBox(box.id, card.oracleId, 1);
+      if (!next.cards.some((c) => c.oracleId === card.oracleId)) {
+        setTaken((t) => [...t.filter((x) => !(x.boxId === box.id && x.card.oracleId === card.oracleId)), { boxId: box.id, card: { ...card, qty: 0 }, name, known }]);
+      }
+      setDetail(next);
       await onChanged();
     } catch (e) {
       notify.error(e);
+    } finally {
+      takeRun.current = false;
+      setTaking(null);
     }
   };
 
@@ -299,19 +356,31 @@ export function YourBoxes({ version, onChanged, onCount }: { version: number; on
               <div className="mt-3 border-t border-slag pt-3" data-testid="box-cards">
                 {!detail || detail.box.id !== b.id ? (
                   <p className="text-[0.88rem] text-ash">Loading</p>
-                ) : detail.cards.length === 0 ? (
+                ) : detail.cards.length === 0 && !taken.some((t) => t.boxId === b.id) ? (
                   <p className="text-[0.88rem] text-ash">Nothing is left sealed in this box.</p>
                 ) : (
-                  <ul className="grid grid-cols-3 gap-2">
-                    {detail.cards.map((c) => {
+                  <ul className="grid grid-cols-3 gap-2" onPointerLeave={() => setTaken((t) => (t.length ? [] : t))} data-testid="box-card-list">
+                    {withTaken(detail.cards, taken.filter((t) => t.boxId === b.id)).map(({ card: c, gone }) => {
                       const known = detail.lookup[c.oracleId];
-                      const name = known?.name ?? 'Unknown card';
+                      const name = gone?.name ?? known?.name ?? 'Unknown card';
+                      const isKnown = gone ? gone.known : !!known;
                       return (
-                        <li key={c.oracleId} className="text-[0.78rem]" data-testid="box-card" data-name={name}>
-                          <div className="card"><CardImage id={c.oracleId} name={known?.frontName ?? name} known={!!known} />
+                        <li key={c.oracleId} className="text-[0.78rem]" data-testid="box-card" data-name={name} data-gone={gone ? true : undefined}>
+                          <div className="card"><CardImage id={c.oracleId} name={gone?.name ?? known?.frontName ?? name} known={isKnown} />
                             {c.qty > 1 && <span className="absolute right-[5%] top-[3.5%] rounded bg-soot/90 px-1 text-[0.8rem] font-semibold leading-[1.35rem]">&times;{c.qty}</span>}
+                            {gone && <div className="absolute inset-0 rounded-[inherit] bg-soot/75" />}
                           </div>
-                          <button type="button" className="btn btn-sm mt-1 w-full" title="Keeps the card in your collection but not as part of the box" onClick={() => void takeOut(b, c.oracleId)} data-testid="box-take">Take out</button>
+                          <button
+                            type="button"
+                            className="btn btn-sm mt-1 w-full"
+                            title={gone ? 'Out of the box, still in your collection' : 'Keeps the card in your collection but not as part of the box'}
+                            aria-label={gone ? `${name} is out of the box` : `Take ${name} out of the box`}
+                            disabled={!!gone || taking !== null}
+                            onClick={() => void takeOut(b, c, name, isKnown)}
+                            data-testid="box-take"
+                          >
+                            {gone ? 'Taken out' : taking === c.oracleId ? 'Taking it out' : 'Take out'}
+                          </button>
                         </li>
                       );
                     })}

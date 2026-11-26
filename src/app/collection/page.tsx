@@ -9,8 +9,46 @@ import { fmtDate, fmtInt } from '../lib/ui';
 import { AddBox, YourBoxes } from './Boxes';
 import { OwnedTile, type Owned } from './OwnedTile';
 
-/** One line of the quick-entry history. `qty` is negative for a removal; `fromBoxes` are the boxes a removal took copies from. */
-interface Recent { key: number; card: ClientCard; qty: number; fromBoxes: BoxTake[] }
+/**
+ * One line of the quick-entry history. `qty` is negative for a removal; `fromBoxes` are the boxes a
+ * removal took copies from. `undone`: kept in its place, without a button, until the pointer leaves the list.
+ */
+interface Recent { key: number; card: ClientCard; qty: number; fromBoxes: BoxTake[]; undone?: boolean }
+
+/** A card whose last copy was removed from the grid, shown as "0 left" after the card `prev` (null: first). */
+interface Ghost { card: Owned; prev: string | null }
+
+/** `cards` with each ghost the server no longer lists put back after the card it followed. */
+function withGhosts(cards: Owned[], ghosts: Ghost[]): Owned[] {
+  if (ghosts.length === 0) return cards;
+  const listed = new Set(cards.map((c) => c.oracleId));
+  const live = ghosts.filter((g) => !listed.has(g.card.oracleId));
+  if (live.length === 0) return cards;
+  const after = new Map<string | null, Owned[]>();
+  for (const g of live) after.set(g.prev, [...(after.get(g.prev) ?? []), g.card]);
+  const out: Owned[] = [];
+  const placed = new Set<string>();
+  const follow = (key: string | null) => {
+    for (const g of after.get(key) ?? []) {
+      if (placed.has(g.oracleId)) continue;
+      placed.add(g.oracleId);
+      out.push(g);
+      follow(g.oracleId);
+    }
+  };
+  follow(null);
+  for (const c of cards) {
+    out.push(c);
+    follow(c.oracleId);
+  }
+  // A ghost whose neighbour has gone as well: by name.
+  for (const g of live) {
+    if (placed.has(g.card.oracleId)) continue;
+    const i = out.findIndex((c) => c.name.localeCompare(g.card.name) > 0);
+    out.splice(i < 0 ? out.length : i, 0, g.card);
+  }
+  return out;
+}
 
 export default function CollectionPage() {
   const notify = useNotify();
@@ -88,10 +126,10 @@ export default function CollectionPage() {
         const taken = Math.min(qty, have);
         if (taken <= 0) return notify.info(`You do not own ${card.name}`);
         const res = await adjustCollection(card.oracleId, -taken);
-        setRecent((r) => [{ key: recentKey.current++, card, qty: -taken, fromBoxes: res.fromBoxes }, ...r].slice(0, 8));
+        setRecent((r) => [{ key: recentKey.current++, card, qty: -taken, fromBoxes: res.fromBoxes }, ...r.filter((x) => !x.undone)].slice(0, 8));
       } else {
         await adjustCollection(card.oracleId, qty);
-        setRecent((r) => [{ key: recentKey.current++, card, qty, fromBoxes: [] }, ...r].slice(0, 8));
+        setRecent((r) => [{ key: recentKey.current++, card, qty, fromBoxes: [] }, ...r.filter((x) => !x.undone)].slice(0, 8));
       }
       setQuick('');
       setFound(null);
@@ -103,30 +141,66 @@ export default function CollectionPage() {
       quickBusy.current = false;
     }
   };
+  const [undoing, setUndoing] = useState<number | null>(null);
   const undo = async (item: Recent) => {
+    // Shares the quick-entry lock, so a double click cannot undo twice.
+    if (item.undone || quickBusy.current) return;
+    quickBusy.current = true;
+    setUndoing(item.key);
     try {
       // Undoing a removal puts the copies back into the boxes they came from.
       await adjustCollection(item.card.oracleId, -item.qty, item.qty < 0 ? item.fromBoxes : undefined);
-      setRecent((r) => r.filter((x) => x.key !== item.key));
+      // The row stays in place, without its button, until the pointer leaves the list: the next row's Undo must not slide under a second click.
+      setRecent((r) => r.map((x) => (x.key === item.key ? { ...x, undone: true } : x)));
       await changed();
     } catch (e) {
       notify.error(e);
+    } finally {
+      quickBusy.current = false;
+      setUndoing(null);
     }
   };
-  const tileAdjust = async (c: Owned, delta: number) => {
-    try {
-      await adjustCollection(c.oracleId, delta);
+  const dropUndone = () => setRecent((r) => (r.some((x) => x.undone) ? r.filter((x) => !x.undone) : r));
+  // ---- the owned grid. One change at a time, held until the grid has reloaded, so a second click
+  // cannot act on stale counts. A card whose last copy goes keeps its cell as "0 left" (a ghost)
+  // until the pointer leaves the grid, so the next card never slides under a second click.
+  const tileRun = useRef<Promise<void> | null>(null);
+  const [tileBusy, setTileBusy] = useState(false);
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  /** Runs `fn` unless another grid change is running; then a click is dropped, and an Undo (`queue`) waits its turn. */
+  const exclusive = async (fn: () => Promise<void>, queue = false) => {
+    while (tileRun.current) {
+      if (!queue) return;
+      await tileRun.current;
+    }
+    const run = (async () => {
+      setTileBusy(true);
+      try {
+        await fn();
+      } catch (e) {
+        notify.error(e);
+      } finally {
+        tileRun.current = null;
+        setTileBusy(false);
+      }
+    })();
+    tileRun.current = run;
+    await run;
+  };
+  const tileAdjust = (c: Owned, delta: number) =>
+    exclusive(async () => {
+      const prev = all[all.findIndex((x) => x.oracleId === c.oracleId) - 1]?.oracleId ?? null;
+      const res = await adjustCollection(c.oracleId, delta);
+      if (res.qty === 0) setGhosts((g) => [...g.filter((x) => x.card.oracleId !== c.oracleId), { card: { ...c, qty: 0, inBoxes: 0 }, prev }]);
       await changed();
-    } catch (e) {
-      notify.error(e);
-    }
-  };
+    });
 
+  // Every owned card with the ghosts in their old cells (after the card that came before them).
+  const all = useMemo(() => withGhosts(collection?.cards ?? [], ghosts), [collection, ghosts]);
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const cards = collection?.cards ?? [];
-    return needle ? cards.filter((c) => c.name.toLowerCase().includes(needle)) : cards;
-  }, [collection, q]);
+    return needle ? all.filter((c) => c.name.toLowerCase().includes(needle)) : all;
+  }, [all, q]);
 
   return (
     <div className="flex h-full" data-testid="collection-page">
@@ -268,14 +342,20 @@ export default function CollectionPage() {
             )
           )}
           {recent.length > 0 && (
-            <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="quick-recent">
+            <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="quick-recent" onPointerLeave={dropUndone}>
               {recent.map((r) => (
-                <li key={r.key} className="flex items-center gap-2">
+                <li key={r.key} className={`flex items-center gap-2 ${r.undone ? 'text-smoke line-through' : ''}`} data-undone={r.undone || undefined}>
                   <span className="min-w-0 flex-1 truncate">
                     <span className="text-smoke">{r.qty > 0 ? `+${r.qty}` : `\u2212${-r.qty}`}</span> {r.card.name}
                     {r.fromBoxes.length > 0 && <span className="text-smoke" data-testid="quick-from-box"> from {r.fromBoxes.map((b) => b.name).join(', ')}</span>}
                   </span>
-                  <button type="button" className="text-brass hover:underline" onClick={() => void undo(r)} data-testid="quick-undo">Undo</button>
+                  {r.undone ? (
+                    <span className="text-smoke no-underline" data-testid="quick-undone">Undone</span>
+                  ) : (
+                    <button type="button" className="text-brass hover:underline disabled:text-smoke disabled:no-underline" disabled={undoing !== null} onClick={() => void undo(r)} data-testid="quick-undo">
+                      {undoing === r.key ? 'Undoing' : 'Undo'}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -352,10 +432,10 @@ export default function CollectionPage() {
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 px-6 pb-3 pt-6">
           <h2 className="text-[1.35rem]">Cards you own</h2>
-          <input className="field ml-auto w-[18rem]" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find by name" aria-label="Find an owned card by name" />
+          <input className="field ml-auto w-[18rem]" value={q} onChange={(e) => { setQ(e.target.value); setGhosts([]); }} placeholder="Find by name" aria-label="Find an owned card by name" />
         </div>
-        <div className="min-h-0 flex-1 px-3">
-          {collection && collection.count === 0 ? (
+        <div className="min-h-0 flex-1 px-3" onPointerLeave={() => setGhosts((g) => (g.length ? [] : g))}>
+          {collection && collection.count === 0 && all.length === 0 ? (
             <div className="mx-3 max-w-[40rem] rounded-md border border-dashed border-slag p-6 text-ash" data-testid="collection-empty">
               <p className="display text-[1.1rem] text-bone">No cards saved yet</p>
               <p className="mt-1">Paste an export on the left. Until then, “Owned” filters and “only cards in my collection” find nothing.</p>
@@ -371,7 +451,7 @@ export default function CollectionPage() {
               resetKey={q}
               testId="collection-grid"
               empty={collection ? <p className="p-4 text-ash">No owned card has that name.</p> : null}
-              render={(c) => <OwnedTile card={c} onAdjust={(card, d) => void tileAdjust(card, d)} />}
+              render={(c) => <OwnedTile card={c} busy={tileBusy} onAdjust={(card, d) => void tileAdjust(card, d)} />}
             />
           )}
         </div>
