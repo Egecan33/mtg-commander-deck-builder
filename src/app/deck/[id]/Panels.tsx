@@ -844,7 +844,7 @@ export function ImprovePanel({
           )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" className="btn btn-primary" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('improve')} data-testid="improve-run">
+          <button type="button" className="btn" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('improve')} data-testid="improve-run">
             {busy === 'improve' ? 'Working it out' : 'Find improvements'}
           </button>
           <button type="button" className="btn" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('swaps')} title="A few stand-alone swaps for the weakest cards" data-testid="suggest-swaps">
