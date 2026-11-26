@@ -70,6 +70,18 @@ describe('conflicts in analyze, browse and builds', () => {
     expect(browseCards(krenko(), { q: 'arcane signet' }).heldBy).toEqual({});
   });
 
+  it('no "!" on a singleton card the deck already holds while it still has a free copy', () => {
+    // Two Sol Rings: the built Elves deck holds one, the other is free and this deck already has it.
+    const cards = new Map<string, number>([[id('Sol Ring'), 2], [id('Arcane Signet'), 1]]);
+    setCollectionCards('physical', cards);
+    const deck = krenko([['Sol Ring', 1]]);
+    expect(analyzeResponse(deck).conflicts.cards).toEqual({});
+    // The browser and the commander pages ask about the card as it stands in the deck: a singleton card cannot take a second copy.
+    expect(browseCards(deck, { q: 'sol ring' }).heldBy).toEqual({});
+    // A deck without it still sees the free copy, so no "!" either.
+    expect(browseCards(krenko(), { q: 'sol ring' }).heldBy).toEqual({});
+  });
+
   it('an owned-only free-only build never picks Sol Ring', () => {
     const r = runBuild(krenko(), 'auto', { ownedOnly: true, freeOnly: true, seed: 3 }) as BuildDeckResponse;
     const ids = r.deck.main.map((e) => e.oracleId);

@@ -1,5 +1,5 @@
 import type { HeldBy } from '@/app/lib/api';
-import { isBasicLand } from '@/engine/rules';
+import { copyLimit, isBasicLand } from '@/engine/rules';
 import { availableCopies, conflicts, type ConflictReport, type Holder } from '@/engine/collection/conflicts';
 import type { Deck } from '@/engine/types';
 import { activeCollectionId, ownedQuantities, ownedSet } from './collection';
@@ -105,11 +105,16 @@ export function heldByFor(deck: Deck, ids: Iterable<string>): HeldBy {
   for (const c of deck.commanders) count(c, 1);
   if (deck.companion) count(deck.companion, 1);
   for (const e of deck.main) count(e.oracleId, e.qty);
+  const cards = getCardDb();
   for (const id of ids) {
     if (out[id]) continue;
     const free = available.get(id);
     if (free === undefined) continue;
-    const need = (copies.get(id) ?? 0) + 1;
+    // One more copy only where the deck may hold one more: a singleton card already in the deck is
+    // asked about the copies it has (the deck's own conflicts say the same), not a second copy.
+    const have = copies.get(id) ?? 0;
+    const card = cards.get(id);
+    const need = card && have >= copyLimit(card) ? have : have + 1;
     if ((totals.get(id) ?? 0) < need || free >= need) continue;
     const names = holders.filter((h) => !self.has(h.id) && (h.cards.get(id) ?? 0) >= 1).map((h) => h.name);
     if (names.length > 0) out[id] = names;

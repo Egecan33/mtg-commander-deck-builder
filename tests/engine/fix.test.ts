@@ -294,7 +294,8 @@ describe('fixDeck', () => {
       expect(objected.length).toBeGreaterThan(0);
       for (const p of objected) expect(r.changes.some((c) => c.out === p.out && c.in === p.in), `${db.get(p.out)?.name} -> ${db.get(p.in)?.name}`).toBe(false);
     }
-  });
+    // About 3 s alone; the full suite in parallel pushes it past the 5 s default.
+  }, 20_000);
 
   it('a part fixed alone takes only its own kind of card', () => {
     // Mana asks for lands; curve asks for cheap spells, never a land, even where a land would raise the rating.
