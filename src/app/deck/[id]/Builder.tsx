@@ -769,6 +769,16 @@ export function Builder({ id }: { id: string }) {
       void _drop;
       return to === 'standardbrawl' ? { ...rest, arenaFormat: 'standardbrawl' } : rest;
     });
+    // Standard Brawl never asked for play data; Brawl does, and a switch is the only time it has none yet.
+    // Answers 'off' at once unless EDHREC is switched on under Card data.
+    if (to === 'brawl' && deck.commanders.length) {
+      loadEdhrec(deck.commanders, deck.targetBracket).then(
+        (r) => {
+          if (r.status === 'ready') setRev((n) => n + 1);
+        },
+        () => {},
+      );
+    }
     const where = to === 'standardbrawl' ? 'Standard Brawl' : 'Brawl';
     notify.info(
       total > full
