@@ -10,7 +10,7 @@ const CARD_RATIO = 88 / 63;
  * the DOM, so 32,000 cards scroll like 30. Items load through `ensure` as their rows come into view.
  */
 export function VirtualGrid<T>({
-  count, itemAt, ensure, render, keyOf, minTile = 128, gap = 10, resetKey, testId, empty,
+  count, itemAt, ensure, render, keyOf, minTile = 128, gap = 10, extra = 0, resetKey, testId, empty,
 }: {
   count: number;
   itemAt: (index: number) => T | undefined;
@@ -19,6 +19,8 @@ export function VirtualGrid<T>({
   keyOf: (item: T) => Key;
   minTile?: number;
   gap?: number;
+  /** Pixels each tile adds under its card image (a caption row). */
+  extra?: number;
   /** Scrolls back to the top when it changes (a new search, not a re-score). */
   resetKey?: string;
   testId?: string;
@@ -53,7 +55,7 @@ export function VirtualGrid<T>({
 
   const cols = Math.max(1, Math.floor((width + gap) / (minTile + gap)));
   const tileW = width > 0 ? (width - gap * (cols - 1)) / cols : minTile;
-  const rowH = tileW * CARD_RATIO + gap;
+  const rowH = tileW * CARD_RATIO + extra + gap;
   const rows = Math.ceil(count / cols);
   const first = Math.max(0, Math.floor(scrollTop / rowH) - 2);
   const last = Math.min(rows - 1, Math.ceil((scrollTop + viewH) / rowH) + 2);
