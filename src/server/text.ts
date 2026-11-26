@@ -1,10 +1,10 @@
 import type { ExportResponse, ImportResponse } from '@/app/lib/api';
 import { notOnArena } from './arena';
-import { isCommanderEligible } from '@/engine/rules';
+import { canLead } from '@/engine/rules';
 import { exportArenaDecklist, exportDecklist, parseDecklist } from '@/engine/text';
 import type { Bracket, Deck } from '@/engine/types';
 import { cardLookup } from './cards';
-import { deckCollection, deckFormat, ownedSetOf } from './collection';
+import { activeCollectionId, collectionFormat, deckCollection, deckFormat, ownedSetOf } from './collection';
 import { MAX_NAME } from './decks';
 import { HttpError, type Body } from './http';
 import { getCardDb } from './store';
@@ -19,7 +19,9 @@ export function importText(body: Body): ImportResponse {
   const bracket = body.targetBracket ?? 3;
   if (typeof bracket !== 'number' || ![1, 2, 3, 4, 5].includes(bracket)) throw new HttpError(400, 'targetBracket must be 1 to 5.');
   const db = getCardDb();
-  const parsed = parseDecklist(body.text, db, { isCommanderEligible });
+  // A list without sections: its commander is spotted by the active collection's format (Brawl: planeswalkers too).
+  const format = collectionFormat(activeCollectionId());
+  const parsed = parseDecklist(body.text, db, { isCommanderEligible: (c) => canLead(c, format) });
   const name =
     typeof body.name === 'string' && body.name.trim()
       ? body.name.trim().slice(0, MAX_NAME)

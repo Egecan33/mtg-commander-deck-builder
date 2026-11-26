@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { AnalyzeResponse, CardsResponse, CommandersResponse, DeckResponse, DecksResponse, PartnersResponse } from '@/app/lib/api';
+import type { AnalyzeResponse, CardsResponse, CommandersResponse, DeckResponse, DecksResponse, ImportResponse, PartnersResponse } from '@/app/lib/api';
 import * as analyzeRoute from '@/app/api/analyze/route';
 import * as cardsRoute from '@/app/api/cards/route';
 import * as commandersRoute from '@/app/api/commanders/route';
 import * as deckRoute from '@/app/api/decks/[id]/route';
+import * as importRoute from '@/app/api/import/route';
 import * as partnersRoute from '@/app/api/partners/route';
 import * as decksRoute from '@/app/api/decks/route';
 import type { Deck } from '@/engine/types';
@@ -106,6 +107,16 @@ describe('decks belong to a collection', () => {
     expect(late.deck.collectionId).toBe('arena');
     expect(late.deck.name).toBe('Renamed');
     expect(getDeck(deckId)!.deck.collectionId).toBe('arena');
+  });
+
+  it('recognises a planeswalker commander in a list without sections while Arena is active', async () => {
+    const text = '1 Llanowar Elves\n1 Cultivate\n10 Forest\n\n1 Tyvar Kell\n';
+    setActiveCollection('arena');
+    const arena = await ok<ImportResponse>(send(importRoute.POST, 'POST', '/api/import', { text }));
+    expect(arena.deck.commanders).toEqual([id('Tyvar Kell')]);
+    setActiveCollection('physical');
+    const paper = await ok<ImportResponse>(send(importRoute.POST, 'POST', '/api/import', { text }));
+    expect(paper.deck.commanders).toEqual([]);
   });
 
   it('lets only a collection\'s own built decks hold its copies', async () => {
