@@ -676,6 +676,12 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
         expect(Number.isFinite(qs.value), `${name} B${target}`).toBe(true);
         if (name !== 'partial') expect(qs.value, `${name} B${target}`).toBe(0);
         else expect(qs.value, `${name} B${target}`).toBeGreaterThan(0);
+        // A quality of 0 still says why (AGENTS rule 4); there is nothing to swap yet, so it is advice.
+        if (name === 'commander only') {
+          expect(qs.fixes, `${name} B${target}`).toEqual([
+            { text: "No spells yet: card quality is rated on the deck's nonland cards.", filter: null, actionable: false },
+          ]);
+        }
       }
     }
   });

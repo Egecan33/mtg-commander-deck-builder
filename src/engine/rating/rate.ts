@@ -414,7 +414,10 @@ function qualityPart(f: Facts): Part {
     if (prev) prev.qty += qty;
     else rated.set(card.oracleId, { name: card.name, value, qty, roles: features.roles });
   }
-  if (n === 0) return { value: 0, issues: [] };
+  if (n === 0) {
+    // Nothing to rate yet, and nothing to swap: the 0 still says why.
+    return { value: 0, issues: [{ text: "No spells yet: card quality is rated on the deck's nonland cards.", filter: null, actionable: false, loss: 1 }] };
+  }
   const value = clamp01(sum / n / expected);
   const issues: Issue[] = [];
   if (value < QUALITY_FIX_BELOW) {
