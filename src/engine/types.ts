@@ -222,3 +222,21 @@ export interface DeckNetwork {
 export type CorePackageId = 'ramp' | 'draw' | 'removal' | 'protection';
 export type PackageId = CorePackageId | `theme:${string}` | `fn:${string}`;
 export type PackageKind = 'core' | 'theme' | 'functional';
+export interface PlanMove { role: Role; delta: number; reason: string }   // delta as applied to the band's bottom
+export interface PackageCohesion { linked: number; of: number }
+export interface PlannedPackage {
+  id: PackageId; name: string; kind: PackageKind;
+  target: number;              // >= 8, no maximum
+  count: number;               // the deck's cards in it, overlaps counted in every package
+  cards: string[];             // those cards' oracle ids
+  reason: string; moves: PlanMove[]; pinned: boolean;
+  wipes: { lo: number; hi: number; count: number; reason: string } | null;   // Removal only
+  cohesion: PackageCohesion | null;
+}
+export interface PackageOffer { id: PackageId; name: string; kind: PackageKind; why: string | null; count: number }
+export interface PackagePlan {
+  packages: PlannedPackage[];                       // core four first, then theme, then functional
+  lands: { target: number; count: number; reason: string; pinned: boolean };
+  offers: PackageOffer[];
+  dropped: { id: PackageId; name: string; slots: number }[];
+}

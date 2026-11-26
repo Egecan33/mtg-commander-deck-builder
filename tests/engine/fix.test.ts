@@ -291,10 +291,12 @@ describe('fixDeck', () => {
 
   it('a part fixed alone takes only its own kind of card', () => {
     // Mana asks for lands; curve asks for cheap spells, never a land, even where a land would raise the rating.
-    const mana = fixDeck(precon, ctx, opts(), 'mana');
+    // (Under the plan's land target the precon has no land swap left that keeps its rating; the cEDH list, 24.9 lands against 28, does.)
+    const mana = fixDeck(fixtureDeck('cedh', 5), ctx, opts(), 'mana');
     expect(mana.changes.length).toBeGreaterThan(0);
     for (const c of mana.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(true);
-    const curve = fixDeck(fixtureDeck('cedh', 5), ctx, opts(), 'curve');
+    // (The cEDH list moved with the plan's land target and ramp bands and has no curve swap left; the upgraded list stands in.)
+    const curve = fixDeck(fixtureDeck('upgraded', 3), ctx, opts(), 'curve');
     expect(curve.changes.length).toBeGreaterThan(0);
     for (const c of curve.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(false);
     for (const r of [mana, curve]) expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
@@ -391,8 +393,9 @@ describe('fixDeck', () => {
     const deck = swapInto(talrand, gcs, (id) => !db.get(id)!.gameChanger);
     const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
     expect(fixes.length).toBeGreaterThan(0);
-    // (The cards that connect to nothing are a theme fix since the network; they are not what this test is about.)
-    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/connect to nothing/.test(f.text))).toBe(false);
+    // (The cards that connect to nothing are a theme fix since the network, and a one-card graveyard answer a role fix
+    // since the plan's numbers moved the auto-build; neither is what this test is about.)
+    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/connects? to nothing|graveyard/i.test(f.text))).toBe(false);
     const r = fixDeck(deck, ctx, opts());
     const path = ratingsAlong(deck, r.changes);
     expect(path.some((x, i) => x < (i === 0 ? r.ratingBefore : path[i - 1]))).toBe(true); // it dipped
