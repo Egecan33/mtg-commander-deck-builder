@@ -743,6 +743,8 @@ export function Builder({ id }: { id: string }) {
   const detailEntry = detail ? entryOf(deck, detail) : undefined;
   const detailIsCommander = !!detail && deck.commanders.includes(detail);
   const held = analysis?.conflicts.cards ?? NO_HELD;
+  const showCombos = () =>
+    document.getElementById('deck-combos')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   // In the deck: the deck's own conflicts. Outside it: what the browser or a proposal said about adding it.
   const detailHeld = detail ? (inDeck(deck, detail) ? held[detail] : heldHints[detail]) : undefined;
   // Boxes holding the copy this deck card needs: "I took it out of the … box".
@@ -1028,6 +1030,9 @@ export function Builder({ id }: { id: string }) {
           held={held}
           notice={notice}
           result={fixResult}
+          combos={analysis?.bracket.combos ?? null}
+          comboHeld={heldHints}
+          onPutIn={openCard}
           onRemove={remove}
           onAdd={add}
           onLock={lock}
@@ -1084,7 +1089,7 @@ export function Builder({ id }: { id: string }) {
                 })}
               />
             ) : panel === 'bracket' ? (
-              <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} />
+              <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
             ) : panel === 'themes' ? (
               <ThemesPanel
                 analysis={analysis}

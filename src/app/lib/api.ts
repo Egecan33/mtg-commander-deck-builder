@@ -296,6 +296,8 @@ export interface DeckTile {
   cardCount: number;
   rating: number; legal: boolean;
   floor: number; playsLike: Bracket;
+  /** Complete combos in the deck. */
+  combos: number;
   /** The cards are really assembled in this deck (see `Deck.built`). */
   built: boolean;
 }

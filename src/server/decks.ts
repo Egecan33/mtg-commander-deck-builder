@@ -114,7 +114,7 @@ export function deleteDeck(id: string): boolean {
   return getDb().prepare('DELETE FROM decks WHERE id = ?').run(id).changes > 0;
 }
 
-type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'legal' | 'floor' | 'playsLike'>;
+type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'legal' | 'floor' | 'playsLike' | 'combos'>;
 
 /** Saved decks, newest first, with what a tile shows. Ratings are computed once per deck version. */
 export function listDecks(): DeckTile[] {
@@ -137,7 +137,7 @@ export function listDecks(): DeckTile[] {
     if (!n) {
       const rating = rateDeck(deck, ctx);
       const bracket = analyzeBracket(deck, ctx);
-      n = { cardCount: deckSize(deck), rating: rating.rating, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike };
+      n = { cardCount: deckSize(deck), rating: rating.rating, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
       numbers.set(key, n);
     }
     const lookup = cardLookup(deck.commanders);

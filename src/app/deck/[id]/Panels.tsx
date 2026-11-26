@@ -535,43 +535,7 @@ export function PutItIn({
 // ---------------------------------------------------------------------------------------------
 // Bracket
 
-function ComboRow({ found, lookup, onOpen }: { found: FoundCombo; lookup: CardLookup; onOpen: (id: string) => void }) {
-  const missing = new Set(found.missing);
-  return (
-    <li className="rounded-md border border-slag bg-soot p-2.5" data-testid="combo">
-      <div className="flex flex-wrap gap-2 pb-1">
-        {found.combo.cards.map((c) => (
-          <Thumb key={c.oracleId} id={c.oracleId} lookup={lookup} onOpen={onOpen} width={58} dim={missing.has(c.oracleId)} label={missing.has(c.oracleId) ? 'missing' : c.mustBeCommander ? 'commander' : undefined} />
-        ))}
-      </div>
-      <p className="mt-1.5 text-[0.84rem]">{found.combo.produces.slice(0, 3).join(', ') || 'Combo'}</p>
-      <p className="text-[0.76rem] text-smoke">
-        {[found.twoCard ? 'two cards' : `${found.combo.cards.length} cards`, found.early ? 'can come down early' : null, `needs ${found.combo.manaValueNeeded} mana`, found.relevant ? null : 'does not win on its own']
-          .filter(Boolean)
-          .join(', ')}
-      </p>
-    </li>
-  );
-}
-
-function ComboList({ title, items, lookup, onOpen, none }: { title: string; items: FoundCombo[]; lookup: CardLookup; onOpen: (id: string) => void; none: string }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? items : items.slice(0, 5);
-  return (
-    <Section title={title} aside={items.length ? String(items.length) : undefined}>
-      {items.length === 0 ? <p className="text-ash">{none}</p> : (
-        <>
-          <ul className="grid gap-2">{shown.map((f) => <ComboRow key={f.combo.id} found={f} lookup={lookup} onOpen={onOpen} />)}</ul>
-          {items.length > 5 && (
-            <button type="button" className="btn btn-sm btn-quiet mt-2" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${items.length}`}</button>
-          )}
-        </>
-      )}
-    </Section>
-  );
-}
-
-export function BracketPanel({ analysis, deck, lookup, onOpen }: { analysis: AnalyzeResponse; deck: Deck; lookup: CardLookup; onOpen: (id: string) => void }) {
+export function BracketPanel({ analysis, deck, lookup, onOpen, onShowCombos }: { analysis: AnalyzeResponse; deck: Deck; lookup: CardLookup; onOpen: (id: string) => void; onShowCombos: () => void }) {
   const b = analysis.bracket;
   const [allViolations, setAllViolations] = useState(false);
   const violations = allViolations ? b.violationsOfTarget : b.violationsOfTarget.slice(0, 6);
@@ -637,8 +601,14 @@ export function BracketPanel({ analysis, deck, lookup, onOpen }: { analysis: Ana
         )}
       </Section>
 
-      <ComboList title="Combos in the deck" items={b.combos.included} lookup={lookup} onOpen={onOpen} none="No complete combo in the list." />
-      <ComboList title="One card away" items={b.combos.oneAway} lookup={lookup} onOpen={onOpen} none="No combo is a single card short." />
+      <Section title="Combos">
+        <p className="text-[0.86rem]" data-testid="combo-summary">
+          {b.combos.included.length === 0 ? 'No combo in the deck' : `${b.combos.included.length} ${b.combos.included.length === 1 ? 'combo' : 'combos'} in the deck`}
+          {b.combos.oneAway.length > 0 && `, ${b.combos.oneAway.length} one card away`}
+          {'. '}
+          <button type="button" className="text-brass hover:underline" onClick={onShowCombos} data-testid="combo-summary-link">Show them in the deck</button>
+        </p>
+      </Section>
     </div>
   );
 }
