@@ -9,7 +9,7 @@ import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
-  type AnalyzeResponse, type CardLookup, type ClientCard, type HeldBy, type ScoredCard,
+  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type ConflictReport, type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
@@ -29,6 +29,21 @@ const PANELS: { id: PanelId; label: string }[] = [
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
+
+/** The deck's conflicts without one holder (a box just linked to this deck), matched by its id; cards it was the only holder of drop out. */
+function withoutHolderId(report: ConflictReport, holderId: string): ConflictReport {
+  const holder = report.byHolder.find((h) => h.holderId === holderId);
+  if (!holder) return report;
+  const cards = { ...report.cards };
+  for (const oracleId of holder.oracleIds) {
+    const names = [...(cards[oracleId] ?? [])];
+    const i = names.indexOf(holder.name); // one entry per holder: a same-name box keeps its own
+    if (i >= 0) names.splice(i, 1);
+    if (names.length) cards[oracleId] = names;
+    else delete cards[oracleId];
+  }
+  return { cards, byHolder: report.byHolder.filter((h) => h.holderId !== holderId) };
+}
 
 /** `map` without the holder `name` (a box just linked to this deck); cards it was the only holder of drop out. */
 function withoutHolder(map: HeldBy, name: string): HeldBy {
@@ -72,6 +87,8 @@ export function Builder({ id }: { id: string }) {
   const [heldHints, setHeldHints] = useState<HeldBy>({});
   // Is a box of the active collection already linked to this deck (then no second box is offered).
   const [boxLinked, setBoxLinked] = useState<boolean | null>(null);
+  // The active collection's boxes as last read (two boxes of one product share a holder name).
+  const boxes = useRef<BoxInfo[]>([]);
   const [linking, setLinking] = useState(false);
   // `<holderId>|<oracleId>` while "I took it out" runs, until the analysis after it arrives.
   const [takingOut, setTakingOut] = useState<string | null>(null);
@@ -119,7 +136,10 @@ export function Builder({ id }: { id: string }) {
   useEffect(() => {
     const ctrl = new AbortController();
     getBoxes(ctrl.signal).then(
-      (res) => setBoxLinked(res.boxes.some((b) => b.deckId === id)),
+      (res) => {
+        boxes.current = res.boxes;
+        setBoxLinked(res.boxes.some((b) => b.deckId === id));
+      },
       (e) => {
         if (!isAbort(e)) setBoxLinked(false);
       },
@@ -425,11 +445,18 @@ export function Builder({ id }: { id: string }) {
     try {
       await linkBox(match.boxId, id);
       setBoxLinked(true);
+      boxes.current = boxes.current.map((b) => (b.id === match.boxId ? { ...b, deckId: id } : b));
       // That box no longer counts against this deck: drop it from the "!" already on screen, then analyse again.
+      // The summary knows holders by id. The "!" of other cards only carry names, and another box of
+      // the same product still counts here, so its name stays until those cards are seen again.
+      setAnalysis((a) => (a ? { ...a, conflicts: withoutHolderId(a.conflicts, `box:${match.boxId}`) } : a));
       const gone = `${match.name} box`;
-      setHeldHints((h) => withoutHolder(h, gone));
-      setProposals((p) => (p ? { ...p, heldBy: withoutHolder(p.heldBy, gone) } : p));
-      setReplacing((r) => (r?.heldBy ? { ...r, heldBy: withoutHolder(r.heldBy, gone) } : r));
+      const twin = boxes.current.some((b) => b.id !== match.boxId && `${b.name} box` === gone && b.sealed > 0 && b.deckId !== id);
+      if (!twin) {
+        setHeldHints((h) => withoutHolder(h, gone));
+        setProposals((p) => (p ? { ...p, heldBy: withoutHolder(p.heldBy, gone) } : p));
+        setReplacing((r) => (r?.heldBy ? { ...r, heldBy: withoutHolder(r.heldBy, gone) } : r));
+      }
       setRev((n) => n + 1);
       notify.info(`This deck is now your ${match.name} box. Cards still sealed in it no longer count as taken here.`, { label: 'Undo', run: () => void unlinkMatch(match) });
     } catch (e) {
