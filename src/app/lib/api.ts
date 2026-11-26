@@ -23,6 +23,14 @@
  *        exactly these two). Unknown commander or partner: 404; the same commander twice or a pair that cannot be one:
  *        400. `bracket` 1-5 (default 3). Cached EDHREC data only (`peekEdhrec`): never a request, and the EDHREC fields
  *        (`edhrecDecks`, `edhrecThemes`) are absent when nothing is cached.
+ * GET  /api/commander/:slug/recs?with&bracket&budget&owned&free -> CommanderRecsResponse
+ *        Card recommendations in EDHREC's sections, scored by the app's own scorer for a deck of just the commander(s)
+ *        at `bracket` (one cached scoring pass per commander and bracket; the filters only narrow it). Sections, in
+ *        order: new (first printed in the two newest sets), synergy, top, game-changers (Bracket 3-5 only), owned,
+ *        then one per card type; each lists its first 100 cards and a `total`, and a headline section that comes out
+ *        empty says why in `empty`. `budget` any|under-5|under-1 (else 400), `owned=1` only the collection,
+ *        `free=1` (with `owned`) only free copies. Forge numbers always (`synergy`, `quality`, `scores`); an `edhrec`
+ *        block on a card only when EDHREC data for this commander is already cached. Never a request.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
  * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
@@ -209,6 +217,7 @@
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
+import type { Budget } from './filters';
 import type {
   AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
@@ -317,6 +326,22 @@ export interface CommanderPageResponse {
   ownedCards: number;
   /** Saved decks with this commander among theirs; for a pair, exactly these two. */
   decks: DeckTile[];
+}
+export interface RecsQuery { bracket: Bracket; budget: Budget; ownedOnly: boolean; freeOnly: boolean }
+export type RecTypeId = 'creatures' | 'instants' | 'sorceries' | 'utility-artifacts' | 'mana-artifacts' | 'enchantments' | 'planeswalkers' | 'utility-lands' | 'lands' | 'other';
+export type RecSectionId = 'new' | 'synergy' | 'top' | 'game-changers' | 'owned' | RecTypeId;
+export interface RecCard {
+  oracleId: string;
+  /** 0-100, Forge */
+  synergy: number;
+  /** 0-100, Forge */
+  quality: number;
+  edhrec?: { inclusion: number; decks: number; lift: number | null };
+}
+export interface RecSection { id: RecSectionId; title: string; total: number; cards: RecCard[]; note?: string; empty?: string }
+export interface CommanderRecsResponse {
+  commanders: string[]; query: RecsQuery; edhrec: EdhrecStatus; sections: RecSection[];
+  scores: Record<string, CardScore>; cards: CardLookup; heldBy: HeldBy;
 }
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
@@ -652,6 +677,13 @@ export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal
   );
 export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket }, signal?: AbortSignal) =>
   call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query(o)}`, undefined, signal);
+export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
+  call<CommanderRecsResponse>(
+    'GET',
+    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined })}`,
+    undefined,
+    signal,
+  );
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 
