@@ -73,6 +73,18 @@ describe('Arena rarity and printing', () => {
     expect(index.get('o-1')?.printing).toEqual({ set: 'FDN', number: '200' });
   });
 
+  it('prefers, at the cheapest rarity, a printing Arena has an id for over a newer one without', () => {
+    const index = createArenaIndex();
+    index.add(printing('ltc', '301', 'common', ['paper', 'arena'], '2023-06-23', { arena_id: 103830 }));
+    index.add(printing('frc', '22', 'common', ['paper', 'arena'], '2026-10-02'));
+    index.add(printing('eld', '333', 'common', ['paper', 'arena'], '2019-10-04', { arena_id: 70466 }));
+    expect(index.get('o-1')?.printing).toEqual({ set: 'LTC', number: '301' });
+    // A card whose only Arena printing has no id is still on Arena (Scryfall says so).
+    const lone = createArenaIndex();
+    lone.add(printing('p02', '135', 'common', ['paper', 'arena'], '1998-06-24'));
+    expect(lone.get('o-1')).toEqual({ rarity: 'common', printing: { set: 'P02', number: '135' } });
+  });
+
   it('counts an Arena-only printing with special rarity as mythic, below which a real rarity wins', () => {
     const index = createArenaIndex();
     index.add(printing('sta', '10', 'special', ['arena'], '2021-04-23'));

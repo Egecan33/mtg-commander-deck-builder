@@ -27,11 +27,12 @@ export interface ArenaInfo { rarity: ArenaRarity; printing: { set: string; numbe
 
 /**
  * Collects, from Scryfall's default-cards printings, each card's cheapest printing on MTG Arena
- * (`arena` in `games`): the lowest rarity, the newest release among those on a tie. Arena wildcards
+ * (`arena` in `games`): the lowest rarity; among those, one with an `arena_id` first, then the
+ * newest release. Arena wildcards
  * only craft their own rarity, so that printing is what the budget counts and what the export names.
  */
 export function createArenaIndex(): { add(printing: any): void; get(oracleId: string): ArenaInfo | null } {
-  const best = new Map<string, ArenaInfo & { released: string }>();
+  const best = new Map<string, ArenaInfo & { released: string; known: boolean }>();
   return {
     add(p) {
       if (!Array.isArray(p?.games) || !p.games.includes('arena')) return;
@@ -39,10 +40,13 @@ export function createArenaIndex(): { add(printing: any): void; get(oracleId: st
       const rarity = arenaRarityOf(p.rarity);
       if (typeof oracleId !== 'string' || !rarity || typeof p.set !== 'string' || typeof p.collector_number !== 'string') return;
       const released = typeof p.released_at === 'string' ? p.released_at : '';
+      // A printing Arena has an id for is one its import surely knows; Scryfall lists a few without.
+      const known = typeof p.arena_id === 'number';
       const prev = best.get(oracleId);
       const cheaper = !prev || ORDER.indexOf(rarity) < ORDER.indexOf(prev.rarity);
-      const newer = !!prev && rarity === prev.rarity && released > prev.released;
-      if (cheaper || newer) best.set(oracleId, { rarity, printing: { set: arenaSetCode(p.set), number: p.collector_number }, released });
+      const same = !!prev && rarity === prev.rarity;
+      const better = same && (known !== prev.known ? known : released > prev.released);
+      if (cheaper || better) best.set(oracleId, { rarity, printing: { set: arenaSetCode(p.set), number: p.collector_number }, released, known });
     },
     get(oracleId) {
       const hit = best.get(oracleId);
