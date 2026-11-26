@@ -17,8 +17,10 @@ import { isAbort } from '@/app/lib/ui';
 import { Banner } from './Banner';
 import { AverageDeckTab } from './AverageDeckTab';
 import { ChartsTab } from './ChartsTab';
+import { CombosTab } from './CombosTab';
 import { DecksTab } from './DecksTab';
 import { REC_GROUPS, REC_SORTS, RecsTab } from './RecsTab';
+import { SimilarTab } from './SimilarTab';
 import { joinNames, shellDeck } from './shell';
 import { useAverageDeck } from './useAverageDeck';
 
@@ -185,7 +187,8 @@ export function CommanderPage({ slug }: { slug: string }) {
         {tab === 'decks' && <DecksTab page={page} name={name} onBuild={() => void create('build')} />}
         {tab === 'deck' && <AverageDeckTab avg={avg} name={name} />}
         {tab === 'charts' && <ChartsTab avg={avg} name={name} bracket={q.bracket} />}
-        {(tab === 'combos' || tab === 'similar') && <EmptyState message="Coming in the next step." />}
+        {tab === 'combos' && <CombosTab slug={slug} withSlug={withSlug} q={q} name={name} tick={tick} />}
+        {tab === 'similar' && <SimilarTab slug={slug} withSlug={withSlug} q={q} name={name} />}
       </div>
     </div>
   );
