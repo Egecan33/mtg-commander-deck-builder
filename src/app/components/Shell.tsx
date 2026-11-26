@@ -64,7 +64,7 @@ interface CollectionsValue {
   collections: CollectionInfo[];
   active: CollectionInfo | null;
   /** Makes another collection the active one; every page then reloads its data. */
-  switchTo: (id: string) => Promise<void>;
+  switchTo: (id: string, why?: string) => Promise<void>;
   /** Re-reads sizes after a page changed a collection. */
   refresh: () => Promise<void>;
   arena: ArenaStatus | null;
@@ -253,13 +253,14 @@ export function Shell({ children }: { children: ReactNode }) {
     arenaBusy,
     syncArena: () => runArenaSync(false),
     readArenaFull,
-    switchTo: async (id) => {
+    switchTo: async (id, why) => {
       try {
         const list = (await setActiveCollection(id)).collections;
         setCollections(list);
         setOwnedEpoch((n) => n + 1);
         const now = list.find((c) => c.active);
-        if (now) notify.info(`Using the ${now.name} collection: ${now.count.toLocaleString('en-US')} different cards`);
+        if (why) notify.info(why);
+        else if (now) notify.info(`Using the ${now.name} collection: ${now.count.toLocaleString('en-US')} different cards${now.kind === 'arena' ? ' (building for MTG Arena Brawl)' : ''}`);
       } catch (e) {
         notify.error(e);
       }
@@ -313,6 +314,11 @@ export function Shell({ children }: { children: ReactNode }) {
                     </option>
                   ))}
                 </select>
+                {activeCollection?.kind === 'arena' && (
+                  <span className="chip border-brass text-bone" title="Building for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget" data-testid="mode-brawl">
+                    Brawl
+                  </span>
+                )}
               </label>
             )}
             <div className={`${collections.length > 0 ? '' : 'ml-auto '}text-[0.78rem] text-smoke`}>

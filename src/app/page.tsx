@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ImportDialog } from './components/ImportDialog';
-import { useNotify, useStatus } from './components/Shell';
+import { useCollections, useNotify, useStatus } from './components/Shell';
 import { createDeck, deleteDeck, getDeck, imageUrl, listDecks, type ClientCard, type DeckTile } from './lib/api';
 import { BAND_VAR, bandOf, bracketName, fmtDate } from './lib/ui';
 
@@ -35,6 +35,9 @@ export default function DecksPage() {
   const router = useRouter();
   const notify = useNotify();
   const { status } = useStatus();
+  // The list shows the active collection's decks (each deck belongs to one collection).
+  const { active, collections } = useCollections();
+  const other = collections.find((c) => c.id !== active?.id) ?? null;
   const [decks, setDecks] = useState<DeckTile[] | null>(null);
   const [importing, setImporting] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -79,9 +82,11 @@ export default function DecksPage() {
     <div className="mx-auto max-w-[1500px] px-8 py-7">
       <div className="flex items-end gap-3">
         <div>
-          <h1 className="text-[2rem] leading-none">Your decks</h1>
+          <h1 className="text-[2rem] leading-none" data-testid="decks-heading">{active ? `Your ${active.name} decks` : 'Your decks'}</h1>
           <p className="mt-2 text-ash">
             {decks === null ? 'Loading decks' : decks.length === 0 ? 'Nothing here yet.' : `${decks.length} saved ${decks.length === 1 ? 'deck' : 'decks'}, newest first.`}
+            {active?.kind === 'arena' ? ' Built for MTG Arena Brawl, from cards on Arena. ' : ' '}
+            {other && <span className="text-smoke">Your {other.name} decks show when you switch the collection in the top bar.</span>}
           </p>
         </div>
         <div className="ml-auto flex gap-2">
