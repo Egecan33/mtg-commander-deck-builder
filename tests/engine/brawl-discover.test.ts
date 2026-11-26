@@ -34,7 +34,24 @@ describe('Best from collection on the Arena collection', () => {
       expect(tier.buys.length).toBe(Object.values(tier.wildcards!).reduce((a, b) => a + b, 0));
     }
     for (const r of ['common', 'uncommon', 'rare', 'mythic'] as const) expect(t.crafted.wildcards![r], r).toBeLessThanOrEqual(have[r]);
+    // More room never rates lower: owned only <= within the wildcards <= the whole Arena pool.
+    expect(t.crafted.rating).toBeGreaterThanOrEqual(t.owned.rating);
+    expect(t.unlimited.rating).toBeGreaterThanOrEqual(t.crafted.rating);
     expect(t.crafted.buys.every((id) => !isBasicLand(db.get(id)!))).toBe(true);
     expect(t.unlimited.wildcards!.mythic).toBeGreaterThan(0);
   });
+
+  it('never rates a looser tier below a tighter one, for any commander or budget', () => {
+    const tight: Wildcards = { common: 2, uncommon: 1, rare: 1, mythic: 0 };
+    const names = ['Tyvar Kell', 'Kutzil, Malamet Exemplar', 'Azusa, Lost but Seeking', 'Gyruda, Doom of Depths', 'Obosh, the Preypiercer', COMMANDER];
+    for (const name of names) {
+      const c = card(name);
+      const mine = new Set([c.oracleId, ...db.all().filter((x) => x.colorIdentity.every((k) => c.colorIdentity.includes(k)) && x.arenaRarity === 'common').map((x) => x.oracleId)]);
+      for (const budget of [tight, have]) {
+        const t = wildcardTiers(c.oracleId, ctx, mine, 3, budget);
+        expect(t.crafted.rating, `${name} crafted`).toBeGreaterThanOrEqual(t.owned.rating);
+        expect(t.unlimited.rating, `${name} unlimited`).toBeGreaterThanOrEqual(t.crafted.rating);
+      }
+    }
+  }, 120_000);
 });

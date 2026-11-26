@@ -121,11 +121,16 @@ export function wildcardTiers(
   const make = (kind: 'owned' | 'crafted' | 'unlimited', deck: Deck): TierDeck => ({
     ...tier(kind === 'owned' ? 0 : null, deck, ctx, owned), kind, wildcards: wildcardsNeeded(deck, ctx.db, owned),
   });
-  return {
-    owned: make('owned', autoBuild(shell(commander, bracket), ctx, opts(owned, true))),
-    crafted: make('crafted', autoBuild(shell(commander, bracket), ctx, opts(owned, false, { wildcards }))),
-    unlimited: make('unlimited', autoBuild(shell(commander, bracket), ctx, opts(owned, false))),
+  // Each build is greedy, so a looser tier's own build can rate below a tighter one; then the
+  // tighter tier's deck (which the looser limits also allow) is the looser tier's best.
+  const atLeast = (kind: 'crafted' | 'unlimited', built: Deck, floor: TierDeck): TierDeck => {
+    const t = make(kind, built);
+    return t.rating >= floor.rating ? t : { ...floor, cap: null, kind };
   };
+  const ownedTier = make('owned', autoBuild(shell(commander, bracket), ctx, opts(owned, true)));
+  const crafted = atLeast('crafted', autoBuild(shell(commander, bracket), ctx, opts(owned, false, { wildcards })), ownedTier);
+  const unlimited = atLeast('unlimited', autoBuild(shell(commander, bracket), ctx, opts(owned, false)), crafted);
+  return { owned: ownedTier, crafted, unlimited };
 }
 
 /**
