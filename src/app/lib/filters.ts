@@ -18,6 +18,8 @@ export interface Filters {
   ownedOnly: boolean;
   /** Use free copies only. `null`: never chosen, so the page uses its own default (on when the collection has boxes or built decks). */
   freeOnly: boolean | null;
+  /** MTG Arena decks: only what my wildcards can craft (on by default). */
+  craftOnly: boolean;
   size: TileSize;
   view: ViewMode;
   /** A page's grouping id ("role", "type", ...). Pages check it against their own options. */
@@ -35,6 +37,7 @@ export const FILTER_STORAGE_KEYS: Record<FilterKey, string> = {
   budget: 'cf-budget',
   ownedOnly: 'cf-owned-only',
   freeOnly: 'cf-free-only',
+  craftOnly: 'cf-craft-only',
   size: 'cf-view-size',
   view: 'cf-view-mode',
   groupBy: 'cf-view-group',
@@ -42,7 +45,7 @@ export const FILTER_STORAGE_KEYS: Record<FilterKey, string> = {
 };
 
 export const DEFAULT_FILTERS: Filters = {
-  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, size: 'M', view: 'grid', groupBy: '', sort: '', ready: false,
+  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, craftOnly: true, size: 'M', view: 'grid', groupBy: '', sort: '', ready: false,
 };
 
 export const BUDGETS: { id: Budget; label: string; maxUsd: number | null }[] = [
@@ -73,6 +76,7 @@ export function readFilters(storage: Pick<Storage, 'getItem'> | null): Filters {
     budget: BUDGETS.some((b) => b.id === budget) ? (budget as Budget) : DEFAULT_FILTERS.budget,
     ownedOnly: flag(get('ownedOnly')) ?? DEFAULT_FILTERS.ownedOnly,
     freeOnly: flag(get('freeOnly')),
+    craftOnly: flag(get('craftOnly')) ?? DEFAULT_FILTERS.craftOnly,
     size: size === 'S' || size === 'M' || size === 'L' ? size : DEFAULT_FILTERS.size,
     view: view === 'grid' || view === 'list' ? view : DEFAULT_FILTERS.view,
     groupBy: get('groupBy') ?? DEFAULT_FILTERS.groupBy,

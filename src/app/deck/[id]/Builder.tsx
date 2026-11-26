@@ -9,13 +9,14 @@ import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
-  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type ConflictReport, type HeldBy, type ScoredCard,
+  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import { setFilters, useFilters } from '../../lib/filters';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
   type BrowserQuery,
 } from '../../lib/ui';
+import { FormatChip, WildcardLine } from './ArenaParts';
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
 import {
@@ -60,7 +61,7 @@ function withoutHolder(map: HeldBy, name: string): HeldBy {
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
-  const { active: activeCollection, refresh: refreshCollections } = useCollections();
+  const { active: activeCollection, refresh: refreshCollections, collections, switchTo } = useCollections();
   const proxies = useProxies();
   const { status } = useStatus();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -96,6 +97,12 @@ export function Builder({ id }: { id: string }) {
   // `built` as last saved: when a save changes it, the collections are read again.
   const savedBuilt = useRef(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  // The deck's collection decides its format: an MTG Arena deck is a Brawl deck (Arena cards, wildcards).
+  const deckCollection = collections.find((c) => c.id === (deck?.collectionId ?? activeCollection?.id)) ?? null;
+  const otherCollection = collections.find((c) => c.id !== deckCollection?.id && c.kind !== deckCollection?.kind) ?? null;
+  const brawl = analysis ? analysis.format === 'brawl' : deckCollection?.kind === 'arena';
+  const { craftOnly } = useFilters();
+  const [moving, setMoving] = useState(false);
 
   const learn = useCallback((cards: CardLookup | ClientCard[]) => {
     setLookup((cur) => {
@@ -130,6 +137,17 @@ export function Builder({ id }: { id: string }) {
     );
     return () => ctrl.abort();
   }, [id, learn]);
+
+  // A deck of the other collection: that collection becomes the active one ("owned" follows the deck), once.
+  const switched = useRef(false);
+  const deckCollectionId = deck?.collectionId ?? null;
+  useEffect(() => {
+    if (switched.current || !deckCollectionId || !activeCollection || deckCollectionId === activeCollection.id) return;
+    const target = collections.find((c) => c.id === deckCollectionId);
+    if (!target) return;
+    switched.current = true;
+    void switchTo(target.id, `Switched to your ${target.name} collection: this deck belongs to it.`);
+  }, [deckCollectionId, activeCollection, collections, switchTo]);
 
   // A deck that already is a box's deck gets no "This deck is my … box" offer.
   useEffect(() => {
@@ -302,7 +320,9 @@ export function Builder({ id }: { id: string }) {
     return {
       ownedOnly: options.ownedOnly || undefined,
       freeOnly: (options.ownedOnly && freeOnly) || undefined,
-      maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
+      // A Brawl deck's budget is its wildcards ("Only what I can craft"), not dollars.
+      maxPriceUsd: !brawl && options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
+      craftableOnly: brawl ? craftOnly : undefined,
     };
   };
   const rebuild = async (mode: 'auto' | 'fill', label: string, seed?: number) => {
@@ -414,6 +434,22 @@ export function Builder({ id }: { id: string }) {
     if (filtersReady) setOptions((o) => (o.ownedOnly === storedOwnedOnly ? o : { ...o, ownedOnly: storedOwnedOnly }));
   }, [filtersReady, storedOwnedOnly]);
   const setOwnedOnly = (ownedOnly: boolean) => setFilters({ ownedOnly });
+
+  // "Move to MTG Arena / Physical": only the deck's collection changes, then that collection becomes the active one.
+  const moveTo = async (to: CollectionInfo) => {
+    if (!deck) return;
+    setMoving(true);
+    try {
+      await updateDeck(id, { ...deck, collectionId: to.id });
+      dirty.current = false;
+      switched.current = true;
+      await switchTo(to.id, `Moved to your ${to.name} collection: it is now checked as a ${to.kind === 'arena' ? 'Brawl' : 'Commander'} deck.`);
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setMoving(false);
+    }
+  };
 
   // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
   const toggleBuilt = () => {
@@ -574,6 +610,7 @@ export function Builder({ id }: { id: string }) {
           />
           <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1">
             <span className={`chip ${count === 100 ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / 100</span>
+            <FormatChip format={brawl ? 'brawl' : 'commander'} collection={deckCollection} other={otherCollection} busy={moving} onMove={(to) => void moveTo(to)} />
             {manual && (
               <button
                 type="button"
@@ -591,7 +628,7 @@ export function Builder({ id }: { id: string }) {
               <button
                 type="button"
                 className={`chip ${rating.legal ? 'border-band-top text-band-top' : broken.length ? 'border-band-low text-band-low' : ''}`}
-                title={rating.legal ? 'Follows every Commander deck-building rule' : rating.violations.map((v) => v.message).join('\n')}
+                title={rating.legal ? `Follows every ${brawl ? 'MTG Arena Brawl' : 'Commander'} deck-building rule` : rating.violations.map((v) => v.message).join('\n')}
                 onClick={() => setPanel('rating')}
                 data-testid="legality"
               >
@@ -621,6 +658,7 @@ export function Builder({ id }: { id: string }) {
               {saveState === 'saving' || deck !== settled ? 'Saving' : saveState === 'failed' ? 'Not saved' : dirty.current ? 'Saved' : ''}
             </span>
           </div>
+          {analysis?.arena && <WildcardLine report={analysis.arena} lookup={lookup} onOpen={openCard} />}
           {needsColor && (
             <div className="mt-1 flex items-center gap-1.5 px-1 text-[0.8rem] text-ash" data-testid="chosen-color">
               <span>Chosen colour</span>
@@ -634,7 +672,9 @@ export function Builder({ id }: { id: string }) {
         </div>
 
         <div className="shrink-0">
-          <div className="mb-1 text-[0.75rem] text-ash">Target bracket: {bracketName(deck.targetBracket)}</div>
+          <div className="mb-1 text-[0.75rem] text-ash" title={brawl ? 'MTG Arena has no brackets; the builder uses them as its power setting' : undefined} data-testid="bracket-label">
+            {brawl ? `Power level, Commander brackets; Arena ignores this: ${bracketName(deck.targetBracket)}` : `Target bracket: ${bracketName(deck.targetBracket)}`}
+          </div>
           <div className="seg" role="group" aria-label="Target bracket">
             {BRACKETS.map((b) => (
               <button key={b.n} type="button" aria-pressed={deck.targetBracket === b.n} title={`${b.name}. ${b.blurb}`} onClick={() => mutate((d) => ({ ...d, targetBracket: b.n as Bracket }))} data-testid={`target-${b.n}`}>
@@ -675,6 +715,15 @@ export function Builder({ id }: { id: string }) {
               <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
               <span className="truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
             </label>
+            {brawl && (
+              <label
+                className={`flex items-center gap-1.5 ${options.ownedOnly ? 'text-smoke' : 'cursor-pointer'}`}
+                title="Builds and suggestions keep the cards you do not own within your MTG Arena wildcards, per rarity (set them on the Collection page). Off: the whole Arena pool."
+              >
+                <input type="checkbox" checked={craftOnly} disabled={options.ownedOnly} onChange={(e) => setFilters({ craftOnly: e.target.checked })} data-testid="craft-only" />
+                <span className="truncate">Only what I can craft</span>
+              </label>
+            )}
             {manual && (
               <label
                 className={`flex items-center gap-1.5 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
@@ -704,6 +753,7 @@ export function Builder({ id }: { id: string }) {
           onRemove={remove}
           onOpen={openCard}
           searchRef={searchRef}
+          brawl={brawl}
         />
         <DeckView
           deck={deck}
@@ -784,6 +834,7 @@ export function Builder({ id }: { id: string }) {
                 options={options}
                 collectionName={activeCollection?.name ?? null}
                 showFreeOnly={manual}
+                showPrice={!brawl}
                 freeOnly={freeOnly}
                 onFreeOnly={setFreeOnly}
                 setOptions={setOptions}
@@ -911,6 +962,11 @@ export function Builder({ id }: { id: string }) {
                       ? 'Copied to the clipboard. In Arena open Decks and press Import.'
                       : 'Copied to the clipboard. It pastes into Moxfield, Archidekt and most other deck sites.'}
                 </p>
+                {exported.format === 'arena' && brawl && (
+                  <p className="mt-2 max-w-[44rem] text-[0.88rem] text-ash" data-testid="export-printings">
+                    Cards you do not own carry the set and number of their cheapest Arena printing, so Arena crafts that one with the wildcard counted above.
+                  </p>
+                )}
                 {exported.format === 'arena' && exported.notOnArena && exported.notOnArena.length > 0 && (
                   <p className="mt-2 max-w-[44rem] text-[0.88rem] text-band-mid" data-testid="export-not-on-arena">
                     {exported.notOnArena.length} {exported.notOnArena.length === 1 ? 'card is' : 'cards are'} not on Arena and will not import: {exported.notOnArena.join(', ')}.

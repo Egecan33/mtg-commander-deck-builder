@@ -546,9 +546,11 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, showFreeOnly, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, showFreeOnly, showPrice = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
+  /** False for an MTG Arena deck: its budget is the wildcards ("Only what I can craft"), not a price. */
+  showPrice?: boolean;
   /** Name of the active collection, for the owned-only box. */
   collectionName: string | null;
   /** The active collection can have boxes and built decks, so "Use free copies only" applies. */
@@ -634,19 +636,21 @@ export function ImprovePanel({
               </select>
             )}
           </div>
-          <label className="flex items-center gap-2">
-            <span className="shrink-0 text-ash">Price cap</span>
-            <input
-              className="field w-20"
-              inputMode="decimal"
-              value={options.maxPrice}
-              onChange={(e) => setOptions({ ...options, maxPrice: e.target.value })}
-              placeholder="no cap"
-              aria-label="Highest price per card in dollars"
-              data-testid="improve-price"
-            />
-            <span className="text-ash">dollars per card</span>
-          </label>
+          {showPrice && (
+            <label className="flex items-center gap-2">
+              <span className="shrink-0 text-ash">Price cap</span>
+              <input
+                className="field w-20"
+                inputMode="decimal"
+                value={options.maxPrice}
+                onChange={(e) => setOptions({ ...options, maxPrice: e.target.value })}
+                placeholder="no cap"
+                aria-label="Highest price per card in dollars"
+                data-testid="improve-price"
+              />
+              <span className="text-ash">dollars per card</span>
+            </label>
+          )}
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOptions({ ...options, ownedOnly: e.target.checked })} data-testid="improve-owned" />
             <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>

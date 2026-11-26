@@ -9,6 +9,7 @@ import { ColorPip } from '../../components/card';
 import { useNotify } from '../../components/Shell';
 import { usePaged } from '../../components/VirtualGrid';
 import { browseCards, type CardSort, type HeldBy, type ScoredCard } from '../../lib/api';
+import { rarityStat } from './ArenaParts';
 import {
   AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, entryOf, fmtInt, toFilters, type BrowserQuery,
 } from '../../lib/ui';
@@ -31,7 +32,7 @@ export type BrowserCard = ScoredCard & { held?: string[] };
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef,
+  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, brawl = false,
 }: {
   deck: Deck;
   settled: Deck;
@@ -45,6 +46,8 @@ export function Browser({
   onRemove: (id: string) => void;
   onOpen: (card: BrowserCard) => void;
   searchRef: RefObject<HTMLInputElement | null>;
+  /** An MTG Arena (Brawl) deck: the pool is Arena cards only and each card shows its Arena rarity, not a price. */
+  brawl?: boolean;
 }) {
   const notify = useNotify();
   const [text, setText] = useState(query.q);
@@ -91,7 +94,7 @@ export function Browser({
             data-testid="card-search"
           />
           <select className="field w-[10.5rem]" value={query.sort} onChange={(e) => set('sort', e.target.value as CardSort)} aria-label="Sort cards" data-testid="sort">
-            {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {SORTS.filter((s) => !brawl || s.id !== 'price').map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
           <button type="button" className="btn btn-sm" aria-expanded={showFilters} onClick={() => setShowFilters((s) => !s)}>
             Filters{active ? ` (${active})` : ''}
@@ -134,10 +137,12 @@ export function Browser({
               <input className="field h-7 w-10 px-1 text-center text-[0.8125rem]" inputMode="numeric" value={query.mvMax} onChange={(e) => set('mvMax', e.target.value)} placeholder="16" aria-label="Highest mana value" data-testid="filter-mvmax" />
             </label>
             <input className="field h-7 w-[6.5rem] text-[0.8125rem]" value={query.type} onChange={(e) => set('type', e.target.value)} placeholder="Type, e.g. elf" aria-label="Card type or subtype" />
-            <label className="flex items-center gap-1 text-ash">
-              <span>Up to $</span>
-              <input className="field h-7 w-12 px-1 text-center text-[0.8125rem]" inputMode="decimal" value={query.maxPrice} onChange={(e) => set('maxPrice', e.target.value)} placeholder="any" aria-label="Highest price in dollars" />
-            </label>
+            {!brawl && (
+              <label className="flex items-center gap-1 text-ash">
+                <span>Up to $</span>
+                <input className="field h-7 w-12 px-1 text-center text-[0.8125rem]" inputMode="decimal" value={query.maxPrice} onChange={(e) => set('maxPrice', e.target.value)} placeholder="any" aria-label="Highest price in dollars" />
+              </label>
+            )}
             <label className="flex cursor-pointer items-center gap-1.5 text-ash">
               <input type="checkbox" checked={query.owned} onChange={(e) => set('owned', e.target.checked)} /> Owned
             </label>
@@ -210,7 +215,7 @@ export function Browser({
                 status={commander ? 'Commander' : undefined}
                 qty={entry?.qty}
                 dim={!!gate}
-                stats={query.sort === 'price' && c.priceUsd !== null ? [{ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' }] : undefined}
+                stats={brawl ? [rarityStat(c.arenaRarity)] : query.sort === 'price' && c.priceUsd !== null ? [{ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' }] : undefined}
                 onOpen={() => onOpen(c)}
                 testId="browser-card"
                 data={{
