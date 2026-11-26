@@ -110,7 +110,8 @@ describe('decks belong to a collection', () => {
   });
 
   it('recognises a planeswalker commander in a list without sections while Arena is active', async () => {
-    const text = '1 Llanowar Elves\n1 Cultivate\n10 Forest\n\n1 Tyvar Kell\n';
+    // No headers and exactly 100 cards: the parser looks for the commander itself.
+    const text = '1 Llanowar Elves\n1 Cultivate\n97 Forest\n\n1 Tyvar Kell\n';
     setActiveCollection('arena');
     const arena = await ok<ImportResponse>(send(importRoute.POST, 'POST', '/api/import', { text }));
     expect(arena.deck.commanders).toEqual([id('Tyvar Kell')]);
