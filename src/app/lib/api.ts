@@ -224,6 +224,9 @@ import type {
   SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
+/** The two MTG Arena formats a deck of an Arena collection can be in (`Deck.arenaFormat`; missing is 'brawl'). */
+export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
+
 export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, Wildcards };
 
 // ---------------------------------------------------------------------------------------------
@@ -277,6 +280,8 @@ export interface StatusResponse {
     collection: number; decks: number;
     /** Cards on MTG Arena and legal in Brawl: 0 until `pnpm sync cards` has run with Arena data. */
     brawl: number;
+    /** Cards on MTG Arena and legal in Standard Brawl: 0 until the cards sync has run with Standard Brawl data. */
+    standardBrawl: number;
   };
   /** ISO date of the last cards sync, null when never synced. */
   cardsSyncedAt: string | null;
@@ -308,7 +313,8 @@ export interface CommanderCard extends ClientCard {
   /** The deck is illegal until a colour is chosen. */
   requiresColorChoice: boolean;
 }
-export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number }
+/** `arenaFormat` picks Brawl or Standard Brawl while an MTG Arena collection is active (default 'brawl'). */
+export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number; arenaFormat?: ArenaFormat }
 export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderCard[] }
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
@@ -333,7 +339,7 @@ export interface DeckTile {
 export interface DecksResponse { decks: DeckTile[] }
 export interface DeckResponse {
   deck: Deck; updatedAt: string; cards: CardLookup;
-  /** The deck's format, from its collection: MTG Arena decks are Brawl decks. */
+  /** The deck's format: Commander for a Physical deck; an MTG Arena deck is Brawl, or Standard Brawl when `deck.arenaFormat` says so. */
   format: Format;
 }
 
@@ -343,7 +349,7 @@ export interface DeckResponse {
 export type EdhrecStatus = 'off' | 'loading' | 'ready' | 'none';
 
 export interface AnalyzeResponse {
-  /** The rules the deck was checked under: 'brawl' for a deck of an MTG Arena collection (Arena cards only, Brawl legality). */
+  /** The rules the deck was checked under: 'brawl' or 'standardbrawl' for a deck of an MTG Arena collection (Arena cards only, that format's legality). */
   format: Format;
   rating: DeckRating;
   bracket: BracketReport;
@@ -465,7 +471,7 @@ export type BuildResponse = BuildDeckResponse | BuildProposalsResponse | FixResp
 // Import, export, collection, EDHREC
 
 export interface TextLine { line: number; text: string }
-export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket }
+export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket; arenaFormat?: ArenaFormat }
 export interface ImportResponse { deck: Deck; unresolved: TextLine[]; ignored: TextLine[]; cards: CardLookup }
 export interface ExportResponse {
   text: string;
@@ -680,7 +686,7 @@ export const startSync = (step: SyncStep | 'all') => call<SyncState>('POST', '/a
 export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal) =>
   call<CommandersResponse>(
     'GET',
-    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize })}`,
+    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize, arenaFormat: params.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
     undefined,
     signal,
   );
@@ -743,15 +749,15 @@ export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
-export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly });
-export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal) =>
-  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined })}`, undefined, signal);
-export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly });
+export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly, arenaFormat });
+export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined, arenaFormat })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly, arenaFormat });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);
 
-export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal) =>
-  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket }, signal);
+export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal, format?: Format) =>
+  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket, format }, signal);

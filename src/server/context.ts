@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AnalyzeResponse, ArenaReport, EdhrecStatus } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
+import { isBrawlFormat } from '@/engine/format';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
@@ -23,10 +24,12 @@ export const MAX_ANALYSES = 6;
 /** Everything the engine needs for this deck. Never waits for the network. */
 export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecStatus } {
   const settings = getSettings();
-  const { data, status } = peekEdhrec(deck.commanders, deck.targetBracket);
+  // EDHREC has no data for Standard Brawl: it is off there, whatever the setting says.
+  const format = deckFormat(deck);
+  const { data, status } = format === 'standardbrawl' ? { data: null, status: 'off' as const } : peekEdhrec(deck.commanders, deck.targetBracket);
   return {
-    // An Arena deck is checked and built against the Brawl view of the card data.
-    ctx: { db: getCardDb(deckFormat(deck)), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
+    // An Arena deck is checked and built against its format's view of the card data (Brawl or Standard Brawl).
+    ctx: { db: getCardDb(format), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
     edhrec: status,
   };
 }
@@ -38,7 +41,7 @@ export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecS
 export function deckKey(deck: Deck): string {
   const theme = deck.themeWeights ? Object.entries(deck.themeWeights).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
   const wanted = deck.roleTargets ? Object.entries(deck.roleTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
-  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted];
+  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, deck.arenaFormat ?? null, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted];
   return createHash('sha1').update(JSON.stringify(shape)).digest('hex');
 }
 
@@ -170,7 +173,7 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
  * Commander deck.
  */
 export function arenaReport(deck: Deck, ctx: EngineContext): ArenaReport | null {
-  if (deckFormat(deck) !== 'brawl') return null;
+  if (!isBrawlFormat(deckFormat(deck))) return null;
   const owned = ownedSetOf(deckCollection(deck));
   const needed = wildcardsNeeded(deck, ctx.db, owned);
   const have = getWildcards(deckCollection(deck)).wildcards;

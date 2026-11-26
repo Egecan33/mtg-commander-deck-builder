@@ -12,6 +12,8 @@ export const POST = (req: Request) =>
     }
     const bracket = body.bracket ?? 3;
     if (typeof bracket !== 'number' || ![1, 2, 3, 4, 5].includes(bracket)) throw new HttpError(400, 'bracket must be 1 to 5.');
+    // EDHREC has no data for Standard Brawl: no request is made.
+    if (body.format === 'standardbrawl') return json({ status: 'off', commanderDecks: 0, cards: 0 } satisfies EdhrecResponse);
     const data = await getEdhrec(commanders as string[], bracket as Bracket);
     const { status } = peekEdhrec(commanders as string[], bracket as Bracket);
     return json({

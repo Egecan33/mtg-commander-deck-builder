@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { DiscoverEntry, DiscoverScope, DiscoverState, DiscoverTier, DiscoverTiersResponse } from '@/app/lib/api';
 import { buyTiers, discoverCandidates, eagerTiers, preScore, quickFit, wildcardTiers, type TierDeck } from '@/engine/builder';
-import { isLegalIn } from '@/engine/format';
+import { isBrawlFormat, isLegalIn } from '@/engine/format';
 import type { Bracket, Card, EngineContext, Format } from '@/engine/types';
 import { cardLookup, toClientCard } from './cards';
-import { activeCollectionId, collectionFormat, ownedSet } from './collection';
+import { activeCollectionId, activeFormat, ownedSet } from './collection';
 import { freeOwnedSet } from './holders';
 import { HttpError } from './http';
 import { getSettings } from './settings';
@@ -45,13 +45,12 @@ function edhrecStamp(): string {
  * The format the search builds in: MTG Arena's Brawl while an Arena collection is active (Arena
  * cards only, planeswalkers may lead, the wildcards as the budget), else Commander.
  */
-const searchFormat = (): Format => collectionFormat(activeCollectionId());
+const searchFormat = (arena?: unknown): Format => activeFormat(arena);
 
-function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): string {
+function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean, format: Format): string {
   const ids = [...ownedFor(freeOnly)].sort();
-  const format = searchFormat();
   // A Brawl result also depends on the wildcards it was built within.
-  const budget = format === 'brawl' ? getWildcards(activeCollectionId()).wildcards : null;
+  const budget = isBrawlFormat(format) ? getWildcards(activeCollectionId()).wildcards : null;
   return createHash('sha1').update(JSON.stringify([bracket, scope, freeOnly, ids, getCardDb(format).all().length, format, budget])).digest('hex');
 }
 
@@ -59,10 +58,11 @@ function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): strin
  * The engine context for one commander: the cached EDHREC data the deck page would use for a deck
  * with this commander at this bracket (`engineContext`), else none. Cache only, never a request.
  */
-function context(commander: string, bracket: Bracket): EngineContext {
+function context(commander: string, bracket: Bracket, format: Format): EngineContext {
   const s = getSettings();
-  const { data } = peekEdhrec([commander], bracket);
-  return { db: getCardDb(searchFormat()), edhrec: data, mldOverrides: s.mldOverrides, extraTurnOverrides: s.extraTurnOverrides };
+  // EDHREC has no Standard Brawl data.
+  const { data } = format === 'standardbrawl' ? { data: null } : peekEdhrec([commander], bracket);
+  return { db: getCardDb(format), edhrec: data, mldOverrides: s.mldOverrides, extraTurnOverrides: s.extraTurnOverrides };
 }
 
 function toTier(t: TierDeck, ctx: EngineContext): DiscoverTier {
@@ -89,13 +89,12 @@ const withCards = (job: Job): DiscoverState => {
   return { ...s, ms: s.status === 'running' ? Date.now() - job.started : s.ms, cards: cardLookup(ids) };
 };
 
-async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): Promise<void> {
+async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: boolean, format: Format): Promise<void> {
   const s = job.state;
   try {
-    const format = searchFormat();
     const db = getCardDb(format);
     const owned = ownedFor(freeOnly);
-    const wildcards = format === 'brawl' ? getWildcards(activeCollectionId()).wildcards : null;
+    const wildcards = isBrawlFormat(format) ? getWildcards(activeCollectionId()).wildcards : null;
     const ownedCards = [...owned].map((id) => db.get(id)).filter((c): c is Card => !!c && isLegalIn(c, db));
     // 'unowned': every commander the collection does not hold, ranked by what the owned cards build around it.
     const candidates = scope === 'owned' ? discoverCandidates(db, owned, true) : discoverCandidates(db, owned, false).filter((c) => !owned.has(c.oracleId));
@@ -113,7 +112,7 @@ async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: b
       s.stage = scope === 'owned' ? 'Scoring your commanders' : 'Scoring commanders you do not own';
       s.total = ranked.length;
       for (const r of ranked) {
-        r.pre = preScore(r.c, ownedCards, context(r.c.oracleId, bracket), bracket);
+        r.pre = preScore(r.c, ownedCards, context(r.c.oracleId, bracket, format), bracket);
         s.done++;
         if (s.done % 4 === 0) await tick();
       }
@@ -127,7 +126,7 @@ async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: b
     s.built = ranked.length;
     for (const r of ranked) {
       await tick();
-      const ctx = context(r.c.oracleId, bracket);
+      const ctx = context(r.c.oracleId, bracket, format);
       // On Arena: owned only, within the wildcards, and the whole Arena pool; else owned only and unlimited.
       const tiers = wildcards
         ? (({ owned: o, crafted, unlimited }) => [o, crafted, unlimited])(wildcardTiers(r.c.oracleId, ctx, owned, bracket, wildcards))
@@ -165,17 +164,18 @@ export function readFreeOnly(value: unknown): boolean {
 }
 
 /** GET /api/discover: the job for this collection, bracket, scope and freeOnly, if there is one. */
-export function discoverState(bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false): DiscoverState {
+export function discoverState(bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, arena?: unknown): DiscoverState {
   if (ownedSet().size === 0) return blank(bracket, scope, freeOnly, 'empty');
-  const job = jobs().get(keyOf(bracket, scope, freeOnly));
+  const job = jobs().get(keyOf(bracket, scope, freeOnly, searchFormat(arena)));
   return job && (job.state.status === 'running' || job.stamp === edhrecStamp()) ? withCards(job) : blank(bracket, scope, freeOnly, 'idle');
 }
 
 /** POST /api/discover: starts the job unless a result (or a running job) for the same collection, bracket, scope and freeOnly exists. */
-export function startDiscover(bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false): DiscoverState {
+export function startDiscover(bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, arena?: unknown): DiscoverState {
   if (ownedSet().size === 0) return blank(bracket, scope, freeOnly, 'empty');
   const all = jobs();
-  const key = keyOf(bracket, scope, freeOnly);
+  const format = searchFormat(arena);
+  const key = keyOf(bracket, scope, freeOnly, format);
   const hit = all.get(key);
   const stamp = edhrecStamp();
   if (hit && (hit.state.status === 'running' || (hit.state.status !== 'error' && hit.stamp === stamp))) return withCards(hit);
@@ -186,20 +186,21 @@ export function startDiscover(bracket: Bracket, scope: DiscoverScope = 'owned', 
     if (all.size <= KEPT) break;
     if (j.state.status !== 'running') all.delete(k);
   }
-  void run(job, bracket, scope, freeOnly);
+  void run(job, bracket, scope, freeOnly, format);
   return withCards(job);
 }
 
 /** POST /api/discover/tiers: the 5/10/15/20-buy tiers of one listed commander. */
-export function discoverTiers(bracket: Bracket, commander: unknown, scope: DiscoverScope = 'owned', freeOnly = false): DiscoverTiersResponse {
-  const job = jobs().get(keyOf(bracket, scope, freeOnly));
+export function discoverTiers(bracket: Bracket, commander: unknown, scope: DiscoverScope = 'owned', freeOnly = false, arena?: unknown): DiscoverTiersResponse {
+  const format = searchFormat(arena);
+  const job = jobs().get(keyOf(bracket, scope, freeOnly, format));
   const entry = typeof commander === 'string' ? job?.state.entries.find((e) => e.commander.oracleId === commander) : undefined;
   if (!job || !entry) throw new HttpError(404, 'That commander is not in the result for this bracket. Run the search again.');
   // On Arena the wildcard tiers come with the result; there are no buy-count tiers.
-  if (searchFormat() === 'brawl') return { tiers: [], cards: {} };
+  if (isBrawlFormat(format)) return { tiers: [], cards: {} };
   let tiers = job.lazy.get(entry.commander.oracleId);
   if (!tiers) {
-    const ctx = context(entry.commander.oracleId, bracket);
+    const ctx = context(entry.commander.oracleId, bracket, format);
     tiers = buyTiers(entry.tiers[0].deck, ctx, ownedFor(freeOnly), LAZY_CAPS).map((t) => toTier(t, ctx));
     job.lazy.set(entry.commander.oracleId, tiers);
   }

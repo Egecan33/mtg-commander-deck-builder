@@ -5,7 +5,7 @@ import type { Db } from './db';
 
 export type ServerCardDb = CardDb & { tagSlugs(oracleId: string): string[] };
 
-interface Loaded { db: Db; value: ServerCardDb; cards: Card[]; brawl: ServerCardDb | null }
+interface Loaded { db: Db; value: ServerCardDb; cards: Card[]; views: Partial<Record<Format, ServerCardDb>> }
 
 // On globalThis so that separately bundled route handlers share one copy (see state.ts).
 const KEY = '__commanderForgeCardDb';
@@ -39,19 +39,19 @@ function load(db: Db): Loaded {
     ...createCardDb(cards, features, combos),
     tagSlugs: (oracleId) => slugs.get(oracleId) ?? [],
   };
-  const loaded: Loaded = { db, value, cards, brawl: null };
+  const loaded: Loaded = { db, value, cards, views: {} };
   holder[KEY] = loaded;
   return loaded;
 }
 
 /**
  * Builds the in-memory CardDb from SQLite. Cached per database handle until `invalidateCardDb()`.
- * `format: 'brawl'` is the Brawl view of the same data (`formatCardDb`), built once on first use.
+ * `format: 'brawl'` or `'standardbrawl'` is that format's view of the same data (`formatCardDb`), built once on first use.
  */
 export function loadCardDb(db: Db, format: Format = 'commander'): ServerCardDb {
   const loaded = load(db);
   if (format === 'commander') return loaded.value;
-  return (loaded.brawl ??= formatCardDb(loaded.value, loaded.cards, 'brawl'));
+  return (loaded.views[format] ??= formatCardDb(loaded.value, loaded.cards, format));
 }
 
 export function invalidateCardDb(): void {

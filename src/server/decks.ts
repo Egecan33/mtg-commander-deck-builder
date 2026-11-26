@@ -82,6 +82,8 @@ export function sanitizeDeck(input: unknown): Deck {
   }
   if (input.built === true) deck.built = true;
   if (typeof input.collectionId === 'string' && ID.test(input.collectionId)) deck.collectionId = input.collectionId;
+  // 'brawl' is what a missing value means, so it is not stored: existing Arena decks stay as they are.
+  if (input.arenaFormat === 'standardbrawl') deck.arenaFormat = 'standardbrawl';
   return deck;
 }
 
