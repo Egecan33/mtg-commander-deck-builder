@@ -20,7 +20,7 @@ export const CAPTION_PX = 24;
 export function unknownCard(oracleId: string): ClientCard {
   return {
     oracleId, name: 'Unknown card', frontName: 'Unknown card', manaCost: '', cmc: 0, typeLine: '', colorIdentity: [], imageFaces: 1,
-    gameChanger: false, priceUsd: null, roles: [], owned: false,
+    gameChanger: false, priceUsd: null, roles: [], owned: false, arenaRarity: null,
   };
 }
 
