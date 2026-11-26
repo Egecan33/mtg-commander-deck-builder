@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, mulberry32 } from '@/engine/builder';
-import { rateDeck, ratingCapped } from '@/engine/rating';
+import { QUALITY_EXPECTED, rateDeck, ratingCapped } from '@/engine/rating';
+import { createScorer } from '@/engine/scoring';
 import { roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
-import type { Bracket, Deck, DeckRating, EngineContext, Role } from '@/engine/types';
+import type { Bracket, Card, Deck, DeckRating, EngineContext, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
 
 const db = fixtureDb();
@@ -36,14 +37,17 @@ function expectFinite(r: DeckRating) {
 }
 
 const WEIGHTS: Record<string, number> = {
-  mana: 18, roles: 16, synergy: 16, curve: 10, interaction: 10, wincons: 10, consistency: 10, bracket: 10,
+  mana: 16, roles: 14, synergy: 14, curve: 9, interaction: 9, wincons: 9, consistency: 9, bracket: 8, quality: 12,
 };
 
 describe('rateDeck shape', () => {
   const r = rateDeck(fixtureDeck('precon', 2), ctx);
 
-  it('returns the eight sub-scores with the plan weights', () => {
+  it('returns the nine sub-scores with the plan weights', () => {
     expect(Object.fromEntries(r.subscores.map((s) => [s.key, s.weight]))).toEqual(WEIGHTS);
+    expect(Object.values(WEIGHTS).reduce((a, b) => a + b, 0)).toBe(100);
+    expect(r.subscores.map((s) => s.key)).toEqual(['mana', 'roles', 'synergy', 'quality', 'curve', 'interaction', 'wincons', 'consistency', 'bracket']);
+    expect(sub(r, 'quality').label).toBe('Card quality');
     for (const s of r.subscores) expect(s.label.length).toBeGreaterThan(0);
   });
 
@@ -493,5 +497,99 @@ describe('rateDeck: quality pass 2', () => {
       const all = allFixes(rateDeck(d, ctx)).map((f) => f.text).join('\n');
       expect(all).not.toMatch(/targeted interaction/);
     });
+  });
+});
+
+describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
+  /** The scorer's quality part for a card, points / max; null for a gated card (no parts). */
+  const qualityOf = (scorer: ReturnType<typeof createScorer>, c: Card): number | null => {
+    const part = scorer.score(c).parts.find((p) => p.key === 'quality');
+    return part && part.max > 0 ? part.points / part.max : null;
+  };
+  const lathril = (): Deck => ({ id: null, name: '', commanders: [card('Lathril, Blade of the Elves').oracleId], companion: null, chosenColor: null, main: [], targetBracket: 2, themeWeights: null });
+
+  it('weak cards lower card quality and the rating', () => {
+    const before = fixtureDeck('precon', 2);
+    const scorer = createScorer(before, ctx);
+    const q = (c: Card) => qualityOf(scorer, c) ?? -1;
+    const inDeck = new Set([...before.commanders, ...before.main.map((e) => e.oracleId)]);
+    // The precon's 15 strongest spells, each swapped for the weakest fixture card that shares a role with it.
+    const strongest = before.main.filter((e) => !isLand(e.oracleId)).map((e) => db.get(e.oracleId)!).sort((a, b) => q(b) - q(a) || a.name.localeCompare(b.name)).slice(0, 15);
+    const pool = db.all().filter((c) => !inDeck.has(c.oracleId) && !isLand(c.oracleId) && db.features(c.oracleId) && scorer.score(c).gate === null);
+    const swaps = new Map<string, string>();
+    const taken = new Set<string>();
+    for (const c of strongest) {
+      const roles = db.features(c.oracleId)!.roles;
+      const same = pool.filter((x) => !taken.has(x.oracleId) && (roles.length === 0 ? db.features(x.oracleId)!.roles.length === 0 : roles.some((r) => hasRole(x.oracleId, r))));
+      const weakest = same.sort((a, b) => q(a) - q(b) || a.name.localeCompare(b.name))[0];
+      expect(weakest, c.name).toBeDefined();
+      expect(q(weakest)).toBeLessThan(q(c));
+      taken.add(weakest.oracleId);
+      swaps.set(c.oracleId, weakest.oracleId);
+    }
+    const weak: Deck = { ...before, main: before.main.map((e) => (swaps.has(e.oracleId) ? { ...e, oracleId: swaps.get(e.oracleId)! } : e)) };
+
+    const rBefore = rateDeck(before, ctx);
+    const rWeak = rateDeck(weak, ctx);
+    expect(rWeak.legal).toBe(true);
+    expect(sub(rWeak, 'quality').value).toBeLessThan(sub(rBefore, 'quality').value - 0.15);
+    expect(rWeak.rating).toBeLessThan(rBefore.rating);
+
+    // One fix: how many cards are under the bracket's expectation, and the three weakest by name.
+    const fixes = sub(rWeak, 'quality').fixes;
+    expect(fixes).toHaveLength(1);
+    expect(fixes[0].text).toMatch(/^\d+ of the deck's \d+ spells are below the card quality Bracket 2 decks run/);
+    const weakScorer = createScorer(weak, ctx);
+    const spells = weak.main.map((e) => db.get(e.oracleId)!).filter((c) => !isLand(c.oracleId));
+    const bottom = spells.map((c) => ({ c, v: qualityOf(weakScorer, c) ?? 2 })).sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name)).slice(0, 3);
+    for (const { c } of bottom) expect(fixes[0].text).toContain(c.name);
+  });
+
+  it('rating quality agrees with the scorer', () => {
+    // One spell and 98 Forests: the deck's card quality is that spell's, from the scorer, against Bracket 2's expectation.
+    const solo = (c: Card): Deck => ({ ...lathril(), main: [{ oracleId: card('Forest').oracleId, qty: 98, locked: false }, { oracleId: c.oracleId, qty: 1, locked: false }] });
+    const scorer = createScorer(solo(card('Sol Ring')), ctx);
+    const candidates = db.all().filter((c) => !isLand(c.oracleId) && db.features(c.oracleId) && scorer.score(c).gate === null);
+    const byQuality = candidates.map((c) => ({ c, v: qualityOf(scorer, c)! })).sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name));
+    const weakest = byQuality[0].c;
+    for (const c of [weakest, card('Sol Ring')]) {
+      const d = solo(c);
+      const r = rateDeck(d, ctx);
+      expect(r.legal, c.name).toBe(true);
+      const want = Math.min(1, qualityOf(createScorer(d, ctx), c)! / QUALITY_EXPECTED[1]);
+      expect(sub(r, 'quality').value, c.name).toBeCloseTo(want, 3);
+    }
+    expect(sub(rateDeck(solo(weakest), ctx), 'quality').value).toBeLessThan(0.5);
+    expect(sub(rateDeck(solo(card('Sol Ring')), ctx), 'quality').value).toBe(1); // clamped
+  });
+
+  it('the card-quality fix points the browser at a role when most weak cards share it', () => {
+    const scorer = createScorer(lathril(), ctx);
+    const ramp = db.all()
+      .filter((c) => !isLand(c.oracleId) && hasRole(c.oracleId, 'ramp') && scorer.score(c).gate === null)
+      .sort((a, b) => (qualityOf(scorer, a) ?? 2) - (qualityOf(scorer, b) ?? 2) || a.name.localeCompare(b.name))
+      .slice(0, 6);
+    const d: Deck = { ...lathril(), main: [{ oracleId: card('Forest').oracleId, qty: 93, locked: false }, ...ramp.map((c) => ({ oracleId: c.oracleId, qty: 1, locked: false }))] };
+    const q = sub(rateDeck(d, ctx), 'quality');
+    expect(q.value).toBeLessThan(0.85);
+    expect(q.fixes).toHaveLength(1);
+    expect(q.fixes[0].filter).toEqual({ role: 'ramp' });
+    expect(q.fixes[0].text).toMatch(/^6 of the deck's 6 spells are below/);
+  });
+
+  it('no NaN on empty, commander-only and partial decks', () => {
+    const empty: Deck = { ...lathril(), commanders: [] };
+    const partial = { ...fixtureDeck('precon', 2), main: fixtureDeck('precon', 2).main.slice(0, 39) };
+    const landsOnly = { ...lathril(), main: [{ oracleId: card('Forest').oracleId, qty: 10, locked: false }] };
+    for (const [name, d] of [['empty', empty], ['commander only', lathril()], ['partial', partial], ['lands only', landsOnly]] as const) {
+      for (const target of [1, 2, 3, 4, 5] as Bracket[]) {
+        const r = rateDeck({ ...d, targetBracket: target }, ctx);
+        expectFinite(r);
+        const qs = sub(r, 'quality');
+        expect(Number.isFinite(qs.value), `${name} B${target}`).toBe(true);
+        if (name !== 'partial') expect(qs.value, `${name} B${target}`).toBe(0);
+        else expect(qs.value, `${name} B${target}`).toBeGreaterThan(0);
+      }
+    }
   });
 });

@@ -656,6 +656,7 @@ const FLOOR_ORDER: readonly PartKey[] = ['quality', 'role', 'synergy', 'cast', '
 export function createScorer(deck: Deck, ctx: EngineContext): {
   score(card: Card): CardScore;
   scoreAll(filter?: (c: Card) => boolean): CardScore[];
+  quality(card: Card): number | null;
 } {
   const { db } = ctx;
   const bracket = (Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)))) as Bracket;
@@ -855,6 +856,9 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const gated = (card: Card, gate: Gate): CardScore => ({
     oracleId: card.oracleId, score: 0, parts: [], reasons: [gate.message], gate,
   });
+  /** Bracket 1-3 gate: Game Changers, combos, mass land denial and extra turns the target forbids. */
+  const bracketGated = (card: Card, stat: Stat): Gate | null =>
+    (bracket <= 3 && (stat.checkBracket || overrides) ? bracketGate(card, deck, ctx) : null);
 
   function score(card: Card): CardScore {
     const stat = statOf(card);
@@ -874,10 +878,8 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
         return gated(card, { code: 'copy-limit', message });
       }
     }
-    if (bracket <= 3 && (stat.checkBracket || overrides)) {
-      const g = bracketGate(card, deck, ctx);
-      if (g) return gated(card, g);
-    }
+    const g = bracketGated(card, stat);
+    if (g) return gated(card, g);
 
     const reasons: string[] = [];
     const combo = comboCredit(card);
@@ -1014,5 +1016,23 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
     return out;
   }
 
-  return { score, scoreAll };
+  /**
+   * The card's quality part exactly as `score(card)` reports it, points / max (0-1); null when the
+   * card is gated (it has no parts). The deck rating reads it for every spell of a deck, so it
+   * skips the deck-dependent work where that cannot change the part: only a staple's part short of
+   * its maximum can be lifted by the staple floor, and only a card with more than one copy counted
+   * can hit the copy limit. Those cards go through `score`.
+   */
+  function quality(card: Card): number | null {
+    const stat = statOf(card);
+    if (stat.gate) return null;
+    if ((stat.staple && stat.qualityPts < weights.quality) || (base.counts.get(card.oracleId) ?? 0) > 1) {
+      const part = score(card).parts.find((p) => p.key === 'quality');
+      return part ? part.points / part.max : null;
+    }
+    if (bracketGated(card, stat)) return null;
+    return stat.qualityPts / weights.quality;
+  }
+
+  return { score, scoreAll, quality };
 }

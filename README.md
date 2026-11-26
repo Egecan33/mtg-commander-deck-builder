@@ -24,7 +24,7 @@ It runs on your machine. Card data and about 66,000 card images are downloaded o
 
 - **Auto-build** a full deck from a commander and a target bracket, or **build by hand**, or lock the cards you love and let it **fill the rest**.
 - **Score every card 0–100 for your commander.** The score moves as the deck changes: the tenth ramp spell is worth less than the first. Every score opens into its parts and plain-language reasons.
-- **Rate the deck 0–100** across eight parts — mana base, role coverage, synergy, curve, interaction, win conditions, consistency, bracket fit — each with fixes you can click to see cards that solve them.
+- **Rate the deck 0–100** across nine parts — mana base, role coverage, synergy, card quality, curve, interaction, win conditions, consistency, bracket fit — each with fixes you can click to see cards that solve them.
 - **Improve an existing deck.** Import a list; get ordered swap proposals with the card going out, the card coming in, why, and what it does to the rating. Accept, reject, or apply all.
 - **Commander rules, exactly.** Colour identity, singleton and its exceptions, every partner variant, Backgrounds, Doctor's companions, companions, Vehicles and Spacecraft as commanders, the Rulebreaker commanders, the banned list.
 - **Bracket-aware.** Computes the minimum bracket the official rules force (Game Changers, mass land denial, extra turns, two-card combos), shows what "plays like" a higher bracket, and never suggests a card that breaks your target.

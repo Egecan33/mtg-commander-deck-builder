@@ -274,6 +274,34 @@ describe('createScorer: odd decks', () => {
   });
 });
 
+describe('createScorer: quality, the number the rating reads', () => {
+  it('quality(card) is the quality part of score(card), points / max, and null for a gated card', () => {
+    const decks: Deck[] = [];
+    for (const name of ['precon', 'upgraded', 'cedh'] as const) {
+      const p = parseDecklist(deckText(name), db);
+      for (const b of [1, 2, 3, 4, 5] as Bracket[]) decks.push(deck([], p.main, { name, commanders: p.commanders, targetBracket: b }));
+    }
+    // Over the copy limit, and staples the floor lifts.
+    decks.push(lathril({ name: 'two Sol Rings' }, [...lathrilMain(), e('Sol Ring')]));
+    const sample = db.all().filter((_, i) => i % 7 === 0);
+    let gated = 0;
+    let lifted = 0;
+    for (const d of decks) {
+      const scorer = createScorer(d, ctx);
+      const inDeck = [...new Set([...d.commanders, ...d.main.map((x) => x.oracleId)])].map((i) => db.get(i)!);
+      for (const c of [...inDeck, ...sample]) {
+        const s = scorer.score(c);
+        const q = s.parts.find((p) => p.key === 'quality');
+        expect(scorer.quality(c), `${d.name} B${d.targetBracket} ${c.name}`).toBe(q ? q.points / q.max : null);
+        if (!q) gated++;
+        else if (s.reasons.some((r) => /^staple:/.test(r))) lifted++;
+      }
+    }
+    expect(gated).toBeGreaterThan(0);
+    expect(lifted).toBeGreaterThan(0);
+  });
+});
+
 describe('createScorer: performance', () => {
   it('scores a 32,000-card pool in under 400 ms once the scorer exists', () => {
     const cards: Card[] = [];

@@ -2,6 +2,7 @@ import { analyzeBracket } from '../brackets';
 import { axisLabel } from '../features';
 import { karstenSources, pAtLeast } from '../mana';
 import { commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
+import { createScorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
 import { roleNeeds, scaleTargets, targetsFor } from '../targets';
@@ -10,9 +11,9 @@ import type {
   AxisId, Bracket, BracketReport, Color, Deck, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
 } from '../types';
 
-/** Sub-score weights (spec §11); they sum to 100. */
+/** Sub-score weights (spec §11, plus card quality); they sum to 100. */
 export const RATING_WEIGHTS = {
-  mana: 18, roles: 16, synergy: 16, curve: 10, interaction: 10, wincons: 10, consistency: 10, bracket: 10,
+  mana: 16, roles: 14, synergy: 14, curve: 9, interaction: 9, wincons: 9, consistency: 9, bracket: 8, quality: 12,
 } as const;
 export type RatingKey = keyof typeof RATING_WEIGHTS;
 /**
@@ -23,12 +24,24 @@ export const ILLEGAL_CAP = 40;
 export const MAX_FIXES = 3;
 
 const LABELS: Record<RatingKey, string> = {
-  mana: 'Mana base', roles: 'Role coverage', synergy: 'Synergy', curve: 'Curve', interaction: 'Interaction',
+  mana: 'Mana base', roles: 'Role coverage', synergy: 'Synergy', quality: 'Card quality', curve: 'Curve', interaction: 'Interaction',
   wincons: 'Win conditions', consistency: 'Consistency', bracket: 'Bracket fit',
 };
-const ORDER: readonly RatingKey[] = ['mana', 'roles', 'synergy', 'curve', 'interaction', 'wincons', 'consistency', 'bracket'];
+const ORDER: readonly RatingKey[] = ['mana', 'roles', 'synergy', 'quality', 'curve', 'interaction', 'wincons', 'consistency', 'bracket'];
 
 type PerBracket<T> = readonly [T, T, T, T, T];
+/**
+ * Mean card quality (the scorer's own quality part, points / max) a deck of each bracket runs,
+ * Brackets 1-5: at or above it the card-quality sub-score is full. Calibrated on the reference
+ * decks (the precon averages 0.67 and has to stay inside its Bracket 2 range, 55-82; the upgraded
+ * deck averages 0.74 at Bracket 3, the cEDH list 0.71 at Bracket 5) and on owned-only builds,
+ * whose theme pieces the scorer lifts to about precon level (0.53-0.75).
+ */
+export const QUALITY_EXPECTED: PerBracket<number> = [0.75, 0.8, 0.85, 0.9, 0.95];
+/** Card quality (sub-score value) from which the weakest cards are no longer named as a fix. */
+const QUALITY_FIX_BELOW = 0.85;
+/** Weakest cards a card-quality fix names. */
+const QUALITY_NAMED = 3;
 const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
 const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R: 'red', G: 'green' };
 
@@ -116,7 +129,7 @@ function band(x: number, lo: number, hi: number, below: number, above = below): 
 interface Issue extends Fix { loss: number }
 interface Part { value: number; issues: Issue[] }
 
-/** Everything the eight sub-scores read, gathered once per deck. */
+/** Everything the nine sub-scores read, gathered once per deck. */
 interface Facts {
   deck: Deck; ctx: EngineContext;
   cards: DeckCard[];
@@ -357,6 +370,61 @@ function synergyPart(f: Facts): Part {
     });
   }
   return { value: 0.6 * density + 0.4 * balance, issues };
+}
+
+/**
+ * Card quality: the mean, per copy, of the scorer's own quality part (points / max, read through
+ * `scorer.quality`) over the main deck's spells, against what a deck of the target bracket runs
+ * (`QUALITY_EXPECTED`). The number is the scorer's (AGENTS.md rule 6): EDHREC rank, power tier at
+ * Brackets 4-5, the theme-piece lift, the overcost penalty and the staple floor all come with it,
+ * and nothing is recomputed here. Lands are left out (a land's worth is its mana, rated under the
+ * mana base), and so are cards the scorer gates (banned, off-colour, over the copy limit or the
+ * bracket): they have no parts, and the legality cap and bracket fit already count them. Not
+ * discounted for uncastable cards: what the cards are does not change with the mana.
+ */
+function qualityPart(f: Facts): Part {
+  const { db } = f.ctx;
+  const scorer = createScorer(f.deck, f.ctx);
+  const expected = QUALITY_EXPECTED[f.bi];
+  const rated = new Map<string, { name: string; value: number; qty: number; roles: readonly Role[] }>();
+  let sum = 0;
+  let n = 0;
+  for (const e of f.deck.main) {
+    const qty = Number.isFinite(e.qty) ? Math.floor(e.qty) : 0;
+    if (qty < 1) continue;
+    const card = db.get(e.oracleId);
+    const features = card ? db.features(e.oracleId) : undefined;
+    if (!card || !features || isLandCard(features)) continue;
+    const q = scorer.quality(card); // the quality part of scorer.score(card), points / max
+    if (q === null) continue;
+    const value = clamp01(q);
+    sum += value * qty;
+    n += qty;
+    const prev = rated.get(card.oracleId);
+    if (prev) prev.qty += qty;
+    else rated.set(card.oracleId, { name: card.name, value, qty, roles: features.roles });
+  }
+  if (n === 0) return { value: 0, issues: [] };
+  const value = clamp01(sum / n / expected);
+  const issues: Issue[] = [];
+  // Below the bar the mean is under the expectation, so at least one card is too.
+  const weak = value < QUALITY_FIX_BELOW
+    ? [...rated.values()].filter((c) => c.value < expected).sort((a, b) => a.value - b.value || a.name.localeCompare(b.name))
+    : [];
+  if (weak.length > 0) {
+    const count = weak.reduce((a, c) => a + c.qty, 0);
+    // Point the browser at a role when most of the weak cards share it: stronger cards for the same job.
+    const byRole = new Map<Role, number>();
+    for (const c of weak) for (const r of c.roles) byRole.set(r, (byRole.get(r) ?? 0) + c.qty);
+    const [role, shared] = [...byRole].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0];
+    const names = weak.slice(0, QUALITY_NAMED).map((c) => c.name);
+    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    issues.push({
+      text: `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} below the card quality Bracket ${f.bracket} decks run (quality under ${pct(expected)}). The weakest ${names.length === 1 ? 'is' : 'are'} ${list}.`,
+      filter: role && shared * 2 > count ? { role } : null, loss: 1 - value,
+    });
+  }
+  return { value, issues };
 }
 
 function curvePart(f: Facts): Part {
@@ -618,7 +686,7 @@ function bracketPart(f: Facts): Part {
 }
 
 const PARTS: Record<RatingKey, (f: Facts) => Part> = {
-  mana: manaPart, roles: rolesPart, synergy: synergyPart, curve: curvePart,
+  mana: manaPart, roles: rolesPart, synergy: synergyPart, quality: qualityPart, curve: curvePart,
   interaction: interactionPart, wincons: winconsPart, consistency: consistencyPart, bracket: bracketPart,
 };
 
@@ -634,7 +702,7 @@ export function ratingCapped(deck: Deck, violations: readonly Violation[]): bool
 }
 
 /**
- * Rates a deck 0-100 against its target bracket (spec §11, deck-theory.md §7): eight weighted
+ * Rates a deck 0-100 against its target bracket (spec §11, deck-theory.md §7): nine weighted
  * sub-scores, each with its three largest shortfalls as fixes.
  *
  * A deck short of 100 cards is rated "so far": every sub-score is judged against targets scaled to

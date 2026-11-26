@@ -179,7 +179,7 @@ describe('POST /api/analyze', () => {
     expect(a.summary.cardCount).toBe(100);
     expect(a.rating.rating).toBeGreaterThanOrEqual(0);
     expect(a.rating.rating).toBeLessThanOrEqual(100);
-    expect(a.rating.subscores).toHaveLength(8);
+    expect(a.rating.subscores).toHaveLength(9);
     expect(a.rating.legal).toBe(true);
     expect([1, 2, 3, 4]).toContain(a.bracket.floor);
     expect(a.targets.lands).toBeGreaterThan(20);

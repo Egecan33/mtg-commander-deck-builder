@@ -183,7 +183,7 @@ export function RatingPanel({
             {broken.length
               ? 'The deck breaks a rule, so the rating is capped at 40 until that is fixed.'
               : rating.complete
-                ? 'Eight things a deck needs, weighed together. Click a fix to see cards that solve it.'
+                ? 'Nine things a deck needs, weighed together. Click a fix to see cards that solve it.'
                 : 'The deck is not full yet, so each part is judged against a deck of this size.'}
           </p>
         </div>
@@ -203,7 +203,7 @@ export function RatingPanel({
         )}
       </Section>
 
-      <Section title="The eight parts">
+      <Section title="The nine parts">
         <ul className="grid gap-3.5">
           {rating.subscores.map((s) => {
             const pct = Math.round(s.value * 100);
