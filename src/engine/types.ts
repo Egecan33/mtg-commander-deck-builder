@@ -250,5 +250,6 @@ export interface PackagePlan {
   packages: PlannedPackage[];                       // core four first, then theme, then functional
   lands: { target: number; count: number; reason: string; pinned: boolean };
   offers: PackageOffer[];
-  dropped: { id: PackageId; name: string; slots: number }[];
+  /** Focused themes left out: under 8 slots, or (with `legal`) fewer than 8 cards the deck and its legal pool hold. */
+  dropped: { id: PackageId; name: string; slots: number; legal?: number }[];
 }

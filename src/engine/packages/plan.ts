@@ -3,15 +3,55 @@ import {
   CORE_BAND_ROLES, CORE_PIN_ROLE, PACKAGE_MIN, PACKAGE_PIN_MAX, WIPE_REASON, coreBase, pinFor, targetPlan, wipeSlot,
 } from '../targets';
 import type {
-  AxisId, Card, CorePackageId, Deck, DeckSummary, EngineContext, PackageId, PackageOffer, PackagePlan, PlannedPackage, Role, Targets,
+  AxisId, Card, CardDb, CorePackageId, Deck, DeckSummary, EngineContext, PackageId, PackageOffer, PackagePlan, PlannedPackage, Role, Targets,
 } from '../types';
-import { CORE_PACKAGES, FUNCTIONAL_PACKAGES, isWipe, packageDef, packageMembers, tagsOf, themePackage } from './catalogue';
+import { CORE_PACKAGES, FUNCTIONAL_PACKAGES, inPackage, isWipe, packageDef, packageMembers, tagsOf, themePackage } from './catalogue';
 import type { PackageDef } from './catalogue';
-import { commanderCards } from '../rules';
+import { cardFitsDeck, commanderCards } from '../rules';
+import { isLandCard } from '../summary';
 
 const signed = (n: number): string => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 const shortOf = (card: Card): string => { const i = card.frontName.indexOf(', '); return i > 0 ? card.frontName.slice(0, i) : card.frontName; };
 const clampPin = (n: number): number => Math.min(PACKAGE_PIN_MAX, Math.max(PACKAGE_MIN, Math.round(n)));
+
+/** Legal nonland cards for a deck's commanders, per card database (the pool a package could draw on). */
+const legalCache = new WeakMap<CardDb, Map<string, readonly Card[]>>();
+const reachCache = new WeakMap<readonly Card[], Map<string, number>>();
+
+function legalNonland(deck: Deck, db: CardDb): readonly Card[] {
+  const key = JSON.stringify([deck.commanders, deck.chosenColor, deck.companion]);
+  let byDeck = legalCache.get(db);
+  if (!byDeck) legalCache.set(db, (byDeck = new Map()));
+  let hit = byDeck.get(key);
+  if (!hit) {
+    hit = db.all().filter((card) => {
+      const f = db.features(card.oracleId);
+      return !!f && !isLandCard(f) && cardFitsDeck(card, deck, db) === null;
+    });
+    byDeck.set(key, hit);
+  }
+  return hit;
+}
+
+/**
+ * How many cards a package can hold in this deck: the legal nonland cards for its commanders that
+ * are in it, plus the deck's extra copies of many-copy cards. Owner's rule 4: an optional package
+ * needs at least 8, so one the card pool cannot fill is offered, not planned.
+ */
+export function packageReach(deck: Deck, db: CardDb, def: PackageDef): number {
+  const legal = legalNonland(deck, db);
+  let byDef = reachCache.get(legal);
+  if (!byDef) reachCache.set(legal, (byDef = new Map()));
+  const key = `${def.id}|${deck.targetBracket}`;
+  let n = byDef.get(key);
+  if (n === undefined) {
+    n = 0;
+    for (const card of legal) if (inPackage(def, card, db.features(card.oracleId)!, tagsOf(db, card.oracleId), deck.targetBracket)) n++;
+    byDef.set(key, n);
+  }
+  const members = packageMembers(deck, db, def);
+  return n + Math.max(0, members.count - members.ids.length);
+}
 
 /** The deck's own plan: four core packages, the focused theme packages with room, and the packages the user pinned. */
 export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary = summarizeDeck(deck, ctx.db)): PackagePlan {
@@ -60,19 +100,34 @@ export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary
   const pinnedAxes = new Set(pins.map((p) => p.def.axis).filter((a): a is AxisId => a !== null));
   const slots = (100 - deck.commanders.length) - t.lands - planned.reduce((n, p) => n + p.target, 0) - pins.reduce((n, p) => n + p.n, 0);
 
-  // focused themes share what is left
-  const focus = themeFocus(weights).axes
+  // focused themes share what is left: only those the card pool can fill to 8 (owner's rule 4), and
+  // none past the cards it can hold; what one cannot use goes to the others, strongest first
+  const dropped: PackagePlan['dropped'] = [];
+  const legalNote = new Map<PackageId, number>();
+  const candidates = themeFocus(weights).axes
     .filter((a) => a !== 'typal' && !pinnedAxes.has(a) && (weights[a] ?? 0) >= 0.5)
     .sort((a, b) => (weights[b] ?? 0) - (weights[a] ?? 0) || (a < b ? -1 : 1))
     .slice(0, 3);
+  const focus: AxisId[] = [];
+  const reach = new Map<AxisId, number>();
+  for (const axis of candidates) {
+    const def = themePackage(axis);
+    const n = packageReach(deck, db, def);
+    if (n >= PACKAGE_MIN) { focus.push(axis); reach.set(axis, n); continue; }
+    dropped.push({ id: def.id, name: def.name, slots: 0, legal: n });
+    legalNote.set(def.id, n);
+  }
   const total = focus.reduce((n, a) => n + (weights[a] ?? 0), 0);
   const shares = focus.map((a) => (slots <= 0 || total <= 0 ? 0 : Math.floor((slots * (weights[a] ?? 0)) / total)));
   if (focus.length > 0 && slots > 0) shares[0] += slots - shares.reduce((n, x) => n + x, 0);
-  const dropped: PackagePlan['dropped'] = [];
+  let spare = 0;
+  focus.forEach((axis, i) => { const cap = reach.get(axis) ?? 0; if (shares[i] > cap) { spare += shares[i] - cap; shares[i] = cap; } });
+  focus.forEach((axis, i) => { const room = Math.max(0, (reach.get(axis) ?? 0) - shares[i]); const give = Math.min(room, spare); shares[i] += give; spare -= give; });
   focus.forEach((axis, i) => {
     const def = themePackage(axis);
+    const capped = shares[i] === reach.get(axis);
     if (shares[i] >= PACKAGE_MIN) {
-      planned.push(make(def, shares[i], `${Math.round((100 * shares[i]) / Math.max(1, slots))}% of the ${slots} slots left after lands and the core packages.`, [], false));
+      planned.push(make(def, shares[i], `${Math.round((100 * shares[i]) / Math.max(1, slots))}% of the ${slots} slots left after lands and the core packages${capped ? `; every legal ${def.name} card this deck can play` : ''}.`, [], false));
     } else dropped.push({ id: def.id, name: def.name, slots: Math.max(0, shares[i]) });
   });
   const pinOrder = [...pins].sort((a, b) => (a.def.kind === b.def.kind ? (a.def.id < b.def.id ? -1 : 1) : a.def.kind === 'theme' ? -1 : 1));
@@ -100,7 +155,12 @@ export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary
   };
   const themeAxes = Object.keys(weights).filter((a) => a !== 'typal' && (weights[a] ?? 0) > 0).sort((a, b) => (weights[b] ?? 0) - (weights[a] ?? 0) || (a < b ? -1 : 1));
   const defs: PackageDef[] = [...FUNCTIONAL_PACKAGES, ...themeAxes.map(themePackage)].filter((d) => !have.has(d.id));
-  const offers: PackageOffer[] = defs.map((d) => ({ id: d.id, name: d.name, kind: d.kind, why: why(d.id), count: packageMembers(deck, db, d).count }));
+  const offers: PackageOffer[] = defs.map((d) => {
+    const reason = why(d.id);
+    const legal = legalNote.get(d.id);
+    const note = legal === undefined ? null : `only ${legal} legal ${legal === 1 ? 'card' : 'cards'} for this deck, under the 8 a package needs`;
+    return { id: d.id, name: d.name, kind: d.kind, why: reason && note ? `${reason}; ${note}` : (reason ?? (note ? note[0].toUpperCase() + note.slice(1) : null)), count: packageMembers(deck, db, d).count };
+  });
   const rank = (o: PackageOffer) => (o.why !== null ? 0 : 1);
   offers.sort((a, b) => rank(a) - rank(b));   // stable: functional first, then theme by weight, as built
 

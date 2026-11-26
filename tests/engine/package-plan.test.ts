@@ -161,6 +161,20 @@ describe('packagePlan', () => {
     expect(d).toBeTruthy();
     expect(d!.slots).toBeLessThan(8);
   });
+  // Review I3: Spock planned "Vulcan typal 1 of 9" though only 8 legal Vulcans exist.
+  it('a theme is planned only when the deck and its legal pool can hold 8, and never past what exists', () => {
+    // Five legal Dragons exist for the Golgari elf deck in the fixture.
+    const thin = plan({ ...upgraded, themeWeights: { 'typal:elf': 1, 'typal:dragon': 0.9, tokens: 0.8 } });
+    expect(thin.packages.some((x) => x.id === 'theme:typal:dragon')).toBe(false);
+    expect(thin.dropped.find((x) => x.id === 'theme:typal:dragon')).toMatchObject({ legal: 5 });
+    expect(thin.offers.find((x) => x.id === 'theme:typal:dragon')!.why).toMatch(/only 5 legal cards/);
+    // Nine legal Treasure cards: the package gets at most nine of the slots, the rest go to the elves.
+    const capped = plan({ ...upgraded, themeWeights: { 'typal:elf': 1, treasure: 1 } });
+    const treasure = capped.packages.find((x) => x.id === 'theme:treasure')!;
+    expect(treasure.target).toBe(9);
+    const themes = capped.packages.filter((x) => x.kind === 'theme');
+    expect(themes.reduce((n, x) => n + x.target, 0)).toBe(99 - capped.lands.target - capped.packages.slice(0, 4).reduce((n, x) => n + x.target, 0));
+  });
   it('pins win and the floor holds', () => {
     const ramp14 = plan({ ...upgraded, roleTargets: { ramp: 14 } }).packages[0];
     expect(ramp14).toMatchObject({ target: 14, pinned: true });
