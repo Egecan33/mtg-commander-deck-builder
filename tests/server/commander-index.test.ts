@@ -3,6 +3,9 @@ import * as pageRoute from '@/app/api/commander/[slug]/route';
 import * as recsRoute from '@/app/api/commander/[slug]/recs/route';
 import type { CommanderPageResponse } from '@/app/lib/api';
 import type { Card, Deck } from '@/engine/types';
+import { cardSlug } from '@/engine/text/slug';
+import { toClientCard } from '@/server/cards';
+import { partnersOf } from '@/server/browse';
 import { commanderIndex, slugIndex } from '@/server/commander-index';
 import { saveDeck } from '@/server/decks';
 import { updateSettings } from '@/server/settings';
@@ -32,6 +35,18 @@ describe('slugIndex', () => {
     expect(entries.length).toBeGreaterThan(20);
     expect(new Set(entries.map((e) => e.slug)).size).toBe(entries.length);
     expect(bySlug.size).toBeGreaterThanOrEqual(entries.length);
+  });
+});
+
+describe('client cards link to the right page', () => {
+  it('a card names its page slug whenever that is not its plain name slug', () => {
+    const db = getCardDb();
+    for (const e of commanderIndex().entries) expect(toClientCard(e.card, db, new Set()).slug ?? cardSlug(e.card)).toBe(e.slug);
+  });
+  it('partners come with their page slug', () => {
+    const r = partnersOf(id('Tymna the Weaver'));
+    expect(r.partners.length).toBeGreaterThan(0);
+    for (const p of r.partners as { oracleId: string; slug?: string }[]) expect(p.slug).toBe(commanderIndex().byId.get(p.oracleId)?.slug);
   });
 });
 

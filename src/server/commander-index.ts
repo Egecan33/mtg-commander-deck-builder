@@ -2,10 +2,11 @@ import type { CommanderPageResponse, CommanderTile } from '@/app/lib/api';
 import { axisLabel } from '@/engine/features/axes';
 import { allowedIdentity, canPair, isBasicLand } from '@/engine/rules';
 import { leadAxes, resolveThemeWeights } from '@/engine/summary';
-import { cardSlug, fullSlug } from '@/engine/text/slug';
+import { cardSlug } from '@/engine/text/slug';
 import type { AxisId, Bracket, Card, Color, Deck } from '@/engine/types';
 import type { ServerCardDb } from './carddb';
 import { poolIndex, toCommanderCard } from './cards';
+import { slugIndex } from './commander-slugs';
 import { ownedSet } from './collection';
 import { engineContext } from './context';
 import { listDecks } from './decks';
@@ -20,27 +21,9 @@ export function commanderShell(commanders: string[], bracket: Bracket, chosenCol
   return { id: null, name: '', commanders, companion: null, chosenColor, main: [], targetBracket: bracket, themeWeights: null };
 }
 
-export interface CommanderEntry { card: Card; slug: string; weights: Record<AxisId, number>; lead: AxisId[] }
+export { slugIndex };
 
-/**
- * Page slugs for cards given in popularity order. Each claims its EDHREC slug, or the slug plus
- * eight id characters when taken; the full-name slug is an alias that never displaces a primary.
- */
-export function slugIndex(cards: readonly Card[]): { slugOf: Map<string, string>; bySlug: Map<string, Card> } {
-  const slugOf = new Map<string, string>();
-  const bySlug = new Map<string, Card>();
-  for (const card of cards) {
-    let slug = cardSlug(card);
-    if (bySlug.has(slug)) slug = `${slug}-${card.oracleId.slice(0, 8)}`;
-    bySlug.set(slug, card);
-    slugOf.set(card.oracleId, slug);
-  }
-  for (const card of cards) {
-    const full = fullSlug(card);
-    if (full !== slugOf.get(card.oracleId) && !bySlug.has(full)) bySlug.set(full, card);
-  }
-  return { slugOf, bySlug };
-}
+export interface CommanderEntry { card: Card; slug: string; weights: Record<AxisId, number>; lead: AxisId[] }
 
 export interface CommanderIndex {
   entries: CommanderEntry[];

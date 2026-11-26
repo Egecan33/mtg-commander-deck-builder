@@ -1,14 +1,32 @@
 import type { CardLookup, ClientCard, CommanderCard } from '@/app/lib/api';
+import { cardSlug } from '@/engine/text/slug';
 import { normalizeName } from '@/engine/carddb';
 import { isCommanderEligible, needsColorChoice, partnerKind, requiresColorChoice } from '@/engine/rules';
 import type { Card, CardDb } from '@/engine/types';
 import type { ServerCardDb } from './carddb';
 import { ownedSet } from './collection';
+import { slugIndex } from './commander-slugs';
 import { cacheSlot } from './state';
 import { getCardDb } from './store';
 
+/** Commanders whose page slug is not their plain name slug (two commanders claim it; the less popular gets the id suffix), by oracle id. */
+function slugOverrides(): Map<string, string> {
+  const db = getCardDb();
+  const slot = cacheSlot<{ db: CardDb | null; map: Map<string, string> }>('slug-overrides', () => ({ db: null, map: new Map() }));
+  if (slot.db !== db) {
+    const { commanders } = poolIndex(db);
+    const map = new Map<string, string>();
+    for (const [id, slug] of slugIndex(commanders).slugOf) if (slug !== cardSlug(db.get(id) as Card)) map.set(id, slug);
+    slot.db = db;
+    slot.map = map;
+  }
+  return slot.map;
+}
+
 export function toClientCard(card: Card, db: CardDb, owned: ReadonlySet<string>): ClientCard {
+  const slug = slugOverrides().get(card.oracleId);
   return {
+    ...(slug ? { slug } : {}),
     oracleId: card.oracleId, name: card.name, frontName: card.frontName, manaCost: card.manaCost, cmc: card.cmc,
     typeLine: card.typeLine, colorIdentity: card.colorIdentity, imageFaces: card.imageFaces,
     gameChanger: card.gameChanger, priceUsd: card.priceUsd,

@@ -254,7 +254,7 @@ export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
 export type ClientCard = Pick<
   Card,
   'oracleId' | 'name' | 'frontName' | 'manaCost' | 'cmc' | 'typeLine' | 'colorIdentity' | 'imageFaces' | 'gameChanger' | 'priceUsd'
-> & { roles: Role[]; owned: boolean };
+> & { roles: Role[]; owned: boolean; /** A commander page slug that differs from its plain name slug (two commanders share the name). */ slug?: string };
 
 export type ScoredCard = ClientCard & { score: CardScore };
 export type CardLookup = Record<string, ClientCard>;

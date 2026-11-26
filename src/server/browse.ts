@@ -209,5 +209,5 @@ export function partnersOf(oracleId: string): PartnersResponse {
   const { ranks, position } = poolIndex(db);
   const rank = (c: Card) => ranks[position.get(c.oracleId) as number];
   const partners = db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderCard(c, db, owned)) };
+  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned)) };
 }
