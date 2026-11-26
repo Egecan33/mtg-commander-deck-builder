@@ -3,7 +3,8 @@ import { formatOf, isLegalIn } from '../format';
 import { canLead, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
-import type { Bracket, BuildOptions, Card, CardDb, Color, Deck, EngineContext } from '../types';
+import type { Bracket, BuildOptions, Card, CardDb, Color, Deck, EngineContext, Wildcards } from '../types';
+import { wildcardsNeeded } from '../wildcards';
 import { autoBuild } from './auto';
 import { improveDeck } from './goals';
 import { applySwaps } from './improve';
@@ -89,7 +90,14 @@ export function buysOf(deck: Deck, owned: ReadonlySet<string>, db: CardDb): stri
   return out;
 }
 
-export interface TierDeck { /** Most cards to buy besides what is owned; null = no limit. */ cap: number | null; deck: Deck; rating: number; buys: string[] }
+export interface TierDeck {
+  /** Most cards to buy besides what is owned; null = no limit. */
+  cap: number | null; deck: Deck; rating: number; buys: string[];
+  /** Brawl tiers: owned cards only, within the wildcards ('crafted'), or the whole Arena pool ('unlimited'). */
+  kind?: 'owned' | 'crafted' | 'unlimited';
+  /** Brawl tiers: the wildcards the deck needs, per rarity. */
+  wildcards?: Wildcards;
+}
 
 const tier = (cap: number | null, deck: Deck, ctx: EngineContext, owned: ReadonlySet<string>): TierDeck => ({
   cap, deck, rating: rateDeck(deck, ctx).rating, buys: buysOf(deck, owned, ctx.db),
@@ -100,6 +108,24 @@ export function eagerTiers(commander: string, ctx: EngineContext, owned: Set<str
   const base = autoBuild(shell(commander, bracket), ctx, opts(owned, true));
   const free = autoBuild(shell(commander, bracket), ctx, opts(owned, false));
   return { owned: tier(0, base, ctx, owned), unlimited: tier(null, free, ctx, owned) };
+}
+
+/**
+ * Best from collection on MTG Arena (`ctx.db` a Brawl database): the best deck from owned cards
+ * only, the best deck within the wildcards the player has ("Only what I can craft"), and the best
+ * deck from the whole Arena pool. Each says the wildcards it needs per rarity.
+ */
+export function wildcardTiers(
+  commander: string, ctx: EngineContext, owned: Set<string>, bracket: Bracket, wildcards: Wildcards,
+): { owned: TierDeck; crafted: TierDeck; unlimited: TierDeck } {
+  const make = (kind: 'owned' | 'crafted' | 'unlimited', deck: Deck): TierDeck => ({
+    ...tier(kind === 'owned' ? 0 : null, deck, ctx, owned), kind, wildcards: wildcardsNeeded(deck, ctx.db, owned),
+  });
+  return {
+    owned: make('owned', autoBuild(shell(commander, bracket), ctx, opts(owned, true))),
+    crafted: make('crafted', autoBuild(shell(commander, bracket), ctx, opts(owned, false, { wildcards }))),
+    unlimited: make('unlimited', autoBuild(shell(commander, bracket), ctx, opts(owned, false))),
+  };
 }
 
 /**
