@@ -6,7 +6,6 @@ import { CommanderTileView } from '@/app/components/CommanderTileView';
 import { EmptyState } from '@/app/components/EmptyState';
 import { useNotify } from '@/app/components/Shell';
 import { ApiError, getSimilarCommanders, type RecsQuery, type SimilarResponse } from '@/app/lib/api';
-import { budgetMax } from '@/app/lib/budget';
 import { setFilters } from '@/app/lib/filters';
 import { isAbort } from '@/app/lib/ui';
 
@@ -15,12 +14,11 @@ export function SimilarTab({ slug, withSlug, q, name }: { slug: string; withSlug
   const [data, setData] = useState<SimilarResponse | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
-    getSimilarCommanders(slug, withSlug, ctrl.signal).then(setData, (e) => { if (!isAbort(e) && !(e instanceof ApiError && e.status === 404)) notify.error(e); });
+    getSimilarCommanders(slug, withSlug, { budget: q.budget, ownedOnly: q.ownedOnly }, ctrl.signal).then(setData, (e) => { if (!isAbort(e) && !(e instanceof ApiError && e.status === 404)) notify.error(e); });
     return () => ctrl.abort();
-  }, [slug, withSlug, notify]);
+  }, [slug, withSlug, q.budget, q.ownedOnly, notify]);
   if (!data) return <p className="text-ash">Loading similar commanders…</p>;
-  const cap = budgetMax(q.budget);
-  const shown = data.commanders.filter((c) => (!q.ownedOnly || c.owned) && (cap === null || (typeof c.priceUsd === 'number' && c.priceUsd <= cap)));
+  const shown = data.commanders;
   return (
     <div data-testid="similar">
       {data.basis === 'popularity' && <p className="mb-3 text-ash">{name} names no theme, so these are the most played commanders in its colours.</p>}

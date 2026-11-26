@@ -41,8 +41,8 @@
  *        empty says why in `empty`. `budget` any|under-5|under-1 (else 400), `owned=1` only the collection,
  *        `free=1` (with `owned`) only free copies. Forge numbers always (`synergy`, `quality`, `scores`); an `edhrec`
  *        block on a card only when EDHREC data for this commander is already cached. Never a request.
- * GET  /api/commander/:slug/similar?with -> SimilarResponse
- *        Up to 24 commanders within one colour of this page's identity, ranked by how alike their theme weights
+ * GET  /api/commander/:slug/similar?with&budget&owned -> SimilarResponse
+ *        `budget` and `owned=1` filter before the cut. Up to 24 commanders within one colour of this page's identity, ranked by how alike their theme weights
  *        are (`similarity` 0-1, 0.85 times for one colour off). A commander that names no theme gets the most
  *        played commanders of its colours (`basis: 'popularity'`, `similarity: null`). Text only: no EDHREC data.
  * GET  /api/commander/:slug/combos?with&bracket&budget&owned&free -> CommanderCombosResponse
@@ -740,8 +740,8 @@ export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string },
     undefined,
     signal,
   );
-export const getSimilarCommanders = (slug: string, withSlug?: string, signal?: AbortSignal) =>
-  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug })}`, undefined, signal);
+export const getSimilarCommanders = (slug: string, withSlug: string | undefined, q: Pick<RecsQuery, 'budget' | 'ownedOnly'>, signal?: AbortSignal) =>
+  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug, budget: q.budget, owned: q.ownedOnly ? 1 : undefined })}`, undefined, signal);
 export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
   call<CommanderCombosResponse>(
     'GET',

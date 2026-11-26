@@ -1,4 +1,5 @@
-import type { SimilarResponse } from '@/app/lib/api';
+import type { RecsQuery, SimilarResponse } from '@/app/lib/api';
+import { budgetMax } from '@/app/lib/budget';
 import type { AxisId, Card, Color } from '@/engine/types';
 import { resolveThemeWeights } from '@/engine/summary';
 import { ownedSet } from './collection';
@@ -39,13 +40,14 @@ export function rankSimilar(
   page: { ids: string[]; identity: Color[]; weights: Weights },
   candidates: readonly { card: Card; weights: Weights }[],
   limit: number,
+  keep: (c: Card) => boolean = () => true,
 ): { basis: 'themes' | 'popularity'; ranked: { card: Card; similarity: number | null; colorsOff: 0 | 1 }[] } {
   const off = (c: Card): number => {
     const mine = new Set(page.identity);
     const theirs = new Set(c.colorIdentity);
     return [...mine].filter((x) => !theirs.has(x)).length + [...theirs].filter((x) => !mine.has(x)).length;
   };
-  const pool = candidates.filter((c) => !page.ids.includes(c.card.oracleId)).map((c) => ({ ...c, colorsOff: off(c.card) })).filter((c) => c.colorsOff <= 1);
+  const pool = candidates.filter((c) => !page.ids.includes(c.card.oracleId) && keep(c.card)).map((c) => ({ ...c, colorsOff: off(c.card) })).filter((c) => c.colorsOff <= 1);
   if (vector(page.weights).size === 0) {
     const ranked = pool.filter((c) => c.colorsOff === 0).sort((a, b) => byRankName(a.card, b.card)).slice(0, limit);
     return { basis: 'popularity', ranked: ranked.map((c) => ({ card: c.card, similarity: null, colorsOff: 0 as const })) };
@@ -59,7 +61,8 @@ export function rankSimilar(
   return { basis: 'themes', ranked: ranked.map((c) => ({ card: c.card, similarity: c.similarity, colorsOff: c.colorsOff as 0 | 1 })) };
 }
 
-export function similarCommanders(cards: Card[]): SimilarResponse {
+/** The owned and budget filters apply before the cut to `SIMILAR_LIMIT`, so a filtered view is not left empty by the top 24. */
+export function similarCommanders(cards: Card[], q: Pick<RecsQuery, 'ownedOnly' | 'budget'> = { ownedOnly: false, budget: 'any' }): SimilarResponse {
   const db = getCardDb();
   const index = commanderIndex();
   const ids = cards.map((c) => c.oracleId);
@@ -68,7 +71,9 @@ export function similarCommanders(cards: Card[]): SimilarResponse {
       ? (index.byId.get(ids[0])?.weights ?? {})
       : resolveThemeWeights(commanderShell(ids, 3), { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} });
   const identity = [...allowedIdentity(commanderShell(ids, 3), db)];
-  const { basis, ranked } = rankSimilar({ ids, identity, weights }, index.entries, SIMILAR_LIMIT);
   const owned = ownedSet();
+  const cap = budgetMax(q.budget);
+  const keep = (c: Card) => (!q.ownedOnly || owned.has(c.oracleId)) && (cap === null || (typeof c.priceUsd === 'number' && c.priceUsd <= cap));
+  const { basis, ranked } = rankSimilar({ ids, identity, weights }, index.entries, SIMILAR_LIMIT, keep);
   return { basis, commanders: ranked.map((r) => ({ ...toCommanderTile(r.card, owned), similarity: r.similarity, colorsOff: r.colorsOff })) };
 }

@@ -45,6 +45,15 @@ describe('similar commanders', () => {
     expect(r.commanders[0].lead).toContain('typal:elf');
   });
 
+  it('route: owned=1 lists only owned commanders, from the whole pool', async () => {
+    const all = await similar('lathril-blade-of-the-elves');
+    const last = all.commanders[all.commanders.length - 1];
+    replaceCollection(`1 ${last.name}`);
+    const res = (await (await callRoute(similarRoute, '/api/commander/lathril-blade-of-the-elves/similar?owned=1', { slug: 'lathril-blade-of-the-elves' })).json()) as SimilarResponse;
+    expect(res.commanders.map((c) => c.name)).toEqual([last.name]);
+    replaceCollection('');
+  });
+
   it('of a colourless commander have at most one colour', async () => {
     for (const c of (await similar('kozilek-the-great-distortion')).commanders) expect(c.colorIdentity.length).toBeLessThanOrEqual(1);
   });
@@ -56,6 +65,13 @@ describe('similar commanders', () => {
     expect(out.basis).toBe('popularity');
     expect(out.ranked.map((r) => r.card.oracleId)).toEqual(['a', 'b']);
     expect(out.ranked.every((r) => r.similarity === null && r.colorsOff === 0)).toBe(true);
+  });
+
+  it('apply the filter before the cut, so a low-ranked owned commander still shows', () => {
+    const base = card('Krenko, Mob Boss');
+    const mk = (id: string, rank: number) => ({ card: { ...base, oracleId: id, name: id, edhrecRank: rank, colorIdentity: ['R'] as Card['colorIdentity'] }, weights: { tokens: 1 } });
+    const out = rankSimilar({ ids: ['x'], identity: ['R'], weights: { tokens: 1 } }, [mk('a', 1), mk('b', 2), mk('c', 3)], 2, (c) => c.oracleId === 'c');
+    expect(out.ranked.map((r) => r.card.oracleId)).toEqual(['c']);
   });
 
   it('are indexed for every commander', () => {
