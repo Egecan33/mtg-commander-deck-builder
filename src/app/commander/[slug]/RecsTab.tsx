@@ -13,7 +13,7 @@ import { JumpRail, JumpScope } from '@/app/components/JumpRail';
 import { Section, useSectionLimit } from '@/app/components/Section';
 import type { CommanderRecsResponse, RecCard } from '@/app/lib/api';
 import { setFilters, useFilters } from '@/app/lib/filters';
-import { fmtPrice } from '@/app/lib/ui';
+import { fmtInt, fmtPrice } from '@/app/lib/ui';
 import { arrangeRecs, type ArrangedSection, type GroupBy, type RecSort } from './arrange';
 
 export const REC_GROUPS: FilterOption[] = [
@@ -116,6 +116,7 @@ export function RecsTab({ data, name, edhrecDecks }: { data: CommanderRecsRespon
               <Section id={`rec-${s.id}`} title={s.title} count={s.total} cap={30} data={{ 'data-section': s.id }}>
                 {s.note && <p className="mb-2 text-[13px] text-ash">{s.note}</p>}
                 {body(s)}
+                {s.total > s.cards.length && <p className="mt-2 text-[13px] text-ash" data-testid="rec-capped">Showing the first {s.cards.length} of {fmtInt(s.total)}. Narrow the filters to see the rest.</p>}
               </Section>
             {groupBy === 'category' && s.id === 'owned' && (
             <Section id="rec-packages" title="Packages" data={{ 'data-section': 'packages' }}>

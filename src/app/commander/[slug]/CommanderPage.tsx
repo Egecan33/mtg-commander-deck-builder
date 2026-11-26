@@ -135,7 +135,7 @@ export function CommanderPage({ slug }: { slug: string }) {
 
   const name = page ? joinNames(page.commanders) : '';
   const commanderIds = useMemo(() => page?.commanders.map((c) => c.oracleId) ?? [], [page]);
-  const avg = useAverageDeck(commanderIds, name, q, ready && !!page && (tab === 'deck' || tab === 'charts'), freeOnly === true);
+  const avg = useAverageDeck(commanderIds, name, q, ready && !!page && (tab === 'deck' || tab === 'charts'), freeOnly === true, page?.edhrec ?? '');
   const create = useCallback(
     async (kind: 'build' | 'best' | 'empty') => {
       if (!page) return;

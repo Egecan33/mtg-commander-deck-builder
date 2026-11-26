@@ -9,7 +9,7 @@ import { useFreeOnly } from '../components/held';
 import { useNotify } from '../components/Shell';
 import { VirtualGrid, usePaged } from '../components/VirtualGrid';
 import { getCommanders, getThemes, type ColorLetter, type ColorMode, type CommanderSort, type CommanderTile, type ThemeInfo } from '../lib/api';
-import { useFilters } from '../lib/filters';
+import { setFilters, useFilters } from '../lib/filters';
 import { axisLabel, fmtInt } from '../lib/ui';
 
 const PAGE = 120;
@@ -19,14 +19,13 @@ const SORTS: { id: CommanderSort; label: string }[] = [
 
 export default function CommandersPage() {
   const notify = useNotify();
-  const { bracket } = useFilters();
+  const { bracket, ownedOnly } = useFilters();
   const [freeOnly] = useFreeOnly();
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [colors, setColors] = useState<ColorLetter[]>([]);
   const [mode, setMode] = useState<ColorMode>('includes');
   const [axis, setAxis] = useState('');
-  const [ownedOnly, setOwnedOnly] = useState(false);
   const [sort, setSort] = useState<CommanderSort>('popularity');
   const [themes, setThemes] = useState<ThemeInfo[]>([]);
   const [bestReady, setBestReady] = useState(false);
@@ -51,6 +50,11 @@ export default function CommandersPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // The grid cannot be sorted by best deck until Best from collection has run: do not keep that choice selected.
+  useEffect(() => {
+    if (!bestReady) setSort((s) => (s === 'best' ? 'popularity' : s));
+  }, [bestReady]);
+
   const free = freeOnly === true;
   const key = JSON.stringify([query, colors, mode, axis, ownedOnly, sort, bracket, free]);
   const paged = usePaged<CommanderTile>(
@@ -66,7 +70,7 @@ export default function CommandersPage() {
     },
     notify.error,
   );
-  const clear = () => { setQ(''); setQuery(''); setColors([]); setMode('includes'); setAxis(''); setOwnedOnly(false); setSort('popularity'); };
+  const clear = () => { setQ(''); setQuery(''); setColors([]); setMode('includes'); setAxis(''); setFilters({ ownedOnly: false }); setSort('popularity'); };
 
   return (
     <div className="flex h-full flex-col">
@@ -96,7 +100,7 @@ export default function CommandersPage() {
             {themes.filter((t) => t.commanders > 0).map((t) => <option key={t.axis} value={t.axis}>{t.label} · {t.commanders}</option>)}
           </select>
           <label className="flex items-center gap-1.5 text-ash">
-            <input type="checkbox" checked={ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="commanders-owned" />
+            <input type="checkbox" checked={ownedOnly} onChange={(e) => setFilters({ ownedOnly: e.target.checked })} data-testid="commanders-owned" />
             In my collection
           </label>
           <label className="flex items-center gap-1.5 text-ash">

@@ -12,12 +12,12 @@ const NONE: AverageDeck = { deck: null, analysis: null, error: null, empty: fals
 
 /**
  * The deck Build a deck would make for these commanders and filters (the same options and seed, so
- * the same deck), with its analysis. Built once per filter set per visit, and only while `enabled`.
+ * the same deck), with its analysis. Built once per filter set and EDHREC state per visit, and only while `enabled`.
  */
-export function useAverageDeck(commanders: string[], name: string, q: RecsQuery, enabled: boolean, free: boolean): AverageDeck {
+export function useAverageDeck(commanders: string[], name: string, q: RecsQuery, enabled: boolean, free: boolean, edhrec: string): AverageDeck {
   const memo = useRef(new Map<string, AverageDeck>());
   const [, bump] = useState(0);
-  const key = JSON.stringify([commanders, name, q, free]);
+  const key = JSON.stringify([commanders, name, q, free, edhrec]);
   useEffect(() => {
     if (!enabled || commanders.length === 0 || memo.current.has(key)) return;
     const ctrl = new AbortController();
