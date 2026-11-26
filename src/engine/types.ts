@@ -64,6 +64,8 @@ export interface CardDb {
   byName(name: string): Card | undefined;   // case/diacritic-insensitive; full or front name
   all(): readonly Card[];                    // legal, non-meld-result cards only
   combosFor(oracleId: string): readonly Combo[];
+  /** Rolled-up Scryfall Tagger slugs; absent on a database built without tags. */
+  tagSlugs?(oracleId: string): string[];
 }
 
 export interface DeckEntry { oracleId: string; qty: number; locked: boolean }
@@ -85,6 +87,8 @@ export interface Deck {
    * copies of the collection count as free, never the deck's cards. Absent means false.
    */
   built?: boolean;
+  /** Sizes the user set for theme and functional packages (`theme:<axis>`, `fn:<id>` -> 8..40); core pins live in roleTargets. */
+  packageTargets?: Record<string, number> | null;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -213,3 +217,8 @@ export interface DeckNetwork {
   cohesionParts: { connected: number; clustered: number }; // shares 0..1, three decimals
   unconnected: string[];
 }
+
+// ---- packages (src/engine/packages) -----------------------------------------------------------
+export type CorePackageId = 'ramp' | 'draw' | 'removal' | 'protection';
+export type PackageId = CorePackageId | `theme:${string}` | `fn:${string}`;
+export type PackageKind = 'core' | 'theme' | 'functional';
