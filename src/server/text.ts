@@ -1,6 +1,6 @@
 import type { ExportResponse, ImportResponse } from '@/app/lib/api';
 import { notOnArena } from './arena';
-import { isBrawlFormat } from '@/engine/format';
+import { deckSizeOf, isBrawlFormat } from '@/engine/format';
 import { canLead } from '@/engine/rules';
 import { exportArenaDecklist, exportDecklist, parseDecklist } from '@/engine/text';
 import type { Bracket, Deck } from '@/engine/types';
@@ -22,7 +22,7 @@ export function importText(body: Body): ImportResponse {
   const db = getCardDb();
   // A list without sections: its commander is spotted by the active collection's format (Brawl: planeswalkers too).
   const format = activeFormat(body.arenaFormat);
-  const parsed = parseDecklist(body.text, db, { isCommanderEligible: (c) => canLead(c, format) });
+  const parsed = parseDecklist(body.text, db, { isCommanderEligible: (c) => canLead(c, format), size: deckSizeOf(format) });
   const name =
     typeof body.name === 'string' && body.name.trim()
       ? body.name.trim().slice(0, MAX_NAME)
