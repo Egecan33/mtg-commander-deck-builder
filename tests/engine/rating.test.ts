@@ -500,6 +500,37 @@ describe('rateDeck: quality pass 2', () => {
   });
 });
 
+describe('rateDeck: which fixes Fix deck acts on', () => {
+  it('every fix on the reference decks says whether Fix deck can act on it', () => {
+    let n = 0;
+    for (const name of ['precon', 'upgraded', 'cedh'] as const) {
+      for (const target of [1, 2, 3, 4, 5] as Bracket[]) {
+        for (const f of allFixes(rateDeck(fixtureDeck(name, target), ctx))) {
+          expect(typeof f.actionable, `${name} B${target}: ${f.text}`).toBe('boolean');
+          n++;
+        }
+      }
+    }
+    expect(n).toBeGreaterThan(20);
+  });
+
+  it('shortfalls Fix deck works on are actionable; advice it does not act on is not', () => {
+    const all = (['precon', 'upgraded', 'cedh'] as const).flatMap((name) => ([1, 2, 3, 4, 5] as Bracket[]).flatMap((t) => allFixes(rateDeck(fixtureDeck(name, t), ctx))));
+    // The bracket's own rules (Game Changers at Bracket 2): the bracket step of Fix deck cuts them.
+    const overBracket = sub(rateDeck(fixtureDeck('cedh', 2), ctx), 'bracket').fixes;
+    expect(overBracket.length).toBeGreaterThan(0);
+    for (const f of overBracket) expect(f.actionable, f.text).toBe(true);
+    // A role short of its band: Fix deck asks Improve for that role.
+    const short = all.filter((f) => /^\d+ short on /.test(f.text));
+    expect(short.length).toBeGreaterThan(0);
+    for (const f of short) expect(f.actionable, f.text).toBe(true);
+    // "Plays like Bracket N" and "N over on …" are advice: nothing in Fix deck acts on them.
+    const advice = all.filter((f) => /^Plays like Bracket|^\d+ over on /.test(f.text));
+    expect(advice.length).toBeGreaterThan(0);
+    for (const f of advice) expect(f.actionable, f.text).toBe(false);
+  });
+});
+
 describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
   /** The scorer's quality part for a card, points / max; null for a gated card (no parts). */
   const qualityOf = (scorer: ReturnType<typeof createScorer>, c: Card): number | null => {
