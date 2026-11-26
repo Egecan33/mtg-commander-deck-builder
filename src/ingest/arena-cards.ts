@@ -27,12 +27,18 @@ export interface ArenaInfo { rarity: ArenaRarity; printing: { set: string; numbe
 
 /**
  * Collects, from Scryfall's default-cards printings, each card's cheapest printing on MTG Arena
- * (`arena` in `games`): the lowest rarity; among those, one with an `arena_id` first, then the
- * newest release. Arena wildcards
- * only craft their own rarity, so that printing is what the budget counts and what the export names.
+ * (`arena` in `games`). Printings Arena has an id for (`arena_id`) and that are not promos rank
+ * above rarity: Scryfall tags a few printings `arena` that Arena's crafting never offers (Stoneforge
+ * Mystic's Worldwake rare has no id; Flusterstorm's Buy-a-Box and Arena's own promo printings cannot
+ * be crafted), and counting those would make a card look cheaper than any wildcard crafts it. Among
+ * those printings: the lowest rarity, then the newest release. Only a card with no such printing
+ * falls back to its other Arena printings, by the same order. Arena wildcards only craft their own
+ * rarity, so that printing is what the budget counts and what the export names.
  */
 export function createArenaIndex(): { add(printing: any): void; get(oracleId: string): ArenaInfo | null } {
-  const best = new Map<string, ArenaInfo & { released: string; known: boolean }>();
+  type Best = ArenaInfo & { released: string };
+  const craftable = new Map<string, Best>();
+  const other = new Map<string, Best>();
   return {
     add(p) {
       if (!Array.isArray(p?.games) || !p.games.includes('arena')) return;
@@ -40,16 +46,15 @@ export function createArenaIndex(): { add(printing: any): void; get(oracleId: st
       const rarity = arenaRarityOf(p.rarity);
       if (typeof oracleId !== 'string' || !rarity || typeof p.set !== 'string' || typeof p.collector_number !== 'string') return;
       const released = typeof p.released_at === 'string' ? p.released_at : '';
-      // A printing Arena has an id for is one its import surely knows; Scryfall lists a few without.
-      const known = typeof p.arena_id === 'number';
-      const prev = best.get(oracleId);
+      const promo = p.promo === true || p.set_type === 'promo';
+      const map = typeof p.arena_id === 'number' && !promo ? craftable : other;
+      const prev = map.get(oracleId);
       const cheaper = !prev || ORDER.indexOf(rarity) < ORDER.indexOf(prev.rarity);
-      const same = !!prev && rarity === prev.rarity;
-      const better = same && (known !== prev.known ? known : released > prev.released);
-      if (cheaper || better) best.set(oracleId, { rarity, printing: { set: arenaSetCode(p.set), number: p.collector_number }, released, known });
+      const newer = !!prev && rarity === prev.rarity && released > prev.released;
+      if (cheaper || newer) map.set(oracleId, { rarity, printing: { set: arenaSetCode(p.set), number: p.collector_number }, released });
     },
     get(oracleId) {
-      const hit = best.get(oracleId);
+      const hit = craftable.get(oracleId) ?? other.get(oracleId);
       return hit ? { rarity: hit.rarity, printing: hit.printing } : null;
     },
   };

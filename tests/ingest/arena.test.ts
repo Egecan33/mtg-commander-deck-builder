@@ -73,6 +73,19 @@ describe('Arena rarity and printing', () => {
     expect(index.get('o-1')?.printing).toEqual({ set: 'FDN', number: '200' });
   });
 
+  it('ranks printings Arena has an id for, and that are not promos, above rarity (Stoneforge Mystic)', () => {
+    const index = createArenaIndex();
+    index.add(printing('wwk', '20', 'rare', ['paper', 'arena'], '2010-02-05')); // no arena_id
+    index.add(printing('spg', '29', 'mythic', ['paper', 'arena'], '2024-04-19', { arena_id: 90651, set_type: 'masterpiece' }));
+    expect(index.get('o-1')).toEqual({ rarity: 'mythic', printing: { set: 'SPG', number: '29' } });
+    // A promo with an id (Flusterstorm mh3/496, Rhys the Redeemed pana) does not set the rarity either.
+    const promo = createArenaIndex();
+    promo.add(printing('mh3', '496', 'rare', ['paper', 'arena'], '2024-06-14', { arena_id: 90799, promo: true }));
+    promo.add(printing('pana', '101', 'rare', ['arena'], '2019-12-12', { arena_id: 29535, set_type: 'promo' }));
+    promo.add(printing('soa', '18', 'mythic', ['paper', 'arena'], '2026-04-24', { arena_id: 102770 }));
+    expect(promo.get('o-1')).toEqual({ rarity: 'mythic', printing: { set: 'SOA', number: '18' } });
+  });
+
   it('prefers, at the cheapest rarity, a printing Arena has an id for over a newer one without', () => {
     const index = createArenaIndex();
     index.add(printing('ltc', '301', 'common', ['paper', 'arena'], '2023-06-23', { arena_id: 103830 }));
