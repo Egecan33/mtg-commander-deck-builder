@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, mulberry32 } from '@/engine/builder';
+import { deckNetwork } from '@/engine/network';
 import { QUALITY_EXPECTED, rateDeck, ratingCapped } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, Card, Deck, DeckRating, EngineContext, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
+import { withFiveUnconnected, withTenRandom } from '../helpers/network';
 
 const db = fixtureDb();
 const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
@@ -684,5 +686,30 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
         }
       }
     }
+  });
+});
+
+describe('rateDeck: cohesion', () => {
+  it('Synergy is 70% theme and 30% cohesion', () => {
+    for (const [name, bracket] of [['precon', 2], ['upgraded', 3], ['cedh', 5]] as const) {
+      const deck = fixtureDeck(name, bracket);
+      const cohesion = deckNetwork(deck, ctx).cohesion;
+      const value = sub(rateDeck(deck, ctx), 'synergy').value;
+      expect(value, name).toBeLessThanOrEqual(0.7 + (0.3 * cohesion) / 100 + 0.001);
+      expect(value, name).toBeGreaterThanOrEqual((0.3 * cohesion) / 100 - 0.02);
+    }
+  });
+
+  it('ten random cards lower Synergy', () => {
+    const deck = fixtureDeck('precon', 2);
+    expect(sub(rateDeck(withTenRandom(deck), ctx), 'synergy').value).toBeLessThan(sub(rateDeck(deck, ctx), 'synergy').value);
+  });
+
+  it("the unconnected fix names the cards and points at the deck's theme", () => {
+    const { deck, added } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const fix = sub(rateDeck(deck, ctx), 'synergy').fixes.find((f) => /^5 cards connect to nothing in this deck: /.test(f.text));
+    expect(fix).toBeTruthy();
+    for (const id of added) expect(fix!.text).toContain(card(db.get(id)!.name).name);
+    expect(fix!.filter?.axis).toBe('typal:elf');
   });
 });

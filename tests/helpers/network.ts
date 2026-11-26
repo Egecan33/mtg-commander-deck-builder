@@ -1,7 +1,8 @@
+import { deckNetwork, isRingCard } from '@/engine/network';
 import { mulberry32 } from '@/engine/random';
 import { canPair, cardFitsDeck, copyLimit, isCommanderEligible } from '@/engine/rules';
 import { parseDecklist } from '@/engine/text';
-import type { Bracket, Card, Deck } from '@/engine/types';
+import type { Bracket, Card, Deck, EngineContext } from '@/engine/types';
 import { card, deckText, fixtureDb } from './fixture-db';
 
 const db = fixtureDb();
@@ -48,4 +49,29 @@ export function oddDeck(): Deck {
     main: [{ oracleId: many.oracleId, qty: 30, locked: false }, { oracleId: 'not-a-card', qty: 1, locked: false }],
     targetBracket: 3, themeWeights: null,
   };
+}
+
+/**
+ * The deck with its unconnected cards cut and five nonland, non-ring cards swapped for five fixture
+ * cards that the network marks unconnected, so exactly those five connect to nothing.
+ */
+export function withFiveUnconnected(deck: Deck, ctx: EngineContext): { deck: Deck; added: string[] } {
+  const start = deckNetwork(deck, ctx);
+  const cut = new Set(start.unconnected);
+  const spells = deck.main.filter((e) => e.qty === 1 && !e.locked && !isLand(e.oracleId) && !deck.commanders.includes(e.oracleId) && !isRingCard(db.features(e.oracleId)!));
+  for (const e of spells) { if (cut.size >= 5) break; cut.add(e.oracleId); }
+  const base: Deck = { ...deck, main: deck.main.filter((e) => !cut.has(e.oracleId)) };
+  const inDeck = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+  const pool = db.all().filter((c) => !inDeck.has(c.oracleId) && !isLand(c.oracleId) && !isRingCard(db.features(c.oracleId)!) && copyLimit(c) === 1 && cardFitsDeck(c, deck, db) === null);
+  const added: string[] = [];
+  let current = base;
+  for (const c of pool) {
+    if (added.length === 5) break;
+    const trial: Deck = { ...current, main: [...current.main, { oracleId: c.oracleId, qty: 1, locked: false }] };
+    const net = deckNetwork(trial, ctx);
+    if (net.unconnected.length === added.length + 1 && [...added, c.oracleId].every((id) => net.unconnected.includes(id))) { current = trial; added.push(c.oracleId); }
+  }
+  if (added.length < 5) throw new Error('fixture has no five cards that connect to nothing');
+  // refill the slots freed by the swap with nothing else: the deck is a little short, which the rating allows
+  return { deck: current, added };
 }

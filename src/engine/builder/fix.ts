@@ -1,4 +1,5 @@
 import { analyzeBracket } from '../brackets';
+import { deckNetwork } from '../network';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
@@ -284,6 +285,45 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
 }
 
 /**
+ * Step 3b of `fixDeck` for `only = 'synergy'`: every card the network says connects to nothing is
+ * swapped, one at a time, for the best replacement the engine agrees with that does connect, as
+ * long as neither the rating nor Synergy falls. Locked cards stay. The options hold for every
+ * card brought in (the pool is built with them), so with nothing connected allowed nothing changes.
+ */
+function connectStage(start: Deck, startRating: DeckRating, ctx: EngineContext, poolOf: () => Pool): Stage {
+  const synergyOf = (r: DeckRating): number => r.subscores.find((s) => s.key === 'synergy')?.value ?? 0;
+  let deck = start;
+  let rating = startRating;
+  const changes: FixChange[] = [];
+  const locked = new Set(start.main.filter((e) => e.locked).map((e) => e.oracleId));
+  const tried = new Set<string>();
+  for (let round = 0; round < FIX_SWAPS; round++) {
+    const out = deckNetwork(deck, ctx).unconnected.find((id) => !locked.has(id) && !tried.has(id));
+    if (out === undefined) break;
+    tried.add(out);
+    for (const p of replaceCardFrom(deck, ctx, poolOf(), out, 6)) {
+      if (p.agrees === false || p.out !== out || p.in === '') continue;
+      const next = applySwaps(deck, [p]);
+      const net = deckNetwork(next, ctx);
+      if (net.unconnected.includes(p.in)) continue;
+      const after = rateDeck(next, ctx);
+      if (shownRating(after) < shownRating(rating) || synergyOf(after) < synergyOf(rating)) continue;
+      const names = (id: string) => ctx.db.get(id)?.name ?? id;
+      const links = net.edges.filter((e) => e.kind !== 'commander' && (e.a === p.in || e.b === p.in)).length;
+      changes.push({
+        out, in: p.in,
+        reason: `${names(out)} connects to nothing in this deck; ${names(p.in)} works with ${links === 0 ? 'the commander' : `${links} ${links === 1 ? 'card' : 'cards'} in it`}.`,
+        summary: 'Synergy: swaps a card that connects to nothing',
+      });
+      deck = next;
+      rating = after;
+      break;
+    }
+  }
+  return { deck, rating, changes, why: changes.length === 0 ? 'no card that connects to nothing has a better replacement among the cards allowed' : '' };
+}
+
+/**
  * "Fix deck": solves the problems the deck's own rating lists, and says what it did.
  *
  * 1. Legal and complete first. Every card that breaks a rule (banned, outside the colour identity,
@@ -354,7 +394,13 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
 
   // 3. The rating's own fixes, as the goals of a directed improve.
   const part = only ? (mid.subscores.find((s) => s.key === only) ?? null) : null;
-  const stage = improveStage(current, mid, ctx, opts, part);
+  let stage = improveStage(current, mid, ctx, opts, part);
+  // (A deck whose theme the rating itself calls unconfirmed is left to its theme weights first: no swap settles that.)
+  if (only === 'synergy' && part && part.fixes.every((f) => f.actionable)) {
+    const more = connectStage(stage.deck, stage.rating, ctx, poolOf);
+    if (more.changes.length > 0) stage = { deck: more.deck, rating: more.rating, changes: [...stage.changes, ...more.changes], why: stage.why };
+    else if (stage.changes.length === 0) stage = { ...stage, why: `${stage.why}; ${more.why}` };
+  }
   current = stage.deck;
   changes.push(...stage.changes);
   const rating = stage.rating;

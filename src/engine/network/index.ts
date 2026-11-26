@@ -42,6 +42,8 @@ export function cohesionOf(
   };
 }
 
+const cmp = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+const byKey = (p: NetworkEdge, q: NetworkEdge): number => cmp(p.a, q.a) || cmp(p.b, q.b) || cmp(p.kind, q.kind);
 const pct = (n: number): string => `${Math.round(n * 100)}%`;
 
 /** How the deck's cards work together: nodes, reasoned edges, clusters and cohesion. */
@@ -69,13 +71,18 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
       for (const e of pairEdges(links[i], links[j], weights, named)) all.push(e);
     }
   }
-  // keep an edge when it is among the strongest of either end; combo edges always stay
-  const byNode = new Map<string, NetworkEdge[]>();
-  for (const e of all) for (const id of [e.a, e.b]) (byNode.get(id) ?? byNode.set(id, []).get(id)!).push(e);
-  const rank = (p: NetworkEdge, q: NetworkEdge) => q.weight - p.weight || p.kind.localeCompare(q.kind) || (p.a + p.b).localeCompare(q.a + q.b);
-  const kept = new Set<NetworkEdge>();
-  for (const list of byNode.values()) for (const e of [...list].sort(rank).slice(0, MAX_EDGES_PER_NODE)) kept.add(e);
-  const edges = all.filter((e) => e.kind === 'combo' || kept.has(e));
+  // Keep an edge when it is among the strongest of either end; combo edges always stay. Edges are
+  // visited strongest first, so an end's rank is the number of its edges visited before this one.
+  all.sort((p, q) => q.weight - p.weight || byKey(p, q));
+  const seen = new Map<string, number>();
+  const edges: NetworkEdge[] = [];
+  for (const e of all) {
+    const ra = seen.get(e.a) ?? 0;
+    const rb = seen.get(e.b) ?? 0;
+    seen.set(e.a, ra + 1);
+    seen.set(e.b, rb + 1);
+    if (e.kind === 'combo' || ra < MAX_EDGES_PER_NODE || rb < MAX_EDGES_PER_NODE) edges.push(e);
+  }
 
   // nodes
   const degree = new Map<string, number>();
@@ -120,10 +127,11 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
       });
     }
   }
-  edges.sort((p, q) => p.kind.localeCompare(q.kind) || (p.a + p.b).localeCompare(q.a + q.b));
+  edges.sort((p, q) => cmp(p.kind, q.kind) || byKey(p, q));
 
   const clusters = clusterNetwork(nodes, edges, db, opts.seed ?? 1);
-  for (const c of clusters) for (const id of c.cards) { const n = nodes.find((x) => x.oracleId === id); if (n) n.cluster = c.id; }
+  const byNodeId = new Map(nodes.map((n) => [n.oracleId, n]));
+  for (const c of clusters) for (const id of c.cards) { const n = byNodeId.get(id); if (n) n.cluster = c.id; }
   const { cohesion, parts } = cohesionOf(nodes, edges, clusters);
   const names = new Map(links.map((l) => [l.card.oracleId, l.card.name]));
   const unconnected = nodes.filter((n) => n.unconnected)

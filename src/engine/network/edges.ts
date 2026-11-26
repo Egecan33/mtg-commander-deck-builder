@@ -43,8 +43,26 @@ const payoffOf = (f: CardFeatures, axis: AxisId): boolean => num(f.axes[axis]?.p
 const anyTypePayoff = (f: CardFeatures): boolean => num(f.axes.typal?.p) >= PAYOFF;
 
 /** Axes that can carry a feeds edge under these weights. */
-const feedAxes = (weights: Record<AxisId, number>): AxisId[] =>
-  Object.keys(weights).filter((axis) => !isTypalAxis(axis) && num(weights[axis]) > 0);
+const feedAxesCache = new WeakMap<Record<AxisId, number>, AxisId[]>();
+const feedAxes = (weights: Record<AxisId, number>): AxisId[] => {
+  let hit = feedAxesCache.get(weights);
+  if (!hit) {
+    hit = Object.keys(weights).filter((axis) => !isTypalAxis(axis) && num(weights[axis]) > 0);
+    feedAxesCache.set(weights, hit);
+  }
+  return hit;
+};
+
+/** The creature-type payoff axes of a card, cached per features object. */
+const typalPayoffCache = new WeakMap<CardFeatures, AxisId[]>();
+const typalPayoffAxes = (f: CardFeatures): AxisId[] => {
+  let hit = typalPayoffCache.get(f);
+  if (!hit) {
+    hit = Object.keys(f.axes).filter((axis) => axis.startsWith('typal:') && payoffOf(f, axis));
+    typalPayoffCache.set(f, hit);
+  }
+  return hit;
+};
 
 function ordered(x: LinkCard, y: LinkCard, kind: NetworkEdge['kind'], weight: number, reasonX: string, reasonY: string, extra: Partial<NetworkEdge>): NetworkEdge {
   const swap = x.card.oracleId > y.card.oracleId;
@@ -61,21 +79,23 @@ interface TypalLink { member: LinkCard; payoff: LinkCard; axis: AxisId; led: boo
 
 /** The typal link between two cards, if any (the rules of the spec, strongest candidate first). */
 function typalLink(x: LinkCard, y: LinkCard, named: readonly AxisId[]): TypalLink | null {
+  const px = typalPayoffAxes(x.f);
+  const py = typalPayoffAxes(y.f);
+  const ax = anyTypePayoff(x.f);
+  const ay = anyTypePayoff(y.f);
+  const cmd = x.commander || y.commander;
+  if (px.length === 0 && py.length === 0 && !ax && !ay && !cmd) return null;
   let best: TypalLink | null = null;
   const consider = (member: LinkCard, payoff: LinkCard, axis: AxisId, led: boolean, strength: number) => {
     if (!best || strength > best.strength) best = { member, payoff, axis, led, strength };
   };
-  for (const [member, payoff] of [[x, y], [y, x]] as const) {
-    for (const axis of Object.keys(payoff.f.axes)) {
-      if (axis.startsWith('typal:') && payoffOf(payoff.f, axis) && memberOf(member.f, axis)) consider(member, payoff, axis, false, num(payoff.f.axes[axis]?.p));
-    }
-    if (anyTypePayoff(payoff.f)) {
-      for (const axis of named) if (memberOf(member.f, axis)) consider(member, payoff, axis, false, 0.5);
-    }
-    if (payoff.commander) {
-      for (const axis of named) if (memberOf(member.f, axis)) consider(member, payoff, axis, true, 0.1);
-    }
-  }
+  const side = (member: LinkCard, payoff: LinkCard, axes: AxisId[], any: boolean) => {
+    for (const axis of axes) if (memberOf(member.f, axis)) consider(member, payoff, axis, false, num(payoff.f.axes[axis]?.p));
+    if (any) for (const axis of named) if (memberOf(member.f, axis)) consider(member, payoff, axis, false, 0.5);
+    if (payoff.commander) for (const axis of named) if (memberOf(member.f, axis)) consider(member, payoff, axis, true, 0.1);
+  };
+  side(x, y, py, ay);
+  side(y, x, px, ax);
   return best;
 }
 
@@ -89,9 +109,12 @@ export function pairEdges(a: LinkCard, b: LinkCard, weights: Record<AxisId, numb
 
   let feed: { enabler: LinkCard; payoff: LinkCard; axis: AxisId; w: number } | null = null;
   for (const axis of feedAxes(weights)) {
+    const sa = a.f.axes[axis];
+    const sb = b.f.axes[axis];
+    if (!sa || !sb) continue;
     const w = num(weights[axis]);
-    const ab = num(a.f.axes[axis]?.e) * num(b.f.axes[axis]?.p) * w;
-    const ba = num(b.f.axes[axis]?.e) * num(a.f.axes[axis]?.p) * w;
+    const ab = num(sa.e) * num(sb.p) * w;
+    const ba = num(sb.e) * num(sa.p) * w;
     const v = Math.max(ab, ba);
     if (v >= UNCONNECTED_EDGE && (!feed || v > feed.w)) {
       feed = ab >= ba ? { enabler: a, payoff: b, axis, w: v } : { enabler: b, payoff: a, axis, w: v };
