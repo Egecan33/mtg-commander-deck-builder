@@ -1,4 +1,5 @@
 import { analyzeBracket } from '../brackets';
+import { deckSizeFor } from '../format';
 import { karstenSources } from '../mana';
 import { rateDeck } from '../rating';
 import { companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
@@ -11,7 +12,6 @@ import { COLORS, RELIABLE_SOURCE, addCard, buildPool, deckCount, isCore, isStapl
 import type { Candidate, Pool } from './pool';
 import { planBonus, tallyDeck } from './plan';
 
-const DECK_SIZE = 100;
 /** Roles the fill keeps at or under the top of their band. */
 const CAPPED_ROLES: readonly Role[] = [
   'ramp', 'draw', 'wipe', 'tutor', 'counterspell', 'spot-removal', 'graveyard-hate', 'protection', 'recursion',
@@ -52,7 +52,7 @@ const finite = (n: unknown): number => (typeof n === 'number' && Number.isFinite
 
 /** Targets of the finished deck: the deck padded to 100 with basics, so nothing is scaled. */
 function finalTargets(deck: Deck, ctx: EngineContext, pool: Pool): Targets {
-  const pad = DECK_SIZE - deckCount(deck);
+  const pad = deckSizeFor(ctx.db) - deckCount(deck);
   const basic = Object.values(pool.basics)[0];
   const padded = pad > 0 && basic ? addCard(deck, basic.oracleId, pad) : deck;
   return targetsFor(padded, ctx, summarizeDeck(padded, ctx.db));
@@ -60,7 +60,7 @@ function finalTargets(deck: Deck, ctx: EngineContext, pool: Pool): Targets {
 
 /** Land slots still to fill: the finished deck's land target minus the lands (MDFC-weighted) it has. */
 function landSlots(deck: Deck, ctx: EngineContext, pool: Pool): number {
-  const free = DECK_SIZE - deckCount(deck);
+  const free = deckSizeFor(ctx.db) - deckCount(deck);
   if (free <= 0) return 0;
   const have = summarizeDeck(deck, ctx.db).landsEffective;
   return Math.min(free, Math.max(0, Math.round(finalTargets(deck, ctx, pool).lands - have)));
@@ -199,7 +199,7 @@ function colourDemand(deck: Deck, ctx: EngineContext): { demand: Record<Color, n
       const p = finite(features.pips[c]);
       if (p <= 0) continue;
       pips[c] += p * qty;
-      demand[c] = Math.max(demand[c], karstenSources(p, card.cmc));
+      demand[c] = Math.max(demand[c], karstenSources(p, card.cmc, deckSizeFor(ctx.db)));
     }
   }
   return { demand, pips };
@@ -372,7 +372,7 @@ function addBasics(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
 /** Fills every open slot: spells up to the land target, then the mana base. */
 function fillOpen(start: Deck, ctx: EngineContext, pool: Pool): Deck {
   let deck = start;
-  const free = () => DECK_SIZE - deckCount(deck);
+  const free = () => deckSizeFor(ctx.db) - deckCount(deck);
   if (free() <= 0) return deck;
   deck = seedCore(deck, ctx, pool, Math.max(0, free() - landSlots(deck, ctx, pool)));
   deck = seedPacks(deck, ctx, pool, Math.max(0, free() - landSlots(deck, ctx, pool)));
@@ -397,9 +397,9 @@ function repair(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>):
     const into = bestReplacement(without, ctx, pool, { card: ctx.db.get(off.id), f: ctx.db.features(off.id) });
     deck = into ? addCard(without, into.card.oracleId) : without;
   }
-  if (deckCount(deck) < DECK_SIZE) deck = fillOpen(deck, ctx, pool);
+  if (deckCount(deck) < deckSizeFor(ctx.db)) deck = fillOpen(deck, ctx, pool);
   // Over 100 (too many locked or kept cards plus fills): the weakest free cards go.
-  while (deckCount(deck) > DECK_SIZE) {
+  while (deckCount(deck) > deckSizeFor(ctx.db)) {
     const scorer = createScorer(deck, ctx);
     let worst: string | null = null;
     let worstScore = Infinity;

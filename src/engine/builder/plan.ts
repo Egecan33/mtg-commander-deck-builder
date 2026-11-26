@@ -1,3 +1,4 @@
+import { bracketOf } from '../format';
 import { hasType, isEveryCreatureType } from '../rules';
 import { AXIS_MEMBER, deckCards, resolveThemeWeights } from '../summary';
 import type { Bracket, Card, CardFeatures, Deck, EngineContext } from '../types';
@@ -61,7 +62,7 @@ export interface Kind { member: boolean; generic: boolean; spell: boolean; creat
 export interface Tally { tribe: number; generic: number; spells: number; creatures: number; fast: number; tutors: number }
 
 export function makePlan(deck: Deck, ctx: EngineContext): Plan {
-  const bracket = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3))) as Bracket;
+  const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, ctx.db)) || 3))) as Bracket;
   const weights = resolveThemeWeights(deck, ctx) ?? {};
   let tribe: string | null = null;
   let top = 0;

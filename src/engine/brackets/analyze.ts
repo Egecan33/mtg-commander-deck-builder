@@ -1,3 +1,4 @@
+import { gateBracketOf } from '../format';
 import { deckCounts } from '../rules';
 import { deckCards, isLandCard, type DeckCard } from '../summary';
 import type { Bracket, BracketReport, Card, CardDb, Combo, Deck, EngineContext, FoundCombo, Role, Violation } from '../types';
@@ -76,7 +77,7 @@ const playsLikeOf = (score: number): Bracket => (score >= 80 ? 5 : score >= 60 ?
  */
 export function analyzeBracket(deck: Deck, ctx: EngineContext): BracketReport {
   const { db } = ctx;
-  const target = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)));
+  const target = gateBracketOf(deck, db);
   const { cards, unknown } = deckCards(deck, db);
   const combos = findCombos(deck, db);
   const reasons: BracketReport['reasons'] = [];
@@ -207,9 +208,9 @@ function twoCardCombos(oracleId: string, db: CardDb): Combo[] {
  * call for every card in the pool: deck lookups are cached and re-checked against the deck's cards.
  */
 export function bracketGate(card: Card, deck: Deck, ctx: EngineContext): { code: string; message: string } | null {
-  const target = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)));
-  if (target >= 4) return null;
   const { db } = ctx;
+  const target = gateBracketOf(deck, db);
+  if (target >= 4) return null;
   // Most cards need no deck lookups at all, so the deck state is fetched only when one is needed.
   let state: DeckState | null = null;
 

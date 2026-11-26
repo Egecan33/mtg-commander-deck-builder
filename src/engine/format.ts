@@ -33,6 +33,32 @@ export const formatLabel = (format: Format): string =>
 export const bracketOf = (deck: { targetBracket: number }, db: CardDb): number =>
   formatOf(db) === 'standardbrawl' ? 3 : deck.targetBracket;
 
+/** The bracket the rules gate for: Standard Brawl gates nothing, which reads as Bracket 5 (nothing is gated there). */
+export const gateBracketOf = (deck: { targetBracket: number }, db: CardDb): number =>
+  formatOf(db) === 'standardbrawl' ? 5 : Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)));
+
+/**
+ * The weights with one part dropped and its share spread over the others in proportion, in whole
+ * numbers that still add up to the same total (largest remainders). Standard Brawl drops the
+ * bracket part of the rating and of the card score this way.
+ */
+export function spreadWeights<K extends string>(weights: Readonly<Record<K, number>>, drop: K): Record<K, number> {
+  const keys = (Object.keys(weights) as K[]).filter((k) => k !== drop);
+  const total = (Object.values(weights) as number[]).reduce((a, b) => a + b, 0);
+  const kept = keys.reduce((a, k) => a + weights[k], 0);
+  const exact = keys.map((k) => ({ k, v: (weights[k] * total) / kept }));
+  const out = {} as Record<K, number>;
+  let left = total;
+  for (const { k, v } of exact) { out[k] = Math.floor(v); left -= out[k]; }
+  for (const { k } of [...exact].sort((a, b) => (b.v - Math.floor(b.v)) - (a.v - Math.floor(a.v)) || (a.k < b.k ? -1 : 1))) {
+    if (left <= 0) break;
+    out[k] += 1;
+    left--;
+  }
+  out[drop] = 0;
+  return out;
+}
+
 /** Fewest cards a package (a themed group of cards) needs in this format: 8 in 99 cards, 5 in 59. */
 export const packageMinimum = (format: Format): number => Math.round((8 * (deckSizeOf(format) - 1)) / 99);
 

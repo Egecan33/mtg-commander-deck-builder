@@ -13,10 +13,22 @@ const TABLE: Record<number, number[]> = {
 
 /**
  * Sources of one colour needed to cast a spell with `pips` pips of that colour and mana value `mv`
- * on curve. 0 pips → 0. Costs beyond the table use the nearest row/column.
+ * on curve. 0 pips → 0. Costs beyond the table use the nearest row/column. `deckSize` below 100
+ * (Standard Brawl's 60) scales the 99-card table down.
  */
-export function karstenSources(pips: number, mv: number): number {
+export function karstenSources(pips: number, mv: number, deckSize = 100): number {
   if (!(pips > 0)) return 0;
+  const n0 = karstenSources99(pips, mv);
+  return deckSize >= 100 ? n0 : Math.max(1, Math.round(n0 * SMALL_DECK_SOURCES));
+}
+
+/**
+ * A 60-card deck needs about 0.73 of the 99-card sources (Karsten's 60-card table: 14 for one pip
+ * on a one-drop against 19, 21 for two pips against 30).
+ */
+const SMALL_DECK_SOURCES = 0.73;
+
+function karstenSources99(pips: number, mv: number): number {
   const n = Math.max(1, Math.round(pips));
   const row = TABLE[Math.min(4, n)];
   const generic = Math.max(0, Math.round(Number.isFinite(mv) ? mv : n) - n);

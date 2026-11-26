@@ -1,4 +1,5 @@
 import { analyzeBracket } from '../brackets';
+import { deckSizeFor } from '../format';
 import { rateDeck } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
@@ -28,7 +29,6 @@ const FORCED_THEME = 3;
 const FORCED_TRIES = 10;
 /** A rating has to fall by more than this for the engine to object. */
 const DISSENT = 0.05;
-const DECK_SIZE = 100;
 
 /** "a win condition", for reasons. */
 const ROLE_ONE: Partial<Record<Role, string>> = {
@@ -324,10 +324,10 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
   const scorer = createScorer(deck, ctx);
   const have = idsOf(deck);
   const fits = planFilter(deck, ctx, pool);
-  const open = deckCount(deck) < DECK_SIZE;
+  const open = deckCount(deck) < deckSizeFor(ctx.db);
   const summary = summarizeDeck(deck, db);
   const full = targetsFor(deck, ctx, summary);
-  const targets = open ? scaleTargets(full, summary.cardCount) : full;
+  const targets = open ? scaleTargets(full, summary.cardCount, deckSizeFor(ctx.db)) : full;
   const needs = roleNeeds(deck, ctx, { summary, targets: full, scaled: open });
   const bracket = deck.targetBracket;
   const one = ROLE_ONE[role] ?? role;
@@ -491,7 +491,7 @@ export function swapIn(deck: Deck, ctx: EngineContext, opts: BuildOptions, inId:
   const inScore = scorer.score(inCard);
   if (inScore.gate) return [];
 
-  const open = deckCount(deck) < DECK_SIZE;
+  const open = deckCount(deck) < deckSizeFor(ctx.db);
   const summary = summarizeDeck(deck, db);
   const landsOver = summary.landsEffective > targetsFor(deck, ctx, summary).lands;
   const roles: Role[] = c.f.roles.filter((r) => r !== 'land' && r !== 'game-changer' && r !== 'mass-land-denial' && r !== 'extra-turn');
@@ -510,7 +510,7 @@ export function swapIn(deck: Deck, ctx: EngineContext, opts: BuildOptions, inId:
   const made: { p: SwapProposal; same: boolean; cut: number }[] = [];
   if (open) {
     const after = shownRating(rateDeck(addCard(deck, inId), ctx));
-    const p: SwapProposal = { out: '', in: inId, reason: `${inCard.name} (${score}) fits in an open slot; the deck is under 100 cards, so nothing is cut.`, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
+    const p: SwapProposal = { out: '', in: inId, reason: `${inCard.name} (${score}) fits in an open slot; the deck is under ${deckSizeFor(ctx.db)} cards, so nothing is cut.`, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
     if (!p.agrees) p.objection = `Adding ${inCard.name} drops the rating ${before} -> ${after}.`;
     made.push({ p, same: true, cut: -Infinity });
   }

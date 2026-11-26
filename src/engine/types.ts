@@ -145,6 +145,8 @@ export interface Targets {
   avgMv: RoleBand;
   themeCards: number;
   taplandCap: number;
+  /** Why the numbers are what they are, for formats tuned apart from Commander (Standard Brawl); absent otherwise. */
+  notes?: string[];
 }
 
 export interface FoundCombo { combo: Combo; missing: string[]; twoCard: boolean; early: boolean; relevant: boolean }
@@ -177,7 +179,11 @@ export interface Fix {
    */
   actionable?: boolean;
 }
-export interface DeckRating { rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[] }
+export interface DeckRating {
+  rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[];
+  /** Said next to the rating when the format changes how it is made (Standard Brawl has no bracket part); absent otherwise. */
+  notes?: string[];
+}
 
 /** What a directed improve run is asked to do (all optional; see `improveDeck`). */
 export interface ImproveGoals {
