@@ -66,6 +66,16 @@ Evidence for the score complaint (2026-11-25): owned-only decks from "Best from 
 - Every button has a `title` saying what it does. Existing `data-testid`s keep working (menu items carry the old ids).
 - Fix result panel above the deck: "Fix deck made N changes (rating 63 → 74)", the list (out → in, reason, "!" when held), **Undo** (restores the deck exactly), and Dismiss. Per-problem **Fix** buttons sit beside each fix line in the rating panel.
 
+## UI direction (owner, 2026-11-26: "make the interface as nice as EDHREC's, it is very easy to understand")
+
+The bar is EDHREC's clarity, not its look (no copying of its branding or layout). Concretely, for every screen these tasks touch and the Packages screens:
+- **Cards in plainly titled sections.** A section heading says what the group is and how many ("Ramp · 10"), and the cards sit in an even grid under it.
+- **A sticky jump bar** across the top of the deck (and of the Packages page) with one link per section, so any group is one click away.
+- **One caption line under each card** for what used to be overlays: the card's score, "!" with its holder, "weakest", odds. Nothing covers the card name or the mana cost.
+- **Few controls at once.** The header shows Fix deck, Build ▾, Improve, Export ▾ and the two collection boxes; everything else lives in the side panel's tabs or a menu.
+- **Plain labels over icons**, consistent spacing and type scale, high contrast; the existing palette and fonts stay.
+- UI tasks follow the `frontend-design` guidance where the project allows and are checked with screenshots at 1440×900.
+
 ## Testing
 - Engine: card quality — a deck of the format's weakest cards rates lower than the same structure with strong cards; reference decks keep their ranges; nine weights sum to 100; scorer and rating quality agree for the same card. fixDeck — an illegal deck becomes legal; 101 → 100; 80 → 100; a deck short of ramp gains ramp; rating never drops; locked cards kept; owned-only builds use owned cards only. swapIn — proposals never include commanders or locked cards; under 100 the first is a plain add; sorted by rating after.
 - UI on a copy of the data (never data/, never port 3210): Fix deck on Mr. Spock, Science Officer then Undo (deck JSON identical); a single-problem Fix; Put it in instead of from the browser; the header menus. Screenshots.

@@ -39,6 +39,9 @@ Owner's words: "I want to see my best packages in my collection for each colour,
 - Deck builder: ranked by the deck's own card scores (the scorer the browser already uses), so the picks fit the commander.
 - Held copies (boxes, built decks) show "!" as everywhere else; with "Use free copies only" on they are ranked after free cards and excluded from Complete package.
 
+### Clarity bar
+Same UI direction as the deck page design (`2026-11-26-deck-page-fix-deck-design.md`, "UI direction"): EDHREC-level clarity, titled sections with counts, a sticky jump bar, one caption line under each card (odds, "!"), nothing over the card name or mana cost. The "fun" is in the fanned hands and the odds bars, never at the cost of reading.
+
 ### Odds
 - Hypergeometric, deck size 99 (commander outside), at least one of `k` cards in the first `n` cards: opening hand n = 7, "by draw d" n = 7 + d. Shown for 7 and 14 (opening hand, seventh draw); the deck tab shows them for the deck's actual count.
 - Pure function in `src/engine` with tests: 8 in 99 → 0.456 at 7, 0.719 at 14; 0 cards → 0; k ≥ 93 → 1 at 7.
