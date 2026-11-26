@@ -12,9 +12,10 @@ import { useProxies } from './Shell';
  * The card at full size with why it scores what it scores. Two-faced cards flip.
  * `actions` is whatever the caller lets you do with the card (add, remove, lock, pick).
  * `held`: the boxes and built decks holding the copies the deck would take (the "!").
+ * `children`: a section under the score that the page adds (the deck page's "Put it in instead of").
  */
 export function CardDetail({
-  id, card, score, onClose, actions, note, held, heldActions,
+  id, card, score, onClose, actions, note, held, heldActions, children,
 }: {
   id: string;
   card: ClientCard | undefined;
@@ -25,6 +26,7 @@ export function CardDetail({
   held?: string[];
   /** Under the "!" line, e.g. "I took it out of the … box". */
   heldActions?: ReactNode;
+  children?: ReactNode;
 }) {
   const [face, setFace] = useState<0 | 1>(0);
   const proxies = useProxies();
@@ -132,6 +134,7 @@ export function CardDetail({
             </section>
           )}
 
+          {children}
           {note && <div className="mt-4 text-ash">{note}</div>}
           <div className="mt-auto flex flex-wrap gap-2 pt-6">
             {actions}
