@@ -4,10 +4,11 @@ import { RATING_WEIGHTS } from '@/engine/rating';
 import { ROLE_LABEL } from '@/engine/targets';
 import type { Bracket, BuildOptions, Deck, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { cardLookup } from './cards';
-import { ownedSet } from './collection';
+import { deckCollection, deckFormat, ownedSet } from './collection';
 import { engineContext } from './context';
 import { deckConflicts, freeOwnedSet, heldByFor, selfHolders } from './holders';
 import { HttpError, intParam, isObject } from './http';
+import { getWildcards } from './wildcards';
 
 const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace', 'swapin', 'fix'];
 export const MAX_PROPOSAL_COUNT = 30;
@@ -56,7 +57,12 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
   const goals = mode === 'improve' ? readGoals(o.goals) : null;
   const ownedOnly = o.ownedOnly === true;
   const owned = ownedOnly && o.freeOnly === true ? freeOwnedSet(selfHolders(deck)) : ownedSet();
-  const options: BuildOptions = { ownedOnly, owned, maxPriceUsd: (price as number | null | undefined) ?? null, seed, goals };
+  // A Brawl deck: "Only what I can craft" (on unless `craftableOnly: false`) caps the cards not owned
+  // per rarity by the collection's wildcards, in place of the dollar cap.
+  const brawl = deckFormat(deck) === 'brawl';
+  const wildcards = brawl && o.craftableOnly !== false ? getWildcards(deckCollection(deck)).wildcards : null;
+  const maxPriceUsd = brawl ? null : ((price as number | null | undefined) ?? null);
+  const options: BuildOptions = { ownedOnly, owned, maxPriceUsd, seed, goals, wildcards };
   const { ctx } = engineContext(deck);
   const held = (proposals: SwapProposal[]) => heldByFor(deck, proposals.map((p) => p.in).filter((id) => id !== ''));
 
