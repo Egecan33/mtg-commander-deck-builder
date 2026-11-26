@@ -32,7 +32,7 @@ export type BrowserCard = ScoredCard & { held?: string[] };
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false,
+  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false, size = 100,
 }: {
   /** Hides the card search column (the deck gets its width). */
   onHide: () => void;
@@ -51,6 +51,8 @@ export function Browser({
   searchRef: RefObject<HTMLInputElement | null>;
   /** An MTG Arena (Brawl) deck: the pool is Arena cards only and each card shows its Arena rarity, not a price. */
   brawl?: boolean;
+  /** Cards in a full deck (60 in Standard Brawl). */
+  size?: number;
 }) {
   const notify = useNotify();
   const [text, setText] = useState(query.q);
@@ -82,7 +84,7 @@ export function Browser({
   const active = activeFilterCount(query);
   const clearFilters = () => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort });
   // A full deck: "+" opens the card with the deck cards it could replace.
-  const full = deckCount(deck) >= 100;
+  const full = deckCount(deck) >= size;
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Card browser" data-testid="browser">
@@ -250,7 +252,7 @@ export function Browser({
                           className="tile-btn tile-btn-add"
                           onClick={() => onAdd(c)}
                           aria-label={full ? `Put ${c.name} in instead of a deck card` : `Add ${c.name} to the deck`}
-                          title={full ? 'The deck has 100 cards: opens the card with the deck cards it could replace' : 'Add to the deck'}
+                          title={full ? `The deck has ${size} cards: opens the card with the deck cards it could replace` : 'Add to the deck'}
                           data-testid="browser-add"
                           data-full={full || undefined}
                         >

@@ -6,7 +6,7 @@ import type { Bracket } from '@/engine/types';
 import { createDeck, importDeck, type ImportResponse } from '../lib/api';
 import { BRACKETS, deckCount } from '../lib/ui';
 import { CardImage, Overlay } from './card';
-import { useNotify } from './Shell';
+import { useBuildFormat, useNotify } from './Shell';
 
 const SAMPLE = 'Commander\n1 Lathril, Blade of the Elves\n\nDeck\n1 Sol Ring\n1 Elvish Mystic\n...';
 
@@ -14,6 +14,7 @@ const SAMPLE = 'Commander\n1 Lathril, Blade of the Elves\n\nDeck\n1 Sol Ring\n1 
 export function ImportDialog({ onClose, defaultBracket = 3 }: { onClose: () => void; defaultBracket?: Bracket }) {
   const router = useRouter();
   const notify = useNotify();
+  const std = useBuildFormat() === 'standardbrawl';
   const [text, setText] = useState('');
   const [name, setName] = useState('');
   const [bracket, setBracket] = useState<Bracket>(defaultBracket);
@@ -26,7 +27,7 @@ export function ImportDialog({ onClose, defaultBracket = 3 }: { onClose: () => v
     setBusy(true);
     setProblem(null);
     try {
-      const res = await importDeck({ text, name: name.trim() || undefined, targetBracket: bracket });
+      const res = await importDeck({ text, name: name.trim() || undefined, targetBracket: bracket, arenaFormat: std ? 'standardbrawl' : undefined });
       setResult(res);
       setReadText(text);
       if (!name.trim() && res.deck.name) setName(res.deck.name);
@@ -96,14 +97,16 @@ export function ImportDialog({ onClose, defaultBracket = 3 }: { onClose: () => v
               <span className="text-ash">Deck name</span>
               <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Taken from the commander" data-testid="import-name" />
             </label>
-            <label className="grid gap-1">
-              <span className="text-ash">Target bracket</span>
-              <select className="field" value={bracket} onChange={(e) => setBracket(Number(e.target.value) as Bracket)}>
-                {BRACKETS.map((b) => (
-                  <option key={b.n} value={b.n}>{b.n}. {b.name}</option>
-                ))}
-              </select>
-            </label>
+            {!std && (
+              <label className="grid gap-1">
+                <span className="text-ash">Target bracket</span>
+                <select className="field" value={bracket} onChange={(e) => setBracket(Number(e.target.value) as Bracket)}>
+                  {BRACKETS.map((b) => (
+                    <option key={b.n} value={b.n}>{b.n}. {b.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             {problem && (
               <div role="alert" className="rounded-md border border-band-low bg-[#3a1a16] px-3 py-2">{problem}</div>

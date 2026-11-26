@@ -2,7 +2,7 @@
 
 import { CardGrid } from '../../components/CardGrid';
 import { CardTile, unknownCard } from '../../components/CardTile';
-import { Menu } from '../../components/Menu';
+import { Menu, type MenuItem } from '../../components/Menu';
 import { Section } from '../../components/Section';
 import type { ArenaRarity, ArenaReport, CardLookup, CollectionInfo, Format } from '../../lib/api';
 
@@ -21,28 +21,43 @@ export function rarityStat(rarity: ArenaRarity | null): { label: string; value: 
  * checked under that collection's rules.
  */
 export function FormatChip({
-  format, collection, other, busy, onMove,
-}: { format: Format; collection: CollectionInfo | null; other: CollectionInfo | null; busy: boolean; onMove: (to: CollectionInfo) => void }) {
-  const label = `${collection?.name ?? (format === 'brawl' ? 'MTG Arena' : 'Physical')} · ${format === 'brawl' ? 'Brawl' : 'Commander'}`;
-  const title = format === 'brawl' ? 'Built for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget' : 'Built for paper: Commander rules';
-  if (!other) return <span className="chip" title={title} data-testid="deck-format">{label}</span>;
-  return (
-    <Menu
-      label={busy ? 'Moving' : label}
-      className="chip hover:text-bone"
-      testId="deck-format"
-      title={title}
-      items={[
-        {
-          label: `Move to ${other.name}`,
-          description: `Its cards stay as they are; it is then checked under ${other.kind === 'arena' ? 'MTG Arena Brawl' : 'Commander'} rules.`,
-          onSelect: () => onMove(other),
-          disabled: busy,
-          testId: 'deck-move',
-        },
-      ]}
-    />
-  );
+  format, collection, other, busy, onMove, onSwitch,
+}: {
+  format: Format; collection: CollectionInfo | null; other: CollectionInfo | null; busy: boolean; onMove: (to: CollectionInfo) => void;
+  /** MTG Arena decks: changes only the deck's Arena format (Brawl or Standard Brawl). */
+  onSwitch?: (to: 'brawl' | 'standardbrawl') => void;
+}) {
+  const arena = format === 'brawl' || format === 'standardbrawl';
+  const name = format === 'standardbrawl' ? 'Standard Brawl' : format === 'brawl' ? 'Brawl' : 'Commander';
+  const label = `${collection?.name ?? (arena ? 'MTG Arena' : 'Physical')} · ${name}`;
+  const title =
+    format === 'standardbrawl'
+      ? 'Built for MTG Arena Standard Brawl: 60 cards, Standard cards only, your wildcards as the budget'
+      : format === 'brawl'
+        ? 'Built for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget'
+        : 'Built for paper: Commander rules';
+  const items: MenuItem[] = [];
+  if (arena && onSwitch) {
+    const to = format === 'standardbrawl' ? 'brawl' : 'standardbrawl';
+    items.push({
+      label: to === 'brawl' ? 'Switch to Brawl' : 'Switch to Standard Brawl',
+      description: `Its cards stay as they are; it is then checked as a ${to === 'brawl' ? '100-card Brawl' : '60-card Standard Brawl'} deck.`,
+      onSelect: () => onSwitch(to),
+      disabled: busy,
+      testId: 'deck-switch-format',
+    });
+  }
+  if (other) {
+    items.push({
+      label: `Move to ${other.name}`,
+      description: `Its cards stay as they are; it is then checked under ${other.kind === 'arena' ? 'MTG Arena Brawl' : 'Commander'} rules.`,
+      onSelect: () => onMove(other),
+      disabled: busy,
+      testId: 'deck-move',
+    });
+  }
+  if (items.length === 0) return <span className="chip" title={title} data-testid="deck-format">{label}</span>;
+  return <Menu label={busy ? 'Moving' : label} className="chip hover:text-bone" testId="deck-format" title={title} items={items} />;
 }
 
 /**

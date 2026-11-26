@@ -269,8 +269,8 @@ export const isAbort = (e: unknown): boolean => e instanceof DOMException && e.n
 
 /**
  * The violations that make a deck illegal as built, as opposed to merely unfinished: a deck that
- * is short of 100 cards is "so far", not broken (the engine caps the rating on the same rule).
+ * is short of a full deck (100 cards, 60 in Standard Brawl) is "so far", not broken (the engine caps the rating on the same rule).
  */
-export function brokenRules(rating: DeckRating, cardCount: number): Violation[] {
-  return rating.violations.filter((v) => v.code !== 'size' || cardCount > 100);
+export function brokenRules(rating: DeckRating, cardCount: number, size = 100): Violation[] {
+  return rating.violations.filter((v) => v.code !== 'size' || cardCount > size);
 }

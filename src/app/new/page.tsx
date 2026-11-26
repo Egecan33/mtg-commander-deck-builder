@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bracket, Color, Deck } from '@/engine/types';
 import { CardImage, ColorPip } from '../components/card';
 import { ImportDialog } from '../components/ImportDialog';
-import { useNotify } from '../components/Shell';
+import { useBuildFormat, useNotify } from '../components/Shell';
 import { VirtualGrid, usePaged } from '../components/VirtualGrid';
 import { buildDeck, createDeck, getCommanders, getPartners, loadEdhrec, type ColorLetter, type ColorMode, type CommanderCard } from '../lib/api';
 import { BRACKETS, COLOR_NAME, COLOR_ORDER, fmtInt } from '../lib/ui';
@@ -20,6 +20,8 @@ const MODES: { id: ColorMode; label: string; hint: string }[] = [
 export default function NewDeckPage() {
   const router = useRouter();
   const notify = useNotify();
+  const buildFormat = useBuildFormat();
+  const std = buildFormat === 'standardbrawl';
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
   const [colors, setColors] = useState<ColorLetter[]>([]);
@@ -52,12 +54,12 @@ export default function NewDeckPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const key = JSON.stringify([query, colors, mode]);
+  const key = JSON.stringify([query, colors, mode, buildFormat]);
   const paged = usePaged<CommanderCard>(
     key,
     PAGE,
     async (page, signal) => {
-      const res = await getCommanders({ q: query || undefined, colors: colors.length ? colors : undefined, mode, page, pageSize: PAGE }, signal);
+      const res = await getCommanders({ q: query || undefined, colors: colors.length ? colors : undefined, mode, page, pageSize: PAGE, arenaFormat: buildFormat ?? undefined }, signal);
       return { total: res.total, items: res.commanders };
     },
     notify.error,
@@ -99,6 +101,7 @@ export default function NewDeckPage() {
     main: [],
     targetBracket: bracket,
     themeWeights: null,
+    ...(std ? { arenaFormat: 'standardbrawl' as const } : {}),
   });
 
   const start = async (how: 'auto' | 'empty') => {
@@ -108,7 +111,7 @@ export default function NewDeckPage() {
       let deck = base();
       if (how === 'auto') {
         // Optional play data for this commander; a no-op unless it was switched on under Card data.
-        await loadEdhrec(deck.commanders, bracket).catch(() => null);
+        if (!std) await loadEdhrec(deck.commanders, bracket).catch(() => null);
         deck = { ...(await buildDeck(deck, 'auto', { seed: 1 })).deck, id: null, name: deckName };
       }
       const saved = await createDeck(deck);
@@ -224,7 +227,7 @@ export default function NewDeckPage() {
               resetKey={key}
               testId="commander-grid"
               render={(c) => tile(c, pick, commander?.oracleId === c.oracleId)}
-              empty={<p className="p-6 text-ash">No commander matches. Clear the search or the colour filter.</p>}
+              empty={<p className="p-6 text-ash">{std ? 'No Standard Brawl commander matches. Clear the search or the colour filter; with none set, update the card data once: Standard Brawl legality comes with the cards sync.' : 'No commander matches. Clear the search or the colour filter.'}</p>}
             />
           )}
         </div>
@@ -297,6 +300,7 @@ export default function NewDeckPage() {
               </div>
             )}
 
+            {!std && (
             <div>
               <h3 className="text-[1.05rem]">Bracket</h3>
               <div className="mt-2 grid gap-1.5" role="radiogroup" aria-label="Target bracket">
@@ -321,6 +325,7 @@ export default function NewDeckPage() {
                 ))}
               </div>
             </div>
+            )}
 
             <label className="grid gap-1">
               <span className="text-ash">Deck name</span>
@@ -336,7 +341,7 @@ export default function NewDeckPage() {
                 onClick={() => void start('auto')}
                 data-testid="auto-build"
               >
-                {busy === 'auto' ? 'Building 100 cards' : 'Auto-build the deck'}
+                {busy === 'auto' ? `Building ${std ? 60 : 100} cards` : 'Auto-build the deck'}
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button type="button" className="btn" disabled={!!busy} onClick={() => void start('empty')} data-testid="start-empty">

@@ -11,8 +11,9 @@ import { ResultPanel, type Change } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, moveDeck, takeFromBox, updateDeck,
-  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type RatingKey, type ScoredCard,
+  type AnalyzeResponse, type ArenaFormat, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type RatingKey, type ScoredCard,
 } from '../../lib/api';
+import type { Format } from '@/engine/types';
 import { setFilters, useFilters } from '../../lib/filters';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
@@ -33,7 +34,6 @@ const PANELS: { id: PanelId; label: string }[] = [
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
-const DECK_SIZE = 100;
 const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(card.typeLine);
 
 /**
@@ -134,7 +134,14 @@ export function Builder({ id }: { id: string }) {
   // The deck's collection decides its format: an MTG Arena deck is a Brawl deck (Arena cards, wildcards).
   const deckCollection = collections.find((c) => c.id === (deck?.collectionId ?? activeCollection?.id)) ?? null;
   const otherCollection = collections.find((c) => c.id !== deckCollection?.id && c.kind !== deckCollection?.kind) ?? null;
-  const brawl = analysis ? analysis.format === 'brawl' : deckCollection?.kind === 'arena';
+  const format: Format = analysis ? analysis.format : deckCollection?.kind === 'arena' ? (deck?.arenaFormat ?? 'brawl') : 'commander';
+  const brawl = format !== 'commander';
+  const std = format === 'standardbrawl';
+  // Cards in a full deck: 60 in Standard Brawl, 100 otherwise.
+  const DECK_SIZE = std ? 60 : 100;
+  useEffect(() => {
+    if (std) setPanel((p) => (p === 'bracket' ? 'rating' : p));
+  }, [std]);
   const { craftOnly } = useFilters();
   const [moving, setMoving] = useState(false);
   // "Cards to craft" of a Brawl deck, shown above the deck sections.
@@ -158,7 +165,7 @@ export function Builder({ id }: { id: string }) {
         setDeck(res.deck);
         setSettled(res.deck);
         // Optional per-commander play data; answers 'off' at once unless switched on under Card data.
-        if (res.deck.commanders.length) {
+        if (res.deck.commanders.length && res.format !== 'standardbrawl') {
           loadEdhrec(res.deck.commanders, res.deck.targetBracket).then(
             (r) => {
               if (r.status === 'ready') setRev((n) => n + 1);
@@ -413,7 +420,7 @@ export function Builder({ id }: { id: string }) {
     }
     const ctrl = new AbortController();
     setSwapin({ id: swapinId, list: null, heldBy: {} });
-    // Under 100 cards the plain add comes first, so one more is asked for to keep five swaps.
+    // Under a full deck the plain add comes first, so one more is asked for to keep five swaps.
     buildDeck(settled, 'swapin', { ...cardOpts, in: swapinId, count: deckCount(settled) < DECK_SIZE ? 6 : 5 }, ctrl.signal).then(
       (res) => {
         learn(res.cards);
@@ -458,7 +465,7 @@ export function Builder({ id }: { id: string }) {
         else delete next.built;
         return next;
       });
-      notify.info(mode === 'fill' ? 'Filled the deck to 100 cards' : 'Built a new 100-card deck. Locked cards were kept.');
+      notify.info(mode === 'fill' ? `Filled the deck to ${DECK_SIZE} cards` : `Built a new ${DECK_SIZE}-card deck. Locked cards were kept.`);
     } catch (e) {
       notify.error(e);
     } finally {
@@ -668,6 +675,26 @@ export function Builder({ id }: { id: string }) {
     }
   };
 
+  // "Switch to Brawl / Standard Brawl": only the deck's arenaFormat changes; it is then checked again under the other rules.
+  const switchFormat = (to: ArenaFormat) => {
+    if (!deck || to === (deck.arenaFormat ?? 'brawl')) return;
+    const full = to === 'standardbrawl' ? 60 : 100;
+    const total = deckCount(deck);
+    mutate((d) => {
+      const { arenaFormat: _drop, ...rest } = d;
+      void _drop;
+      return to === 'standardbrawl' ? { ...rest, arenaFormat: 'standardbrawl' } : rest;
+    });
+    const where = to === 'standardbrawl' ? 'Standard Brawl' : 'Brawl';
+    notify.info(
+      total > full
+        ? `Switched to ${where}: ${total - full} cards over the limit; Fix deck can cut them.`
+        : total < full
+          ? `Switched to ${where}: ${full - total} cards short; Build can fill them.`
+          : `Switched to ${where}: the deck is checked under its rules.`,
+    );
+  };
+
   // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
   const toggleBuilt = () => {
     if (!deck) return;
@@ -774,7 +801,7 @@ export function Builder({ id }: { id: string }) {
   const count = deckCount(deck);
   const rating = analysis?.rating;
   const noCollection = status?.counts.collection === 0;
-  const broken = rating ? brokenRules(rating, count) : [];
+  const broken = rating ? brokenRules(rating, count, DECK_SIZE) : [];
   const needsColor = rating?.violations.some((v) => v.code === 'needs-color') || deck.chosenColor !== null;
   const detailEntry = detail ? entryOf(deck, detail) : undefined;
   const detailIsCommander = !!detail && deck.commanders.includes(detail);
@@ -816,7 +843,7 @@ export function Builder({ id }: { id: string }) {
       ? 'Choose a commander first'
       : problems === 0
         ? 'Nothing to fix'
-        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses Only my collection, Use free copies only and the price cap set under Improve; Undo puts the deck back.`;
+        : `Make the deck legal and ${DECK_SIZE} cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses Only my collection, Use free copies only and the price cap set under Improve; Undo puts the deck back.`;
   const fixResult = fixed ? (
     <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
       <ResultPanel
@@ -866,8 +893,8 @@ export function Builder({ id }: { id: string }) {
             data-testid="deck-name"
           />
           <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1">
-            <span className={`chip ${count === 100 ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / 100</span>
-            <FormatChip format={brawl ? 'brawl' : 'commander'} collection={deckCollection} other={otherCollection} busy={moving} onMove={(to) => void moveTo(to)} />
+            <span className={`chip ${count === DECK_SIZE ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / {DECK_SIZE}</span>
+            <FormatChip format={format} collection={deckCollection} other={otherCollection} busy={moving} onMove={(to) => void moveTo(to)} onSwitch={switchFormat} />
             {manual && (
               <button
                 type="button"
@@ -885,7 +912,7 @@ export function Builder({ id }: { id: string }) {
               <button
                 type="button"
                 className={`chip ${rating.legal ? 'border-band-top text-band-top' : broken.length ? 'border-band-low text-band-low' : ''}`}
-                title={rating.legal ? `Follows every ${brawl ? 'MTG Arena Brawl' : 'Commander'} deck-building rule` : rating.violations.map((v) => v.message).join('\n')}
+                title={rating.legal ? `Follows every ${std ? 'MTG Arena Standard Brawl' : brawl ? 'MTG Arena Brawl' : 'Commander'} deck-building rule` : rating.violations.map((v) => v.message).join('\n')}
                 onClick={() => setPanel('rating')}
                 data-testid="legality"
               >
@@ -894,20 +921,24 @@ export function Builder({ id }: { id: string }) {
             )}
             {analysis && (
               <>
-                <button type="button" className="chip hover:text-bone" onClick={() => setPanel('bracket')} title="The lowest bracket the hard rules allow for this list" data-testid="chip-floor">
-                  Minimum bracket {analysis.bracket.floor}
-                </button>
-                <button type="button" className={`chip hover:text-bone ${analysis.bracket.playsLike !== deck.targetBracket ? 'border-band-good text-band-good' : ''}`} onClick={() => setPanel('bracket')} data-testid="chip-plays-like">
-                  Plays like {analysis.bracket.playsLike}
-                </button>
-                {analysis.bracket.violationsOfTarget.length > 0 && (
+                {!std && (
+                  <button type="button" className="chip hover:text-bone" onClick={() => setPanel('bracket')} title="The lowest bracket the hard rules allow for this list" data-testid="chip-floor">
+                    Minimum bracket {analysis.bracket.floor}
+                  </button>
+                )}
+                {!std && (
+                  <button type="button" className={`chip hover:text-bone ${analysis.bracket.playsLike !== deck.targetBracket ? 'border-band-good text-band-good' : ''}`} onClick={() => setPanel('bracket')} data-testid="chip-plays-like">
+                    Plays like {analysis.bracket.playsLike}
+                  </button>
+                )}
+                {!std && analysis.bracket.violationsOfTarget.length > 0 && (
                   <button type="button" className="chip border-band-low text-band-low" onClick={() => setPanel('bracket')} title="Cards or combos in the deck that the target bracket does not allow" data-testid="chip-over-bracket">
                     Over Bracket {deck.targetBracket} ({analysis.bracket.violationsOfTarget.length})
                   </button>
                 )}
                 {analysis.unknown.length > 0 && <span className="chip border-band-low text-band-low">{analysis.unknown.length} unknown</span>}
                 {analysis.edhrec !== 'ready' && (
-                  <span className="text-[0.75rem] text-smoke" title="EDHREC play data is off or not available. It can be switched on under Card data.">Scored from card text and tags</span>
+                  <span className="text-[0.75rem] text-smoke" title={std ? 'EDHREC has no data for Standard Brawl.' : 'EDHREC play data is off or not available. It can be switched on under Card data.'}>Scored from card text and tags</span>
                 )}
               </>
             )}
@@ -928,6 +959,7 @@ export function Builder({ id }: { id: string }) {
           )}
         </div>
 
+        {!std && (
         <div className="shrink-0">
           <div className="mb-1 text-[0.75rem] text-ash" title={brawl ? 'MTG Arena has no brackets; the builder uses them as its power setting' : undefined} data-testid="bracket-label">
             {brawl ? `Power level, Commander brackets; Arena ignores this: ${bracketName(deck.targetBracket)}` : `Target bracket: ${bracketName(deck.targetBracket)}`}
@@ -940,6 +972,7 @@ export function Builder({ id }: { id: string }) {
             ))}
           </div>
         </div>
+        )}
 
         <button type="button" className={`shrink-0 rounded-md px-1 ${analysing ? 'opacity-70' : ''}`} onClick={() => setPanel('rating')} title="Open the rating" data-testid="header-gauge">
           {rating ? <Gauge value={rating.rating} partial={!rating.complete} legal={broken.length === 0} size={112} /> : <div className="skeleton h-[4.3rem] w-28 rounded-md" />}
@@ -966,7 +999,7 @@ export function Builder({ id }: { id: string }) {
               items={[
                 {
                   label: 'Auto-build',
-                  description: 'A new 100-card deck around the commander. Locked cards stay.',
+                  description: `A new ${DECK_SIZE}-card deck around the commander. Locked cards stay.`,
                   onSelect: () => void rebuild('auto', 'auto', 1),
                   disabled: !!busy || noCommander,
                   title: noCommander ? 'Choose a commander first' : undefined,
@@ -976,8 +1009,8 @@ export function Builder({ id }: { id: string }) {
                   label: 'Fill the rest',
                   description: 'Keeps every card and adds the best ones for the empty slots.',
                   onSelect: () => void rebuild('fill', 'fill'),
-                  disabled: !!busy || noCommander || count >= 100,
-                  title: noCommander ? 'Choose a commander first' : count >= 100 ? 'The deck already has 100 cards' : undefined,
+                  disabled: !!busy || noCommander || count >= DECK_SIZE,
+                  title: noCommander ? 'Choose a commander first' : count >= DECK_SIZE ? `The deck already has ${DECK_SIZE} cards` : undefined,
                   testId: 'fill',
                 },
                 {
@@ -1065,6 +1098,7 @@ export function Builder({ id }: { id: string }) {
             searchRef={searchRef}
             onHide={() => setFilters({ browser: false })}
             brawl={brawl}
+            size={DECK_SIZE}
           />
         )}
         <DeckView
@@ -1104,7 +1138,7 @@ export function Builder({ id }: { id: string }) {
         />
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
           <div className="flex shrink-0 border-b border-slag" role="tablist">
-            {PANELS.map((p) => (
+            {PANELS.filter((p) => !(std && p.id === 'bracket')).map((p) => (
               <button
                 key={p.id}
                 type="button"
@@ -1140,7 +1174,7 @@ export function Builder({ id }: { id: string }) {
                   return { ...d, roleTargets: Object.keys(next).length > 0 ? next : null };
                 })}
               />
-            ) : panel === 'bracket' ? (
+            ) : panel === 'bracket' && !std ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
             ) : panel === 'themes' ? (
               <ThemesPanel
@@ -1164,6 +1198,7 @@ export function Builder({ id }: { id: string }) {
                 onOwnedOnly={setOwnedOnly}
                 showFreeOnly={manual}
                 showPrice={!brawl}
+                showBracket={!std}
                 freeOnly={freeOnly}
                 onFreeOnly={setFreeOnly}
                 setOptions={setOptions}
@@ -1243,6 +1278,7 @@ export function Builder({ id }: { id: string }) {
             <PutItIn
               card={detailCard}
               count={count}
+              size={DECK_SIZE}
               another={!!detailEntry}
               state={swapin?.id === detail ? swapin : null}
               why={swapWhy}

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Bracket } from '@/engine/types';
 import { CardImage } from '../components/card';
 import { useFreeOnly } from '../components/held';
-import { useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
+import { useBuildFormat, useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
 import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverScope, type DiscoverState, type DiscoverTier } from '../lib/api';
 import { BAND_VAR, BRACKETS, bandOf, bracketName, fmtPrice } from '../lib/ui';
 
@@ -33,6 +33,7 @@ export default function DiscoverPage() {
   const manual = active?.kind === 'manual';
   // The MTG Arena collection: Brawl commanders, Arena cards, and tiers by wildcards instead of buys.
   const brawl = active?.kind === 'arena';
+  const buildFormat = useBuildFormat() ?? undefined;
   const freeOnly = freeOnlyPref === null ? null : manual && freeOnlyPref;
   const [bracket, setBracket] = useState<Bracket>(3);
   const [scope, setScope] = useState<DiscoverScope>('owned');
@@ -56,22 +57,22 @@ export default function DiscoverPage() {
       // result): start it again, once, instead of showing an empty page.
       if (s.status === 'idle' && !restarted) {
         restarted = true;
-        startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
+        startDiscover(bracket, scope, freeOnly, buildFormat).then(take, (e) => notify.error(e));
         return;
       }
       setState(s);
       setLookup((cur) => ({ ...cur, ...s.cards }));
-      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e)), 700);
+      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly, undefined, buildFormat).then(take, (e) => notify.error(e)), 700);
     };
     setState(null);
     setOpen(null);
     setLazy({});
-    startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
+    startDiscover(bracket, scope, freeOnly, buildFormat).then(take, (e) => notify.error(e));
     return () => {
       run.current++;
       if (timer) clearTimeout(timer);
     };
-  }, [ready, bracket, scope, freeOnly, notify]);
+  }, [ready, bracket, scope, freeOnly, buildFormat, notify]);
 
   const lazyKey = (id: string) => `${bracket}:${scope}:${freeOnly ? 'free' : 'all'}:${id}`;
   const expand = (entry: DiscoverEntry) => {
@@ -83,7 +84,7 @@ export default function DiscoverPage() {
     // On Arena every tier comes with the entry.
     if (lazy[key] || state?.status !== 'done' || entry.tiers.some((t) => t.kind)) return;
     setLazy((l) => ({ ...l, [key]: 'loading' }));
-    getDiscoverTiers(bracket, id, scope, !!freeOnly).then(
+    getDiscoverTiers(bracket, id, scope, !!freeOnly, buildFormat).then(
       (res) => {
         setLookup((cur) => ({ ...cur, ...res.cards }));
         setLazy((l) => ({ ...l, [key]: res.tiers }));
@@ -103,7 +104,7 @@ export default function DiscoverPage() {
     setCreating(true);
     try {
       const name = `${entry.commander.frontName} (${t.kind === 'crafted' ? 'within my wildcards' : t.cap === null ? 'best build' : t.cap === 0 ? 'from my collection' : `${t.buys.length} buys`})`;
-      const saved = await createDeck({ ...t.deck, id: null, name });
+      const saved = await createDeck({ ...t.deck, id: null, name, ...(buildFormat === 'standardbrawl' ? { arenaFormat: 'standardbrawl' as const } : {}) });
       router.push(`/deck/${saved.deck.id}`);
     } catch (e) {
       notify.error(e);
@@ -131,7 +132,7 @@ export default function DiscoverPage() {
               ? 'Which commanders you own make the best deck out of cards you already have, and how much better each gets with a few purchases.'
               : 'Which commanders you do not have would work best with the cards you already own. The commander is the one card to get; open a row to see what a few more would add.'}{' '}
             Basic lands count as owned. Only single commanders are looked at, not partner pairs.
-            {brawl && ' On MTG Arena: Brawl commanders (planeswalkers too) and cards on Arena only; the budget is your wildcards, set on the Collection page. Arena-only digital cards are not in the card data.'}
+            {brawl && ` On MTG Arena: ${buildFormat === 'standardbrawl' ? 'Standard Brawl' : 'Brawl'} commanders (planeswalkers too) and cards on Arena only; the budget is your wildcards, set on the Collection page. Arena-only digital cards are not in the card data.`}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <div className="seg" role="group" aria-label="Whose commanders">
@@ -146,6 +147,7 @@ export default function DiscoverPage() {
             )}
           </div>
         </div>
+        {buildFormat !== 'standardbrawl' && (
         <div className="shrink-0">
           <div className="mb-1 text-[0.75rem] text-ash">Bracket: {bracketName(bracket)}</div>
           <div className="seg" role="group" aria-label="Bracket">
@@ -154,6 +156,7 @@ export default function DiscoverPage() {
             ))}
           </div>
         </div>
+        )}
       </div>
 
       {state?.status === 'empty' && (

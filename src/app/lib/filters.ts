@@ -20,6 +20,8 @@ export interface Filters {
   freeOnly: boolean | null;
   /** MTG Arena decks: only what my wildcards can craft (on by default). */
   craftOnly: boolean;
+  /** MTG Arena: the format new decks are built in and the Commanders list shows ('brawl' or 'standardbrawl'). */
+  arenaFormat: 'brawl' | 'standardbrawl';
   size: TileSize;
   view: ViewMode;
   /** A page's grouping id ("role", "type", ...). Pages check it against their own options. */
@@ -40,6 +42,7 @@ export const FILTER_STORAGE_KEYS: Record<FilterKey, string> = {
   ownedOnly: 'cf-owned-only',
   freeOnly: 'cf-free-only',
   craftOnly: 'cf-craft-only',
+  arenaFormat: 'cf-arena-format',
   size: 'cf-view-size',
   view: 'cf-view-mode',
   groupBy: 'cf-view-group',
@@ -48,7 +51,7 @@ export const FILTER_STORAGE_KEYS: Record<FilterKey, string> = {
 };
 
 export const DEFAULT_FILTERS: Filters = {
-  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, craftOnly: true, size: 'M', view: 'grid', groupBy: '', sort: '', browser: true, ready: false,
+  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, craftOnly: true, arenaFormat: 'brawl', size: 'M', view: 'grid', groupBy: '', sort: '', browser: true, ready: false,
 };
 
 export const BUDGETS: { id: Budget; label: string; maxUsd: number | null }[] = [
@@ -80,6 +83,7 @@ export function readFilters(storage: Pick<Storage, 'getItem'> | null): Filters {
     ownedOnly: flag(get('ownedOnly')) ?? DEFAULT_FILTERS.ownedOnly,
     freeOnly: flag(get('freeOnly')),
     craftOnly: flag(get('craftOnly')) ?? DEFAULT_FILTERS.craftOnly,
+    arenaFormat: get('arenaFormat') === 'standardbrawl' ? 'standardbrawl' : DEFAULT_FILTERS.arenaFormat,
     size: size === 'S' || size === 'M' || size === 'L' ? size : DEFAULT_FILTERS.size,
     view: view === 'grid' || view === 'list' ? view : DEFAULT_FILTERS.view,
     groupBy: get('groupBy') ?? DEFAULT_FILTERS.groupBy,
