@@ -54,12 +54,14 @@ export function DeckView({
   weakest: Set<string>;
   /** Deck cards whose free copies do not cover the deck, with the boxes and built decks holding them. */
   held: HeldBy;
-  onRemove: (id: string) => void;
-  onAdd: (id: string) => void;
-  onLock: (id: string) => void;
+  /** Without all three the deck is read-only: tiles carry no actions. */
+  onRemove?: (id: string) => void;
+  onAdd?: (id: string) => void;
+  onLock?: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
   const filters = useFilters();
+  const editable = !!(onRemove && onAdd && onLock);
   const grouping = pickOption(filters.groupBy, GROUPS) as Grouping;
   const layout = filters.view;
 
@@ -153,12 +155,12 @@ export function DeckView({
           'data-held': holders ? true : undefined,
         }}
         actions={
-          zone === 'main' ? (
+          !editable ? undefined : zone === 'main' ? (
             <>
               <button
                 type="button"
                 className={`tile-btn tile-hover ${entry.locked ? 'tile-btn-on' : ''}`}
-                onClick={() => onLock(id)}
+                onClick={() => onLock?.(id)}
                 aria-pressed={entry.locked}
                 aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name} so it is never cut`}
                 title={entry.locked ? 'Locked: auto-build and improve keep this card. Click to unlock.' : 'Lock: keep this card through auto-build and improve'}
@@ -166,12 +168,12 @@ export function DeckView({
               >
                 <LockIcon open={!entry.locked} />
               </button>
-              <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} title="Remove one copy from the deck" data-testid="deck-remove">
+              <button type="button" className="tile-btn tile-hover" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} from the deck`} title="Remove one copy from the deck" data-testid="deck-remove">
                 &minus;
               </button>
             </>
           ) : zone === 'companion' ? (
-            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} as companion`} title="Remove the companion">
+            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} as companion`} title="Remove the companion">
               &minus;
             </button>
           ) : undefined
@@ -195,15 +197,15 @@ export function DeckView({
         <HeldMark names={held[id]} small />
         {card?.manaCost && <Mana cost={card.manaCost} size="0.95rem" />}
         <ScoreBadge score={score} />
-        {zone === 'main' ? (
+        {!editable ? null : zone === 'main' ? (
           <>
-            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
+            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock?.(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
               <LockIcon open={!entry.locked} />
             </button>
             {card?.roles.includes('land') && (
-              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd(id)} aria-label={`Add another ${name}`}>+</button>
+              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd?.(id)} aria-label={`Add another ${name}`}>+</button>
             )}
-            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
+            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
           </>
         ) : (
           <span className="w-[4.6rem] shrink-0 text-right text-[0.75rem] text-smoke">{zone}</span>

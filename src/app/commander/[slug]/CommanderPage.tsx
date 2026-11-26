@@ -15,9 +15,12 @@ import { budgetMax } from '@/app/lib/budget';
 import { setFilters, useFilters } from '@/app/lib/filters';
 import { isAbort } from '@/app/lib/ui';
 import { Banner } from './Banner';
+import { AverageDeckTab } from './AverageDeckTab';
+import { ChartsTab } from './ChartsTab';
 import { DecksTab } from './DecksTab';
 import { REC_GROUPS, REC_SORTS, RecsTab } from './RecsTab';
 import { joinNames, shellDeck } from './shell';
+import { useAverageDeck } from './useAverageDeck';
 
 export const TABS = [
   { id: 'recs', label: 'Card recs' }, { id: 'deck', label: 'Average deck' }, { id: 'charts', label: 'Charts' },
@@ -121,6 +124,8 @@ export function CommanderPage({ slug }: { slug: string }) {
   }, [page]);
 
   const name = page ? joinNames(page.commanders) : '';
+  const commanderIds = useMemo(() => page?.commanders.map((c) => c.oracleId) ?? [], [page]);
+  const avg = useAverageDeck(commanderIds, name, q, ready && !!page && (tab === 'deck' || tab === 'charts'), freeOnly === true);
   const create = useCallback(
     async (kind: 'build' | 'best' | 'empty') => {
       if (!page) return;
@@ -178,7 +183,9 @@ export function CommanderPage({ slug }: { slug: string }) {
       <div className="mx-auto max-w-[1500px] px-8 py-5 [&_section>header]:!top-[var(--cmd-bar,0px)]">
         {tab === 'recs' && (recs ? <RecsTab data={recs} name={name} edhrecDecks={page.edhrecDecks} /> : <p className="text-ash">Loading card recs…</p>)}
         {tab === 'decks' && <DecksTab page={page} name={name} onBuild={() => void create('build')} />}
-        {(tab === 'deck' || tab === 'charts' || tab === 'combos' || tab === 'similar') && <EmptyState message="Coming in the next step." />}
+        {tab === 'deck' && <AverageDeckTab avg={avg} name={name} />}
+        {tab === 'charts' && <ChartsTab avg={avg} name={name} bracket={q.bracket} />}
+        {(tab === 'combos' || tab === 'similar') && <EmptyState message="Coming in the next step." />}
       </div>
     </div>
   );
