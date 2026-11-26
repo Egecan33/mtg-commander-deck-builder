@@ -229,7 +229,7 @@ export function RatingPanel({
                         title={
                           deck.commanders.length === 0
                             ? 'Choose a commander first'
-                            : `Fix ${s.label.toLowerCase()} alone: swaps that bring in what this part asks for, with the card options beside Fix deck. Undo puts the deck back.`
+                            : `Fix ${s.label.toLowerCase()} alone: swaps that bring in what this part asks for, with the same card options as Fix deck. Undo puts the deck back.`
                         }
                         data-testid="fix-part"
                         data-part={s.key}

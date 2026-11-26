@@ -776,7 +776,7 @@ export function Builder({ id }: { id: string }) {
       ? 'Choose a commander first'
       : problems === 0
         ? 'Nothing to fix'
-        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses the card options beside it; Undo puts the deck back.`;
+        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses Only my collection, Use free copies only and the price cap set under Improve; Undo puts the deck back.`;
   const fixResult = fixed ? (
     <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
       <ResultPanel
