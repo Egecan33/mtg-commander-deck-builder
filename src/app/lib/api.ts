@@ -31,6 +31,16 @@
  *        empty says why in `empty`. `budget` any|under-5|under-1 (else 400), `owned=1` only the collection,
  *        `free=1` (with `owned`) only free copies. Forge numbers always (`synergy`, `quality`, `scores`); an `edhrec`
  *        block on a card only when EDHREC data for this commander is already cached. Never a request.
+ * GET  /api/commander/:slug/similar?with -> SimilarResponse
+ *        Up to 24 commanders within one colour of this page's identity, ranked by how alike their theme weights
+ *        are (`similarity` 0-1, 0.85 times for one colour off). A commander that names no theme gets the most
+ *        played commanders of its colours (`basis: 'popularity'`, `similarity: null`). Text only: no EDHREC data.
+ * GET  /api/commander/:slug/combos?with&bracket&budget&owned&free -> CommanderCombosResponse
+ *        Commander Spellbook combos made only of cards inside the commander's identity, nothing else needed,
+ *        the commander's own first; kept when the combo's tag fits `bracket` (Ruthless 4, Spicy and Powerful 3,
+ *        Oddball and Core 2, Exhibition 1), its other cards are in the collection (`owned=1`) and cost at most
+ *        the budget. `total` counts them all, `combos` lists the first 100, `withCommander` is how many of
+ *        them use the commander.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
  * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
@@ -219,7 +229,7 @@ import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
 import type { Budget } from './filters';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
+  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FoundCombo, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
 export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
@@ -343,6 +353,11 @@ export interface CommanderRecsResponse {
   commanders: string[]; query: RecsQuery; edhrec: EdhrecStatus; sections: RecSection[];
   scores: Record<string, CardScore>; cards: CardLookup; heldBy: HeldBy;
 }
+export interface SimilarResponse {
+  basis: 'themes' | 'popularity';
+  commanders: (CommanderTile & { similarity: number | null; colorsOff: 0 | 1 })[];
+}
+export interface CommanderCombosResponse { total: number; withCommander: number; combos: FoundCombo[]; cards: CardLookup; heldBy: HeldBy }
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
 // ---------------------------------------------------------------------------------------------
@@ -681,6 +696,15 @@ export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string },
   call<CommanderRecsResponse>(
     'GET',
     `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined })}`,
+    undefined,
+    signal,
+  );
+export const getSimilarCommanders = (slug: string, withSlug?: string, signal?: AbortSignal) =>
+  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug })}`, undefined, signal);
+export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
+  call<CommanderCombosResponse>(
+    'GET',
+    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined })}`,
     undefined,
     signal,
   );

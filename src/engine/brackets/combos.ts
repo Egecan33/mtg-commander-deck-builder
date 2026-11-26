@@ -1,5 +1,5 @@
 import { cardFitsDeck, deckCounts } from '../rules';
-import type { CardDb, Combo, Deck, FoundCombo } from '../types';
+import type { Bracket, CardDb, Combo, Deck, FoundCombo } from '../types';
 
 const RELEVANT_TAGS: ReadonlySet<Combo['bracketTag']> = new Set(['R', 'S', 'P']);
 const RELEVANT_RESULT = /^(Infinite|Near-infinite)|Win the game|Lock/;
@@ -42,7 +42,7 @@ export function describeCombo(combo: Combo, db: CardDb, missing: string[] = []):
 }
 
 /** Combos that count against a bracket first, then the best known. */
-function order(a: FoundCombo, b: FoundCombo): number {
+export function comboOrder(a: FoundCombo, b: FoundCombo): number {
   const rank = (f: FoundCombo) => (f.twoCard && f.relevant ? (f.early ? 0 : 1) : f.relevant ? 2 : 3);
   return rank(a) - rank(b) || b.combo.popularity - a.combo.popularity || a.combo.id.localeCompare(b.combo.id);
 }
@@ -89,7 +89,47 @@ export function findCombos(deck: Deck, db: CardDb): { included: FoundCombo[]; on
       oneAway.push(describeCombo(combo, db, [missing]));
     }
   }
-  included.sort(order);
-  oneAway.sort(order);
+  included.sort(comboOrder);
+  oneAway.sort(comboOrder);
   return { included, oneAway: oneAway.slice(0, MAX_ONE_AWAY) };
+}
+
+/** Commander Spellbook's tags: what each is called and the lowest bracket it fits (docs/research/synergy-data.md section 2.4). */
+export const COMBO_TAG: Record<Combo['bracketTag'], { label: string; bracket: Bracket }> = {
+  R: { label: 'Ruthless', bracket: 4 }, S: { label: 'Spicy', bracket: 3 }, P: { label: 'Powerful', bracket: 3 },
+  O: { label: 'Oddball', bracket: 2 }, C: { label: 'Core', bracket: 2 }, E: { label: 'Exhibition', bracket: 1 },
+};
+
+/**
+ * Every combo a commander (or pair) could field with no more than its own colours: each piece a known
+ * legal card inside the identity, nothing needed beyond the listed cards, commander-only pieces
+ * being the commanders. Combos that use a commander come first, then `comboOrder`.
+ */
+export function identityCombos(deck: Deck, db: CardDb): FoundCombo[] {
+  if (deck.commanders.length === 0) return [];
+  const commanders = new Set(deck.commanders);
+  const fits = new Map<string, boolean>();
+  const fit = (id: string): boolean => {
+    let v = fits.get(id);
+    if (v === undefined) {
+      const card = db.get(id);
+      v = card !== undefined && cardFitsDeck(card, deck, db) === null;
+      fits.set(id, v);
+    }
+    return v;
+  };
+  const seen = new Set<string>();
+  const out: FoundCombo[] = [];
+  for (const card of db.all()) {
+    if (!fit(card.oracleId)) continue;
+    for (const combo of db.combosFor(card.oracleId)) {
+      if (seen.has(combo.id)) continue;
+      seen.add(combo.id);
+      if (combo.requiresCount !== 0 || combo.cards.length === 0) continue;
+      if (!combo.cards.every((p) => fit(p.oracleId) && (!p.mustBeCommander || commanders.has(p.oracleId)))) continue;
+      out.push(describeCombo(combo, db));
+    }
+  }
+  const uses = (f: FoundCombo) => (f.combo.cards.some((p) => commanders.has(p.oracleId)) ? 0 : 1);
+  return out.sort((a, b) => uses(a) - uses(b) || comboOrder(a, b));
 }
