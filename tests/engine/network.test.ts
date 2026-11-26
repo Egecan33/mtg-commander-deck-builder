@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { findCombos } from '@/engine/brackets';
 import { axisLabel } from '@/engine/features';
-import { CLUSTER_MIN_EDGE, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
+import { CLUSTER_MIN_EDGE, clusterNetwork, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
+import { packageCohesion } from '@/engine/packages';
 import { createScorer } from '@/engine/scoring';
 import { deckCards, resolveThemeWeights } from '@/engine/summary';
-import type { DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
+import type { Deck, DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck, oddDeck, withTenRandom } from '../helpers/network';
 
@@ -283,5 +284,37 @@ describe('deckNetwork', () => {
     const many = odd.main[0].oracleId;
     expect(net.nodes.filter((n) => n.oracleId === many)).toHaveLength(1);
     expect(net.nodes.find((n) => n.oracleId === many)?.qty).toBe(30);
+  });
+});
+
+// Review I4: functional ("spice") packages were unconnected by construction.
+describe('functional package co-members', () => {
+  const books = ['Spellbook', 'Library of Leng'].map((n) => card(n).oracleId);
+  const withBooks = (pinned: boolean): Deck => {
+    const out = upgraded.main.filter((e) => e.qty === 1 && !db.features(e.oracleId)!.roles.length && (db.features(e.oracleId)!.landWeight ?? 0) < 1).slice(0, 2).map((e) => e.oracleId);
+    const main = [...upgraded.main.filter((e) => !out.includes(e.oracleId)), ...books.map((id) => ({ oracleId: id, qty: 1, locked: false }))];
+    return { ...upgraded, main, packageTargets: pinned ? { 'fn:max-hand-size': 8 } : null };
+  };
+
+  it('connect to each other through a package edge when the package is pinned', () => {
+    expect(deckNetwork(withBooks(false), ctx).unconnected).toEqual(expect.arrayContaining(books));
+    const deck = withBooks(true);
+    const net = deckNetwork(deck, ctx);
+    for (const id of books) expect(net.unconnected, db.get(id)!.name).not.toContain(id);
+    const edge = net.edges.find((e) => e.kind === 'package' && books.includes(e.a) && books.includes(e.b));
+    expect(edge).toBeDefined();
+    expect(edge!.reasons[0]).toMatch(/Max hand size/);
+    // the scorer agrees: no connection penalty for them
+    const scorer = createScorer(deck, ctx);
+    for (const id of books) expect(scorer.score(db.get(id)!).reasons.join(' ')).not.toMatch(/connects to nothing/);
+    // and the package's own cohesion reads them as linked
+    expect(packageCohesion(net, books)).toEqual({ linked: 2, of: 2 });
+  });
+
+  it('package edges never make clusters', () => {
+    const net = deckNetwork(withBooks(true), ctx);
+    const plain = net.edges.filter((e) => e.kind !== 'package');
+    expect(clusterNetwork(net.nodes, net.edges, db, 1)).toEqual(clusterNetwork(net.nodes, plain, db, 1));
+    expect(cohesionOf(net.nodes, net.edges, net.clusters).parts.clustered).toBe(cohesionOf(net.nodes, plain, net.clusters).parts.clustered);
   });
 });

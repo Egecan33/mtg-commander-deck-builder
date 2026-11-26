@@ -24,7 +24,8 @@ export function clusterNetwork(nodes: NetworkNode[], edges: NetworkEdge[], db: C
   const real = nodes.filter((n) => !n.commander).map((n) => n.oracleId).sort();
   const inner: NetworkEdge[] = [];
   for (const e of edges) {
-    if (e.kind === 'commander' || e.weight < CLUSTER_MIN_EDGE) continue;
+    // theme edges only: never a commander spoke, never a functional package's `package` edge
+    if (e.kind === 'commander' || e.kind === 'package' || e.weight < CLUSTER_MIN_EDGE) continue;
     if (commanders.has(e.a) || commanders.has(e.b)) continue;
     inner.push(e);
   }

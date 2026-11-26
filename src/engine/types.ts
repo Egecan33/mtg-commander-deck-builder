@@ -199,10 +199,14 @@ export interface FixResult { deck: Deck; changes: FixChange[]; ratingBefore: num
 export interface EngineContext { db: CardDb; edhrec: EdhrecData | null; mldOverrides: Record<string, boolean>; extraTurnOverrides: Record<string, boolean> }
 
 // ---- the deck network (src/engine/network) ----------------------------------------------------
-export type NetworkEdgeKind = 'combo' | 'feeds' | 'typal' | 'commander';
+/**
+ * `package`: two cards of the same planned or pinned functional package (Pillow fort, Max hand size,
+ * Win the game). It counts for "connected", never for clusters or cohesion's clustered share.
+ */
+export type NetworkEdgeKind = 'combo' | 'feeds' | 'typal' | 'commander' | 'package';
 export interface NetworkNode {
   oracleId: string; qty: number; commander: boolean;
-  /** Has a ring role (ramp, fast mana, draw, spot removal, protection, tutor, wipe, counterspell): drawn on the staple ring, never unconnected. */
+  /** Counts toward the rating's role coverage (a band role, or a core package by tag): drawn on the staple ring, never unconnected. */
   staple: boolean;
   roles: Role[];
   /** Its strongest theme axes in this deck (max(e, p) >= 0.5, ordered by max(e, p) x deck weight), at most three. */
@@ -221,6 +225,8 @@ export interface NetworkEdge {
   /** The reason as read from a's side and from b's side. */
   reasons: [string, string];
   axis?: AxisId; comboId?: string;
+  /** The functional package of a `package` edge. */
+  packageId?: PackageId;
 }
 export interface NetworkCluster { id: number; key: string; name: string; cards: string[]; weight: number }
 export interface DeckNetwork {

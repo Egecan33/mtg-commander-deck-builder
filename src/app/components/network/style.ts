@@ -6,17 +6,18 @@ export const EDGE_COLOR: Record<NetworkEdgeKind, string> = {
   feeds: '#efe7d7',
   typal: '#a79d8b',
   commander: '#7d7566',
+  package: '#a79d8b',
 };
-export const EDGE_LABEL: Record<NetworkEdgeKind, string> = { combo: 'Combo', feeds: 'Feeds', typal: 'Typal', commander: 'Commander' };
-export const EDGE_KINDS: readonly NetworkEdgeKind[] = ['combo', 'feeds', 'typal', 'commander'];
+export const EDGE_LABEL: Record<NetworkEdgeKind, string> = { combo: 'Combo', feeds: 'Feeds', typal: 'Typal', commander: 'Commander', package: 'Package' };
+export const EDGE_KINDS: readonly NetworkEdgeKind[] = ['combo', 'feeds', 'typal', 'commander', 'package'];
 
-/** 1, 2 or 3 px: commander spokes stay thin, the rest by weight. */
+/** 1, 2 or 3 px: commander spokes and package links stay thin, the rest by weight. */
 export function edgeWidth(e: NetworkEdge): 1 | 2 | 3 {
-  if (e.kind === 'commander') return 1;
+  if (e.kind === 'commander' || e.kind === 'package') return 1;
   return e.weight < 0.34 ? 1 : e.weight < 0.67 ? 2 : 3;
 }
 
-export const edgeOpacity = (kind: NetworkEdgeKind): number => (kind === 'commander' ? 0.18 : kind === 'typal' ? 0.55 : 0.85);
+export const edgeOpacity = (kind: NetworkEdgeKind): number => (kind === 'commander' ? 0.18 : kind === 'typal' || kind === 'package' ? 0.55 : 0.85);
 
 /** Node radius in layout units: the commander is the biggest, cards that connect to nothing the smallest. */
 export function nodeRadius(n: NetworkNode, maxDegree: number): number {

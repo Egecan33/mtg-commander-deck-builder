@@ -49,7 +49,7 @@ export function NetworkView({
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<NetworkEdgeKind, number> = { combo: 0, feeds: 0, typal: 0, commander: 0 };
+    const c: Record<NetworkEdgeKind, number> = { combo: 0, feeds: 0, typal: 0, commander: 0, package: 0 };
     for (const e of network?.edges ?? []) c[e.kind]++;
     return c;
   }, [network]);
@@ -155,7 +155,7 @@ export function NetworkView({
         />
       )}
       <div className="absolute left-3 top-3 flex flex-wrap gap-1.5" role="group" aria-label="Link kinds">
-        {EDGE_KINDS.map((kind) => (
+        {EDGE_KINDS.filter((kind) => kind !== 'package' || counts.package > 0).map((kind) => (
           <button
             key={kind}
             type="button"

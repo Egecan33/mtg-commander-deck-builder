@@ -4,7 +4,7 @@ import { AXIS_MEMBER, deckCards, isLandCard, namedTypes, resolveThemeWeights } f
 import type { AxisId, Deck, DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '../types';
 import { clusterNetwork } from './clusters';
 import {
-  MAX_EDGES_PER_NODE, UNCONNECTED_EDGE, UNCONNECTED_LINK, comboEdges, isRingCard, linkIndex, pairEdges, round3, shortName,
+  MAX_EDGES_PER_NODE, PACKAGE_EDGE, UNCONNECTED_EDGE, UNCONNECTED_LINK, comboEdges, functionalPackages, isRingCard, linkIndex, pairEdges, round3, shortName,
 } from './edges';
 import type { LinkCard } from './edges';
 
@@ -126,6 +126,23 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
         a: a.oracleId, b: b.oracleId, kind: 'commander', weight: n.link,
         reasons: a.oracleId === first.oracleId ? [cmdSide, cardSide] : [cardSide, cmdSide],
       });
+    }
+  }
+  // package edges: the cards of a pinned functional package do the same job together (review I4);
+  // they count for "connected" (`linkIndex` reads the same package link), never for clusters
+  const nodeSet = new Set(nodes.filter((n) => !n.commander).map((n) => n.oracleId));
+  const paired = new Set<string>();
+  for (const { def, ids } of functionalPackages(deck, db)) {
+    const members = ids.filter((id) => nodeSet.has(id)).sort();
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const [a, b] = [members[i], members[j]];
+        if (paired.has(`${a}|${b}`)) continue;
+        paired.add(`${a}|${b}`);
+        const ca = byId.get(a)!;
+        const cb = byId.get(b)!;
+        edges.push({ a, b, kind: 'package', weight: PACKAGE_EDGE, reasons: [`${def.name} with ${shortName(cb)}`, `${def.name} with ${shortName(ca)}`], packageId: def.id });
+      }
     }
   }
   edges.sort((p, q) => cmp(p.kind, q.kind) || byKey(p, q));
