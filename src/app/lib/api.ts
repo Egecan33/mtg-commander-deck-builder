@@ -50,13 +50,20 @@
  *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
  *        filled), then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
  *        the engine objects to are skipped; it stops before one that would lower the rating). Every change
- *        is in `changes` ({ out, in, reason }; `out` '' for an add, `in` '' for a cut). The result never
- *        rates below the start: if it would, the deck comes back unchanged with `note` saying why. `note`
- *        also explains an empty result and what still blocks an illegal deck (a locked card, a commander);
- *        commanders and locked cards are never cut. `options.only` (a rating part: mana, roles, synergy,
- *        quality, curve, interaction, wincons, consistency, bracket; anything else is a 400) fixes that
- *        part alone; the legality and size step still runs when the deck needs it. `heldBy` covers the
- *        cards the fix brought in, counted as in a built deck; `cards` covers the deck and every change.
+ *        is in `changes` ({ out, in, reason }; `out` '' for an add, `in` '' for a cut). Making the deck
+ *        legal and 100 cards always stands, even when it costs rating points (a deck that breaks a rule is
+ *        capped at 40 and cannot be played; `note` then says what it cost), so `ratingAfter` can be below
+ *        `ratingBefore` only for that reason. The improve part never ends below the rating the legality
+ *        step left: if it would, only its swaps are dropped. `note` also explains an empty result (what
+ *        Improve found and why none of it was used, never blaming the card options unless they were in
+ *        force) and what still blocks an illegal deck (a locked card, a commander); commanders and locked
+ *        cards are never cut. `options.only` (a rating part: mana, roles, synergy, quality, curve,
+ *        interaction, wincons, consistency, bracket; anything else is a 400) fixes that part alone: swaps
+ *        must bring in the kind of card the part asks for and must not lower it, the part is judged over
+ *        the whole run (bracket fit stays 0 until the last offender goes), and the run is kept up to its
+ *        last step that raised the part. The legality and size step still runs when the deck needs it.
+ *        `heldBy` covers the cards the fix brought in, counted as in a built deck; `cards` covers the deck
+ *        and every change.
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        'swapin' takes `options.in` (a card not in the deck; 400 without it), `count` 1-10, and returns the deck cards it could replace,
  *        best rating after first; a deck under 100 cards gets the plain add (`out` '') first; an illegal card gives no proposals.

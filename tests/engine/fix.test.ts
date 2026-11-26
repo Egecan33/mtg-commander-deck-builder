@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { fixDeck } from '@/engine/builder';
+import { autoBuild, fixDeck } from '@/engine/builder';
 import { shownRating } from '@/engine/builder/improve';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
+import { resolveThemeWeights } from '@/engine/summary';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -51,6 +52,17 @@ function junkFor(deck: Deck, n: number): string[] {
   expect(junk.length).toBe(n);
   return junk;
 }
+
+/** `n` Game Changers in the commander's colours that the deck does not hold. */
+function gameChangersFor(deck: Deck, n: number): string[] {
+  const have = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+  const identity = new Set(deck.commanders.flatMap((id) => db.get(id)!.colorIdentity));
+  const gcs = db.all().filter((c) => c.gameChanger && !have.has(c.oracleId) && !isLand(c.oracleId) && c.colorIdentity.every((k) => identity.has(k)))
+    .slice(0, n).map((c) => c.oracleId);
+  expect(gcs.length).toBe(n);
+  return gcs;
+}
+const bracketFit = (d: Deck) => rateDeck(d, ctx).subscores.find((s) => s.key === 'bracket')!.value;
 
 /** The deck with its first `n` single nonland, unlocked entries (that `pick` accepts) replaced by `ids`. */
 function swapInto(deck: Deck, ids: string[], pick: (id: string) => boolean = () => true): Deck {
@@ -154,7 +166,9 @@ describe('fixDeck', () => {
     expect(r.deck).toEqual(upgraded);
     expect(r.changes).toEqual([]);
     expect(r.ratingAfter).toBe(r.ratingBefore);
-    expect(r.note).toMatch(/Nothing to fix with the cards allowed/);
+    expect(r.note).toMatch(/^Nothing to fix/);
+    // The options are named as what was searched, since they are in force here.
+    expect(r.note).toMatch(/owned cards only/);
   });
 
   it('locked cards and commanders are never cut', () => {
@@ -264,21 +278,89 @@ describe('fixDeck', () => {
     for (const r of [mana, curve]) expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
   });
 
-  it('a fix that would lower the rating changes nothing and says why', () => {
+  it('making a deck legal stands even when it costs rating points, and the note says so', () => {
     // A pile of Mountains whose one removal spell is off-colour: with nothing owned it can only be
-    // removed for another Mountain, which rates lower than the illegal deck did.
+    // removed for another Mountain, which rates lower than the illegal deck did. Legal wins: an
+    // illegal deck is capped at 40 and cannot be played.
     const krenko = card('Krenko, Mob Boss').oracleId;
+    const mountain = card('Mountain').oracleId;
     const deck: Deck = {
       id: null, name: 'mountains', commanders: [krenko], companion: null, chosenColor: null, targetBracket: 3, themeWeights: null,
-      main: [{ oracleId: card('Mountain').oracleId, qty: 98, locked: false }, { oracleId: swords, qty: 1, locked: false }],
+      main: [{ oracleId: mountain, qty: 98, locked: false }, { oracleId: swords, qty: 1, locked: false }],
     };
     expect(size(deck)).toBe(100);
     const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned: new Set() }));
-    expect(r.deck).toEqual(deck);
-    expect(r.changes).toEqual([]);
-    expect(r.ratingAfter).toBe(r.ratingBefore);
-    expect(r.note).toMatch(/would lower the rating/);
-    expect(r.note).toMatch(/Swords to Plowshares/);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(qty(r.deck, swords)).toBe(0);
+    expect(size(r.deck)).toBe(100);
+    expect(r.changes[0]).toMatchObject({ out: swords, in: '' });
+    expect(r.changes.some((c) => c.out === '' && c.in === mountain)).toBe(true);
+    expect(r.ratingAfter).toBeLessThan(r.ratingBefore);
+    expect(r.ratingAfter).toBe(shownRating(rateDeck(r.deck, ctx)));
+    expect(r.note).toMatch(/legal cost rating points/);
+    expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+  });
+
+  it("only='bracket' cuts the Game Changers a Bracket 2 deck may not hold, and bracket fit rises", () => {
+    for (const n of [2, 3]) {
+      const deck = swapInto(precon, gameChangersFor(precon, n), (id) => !db.get(id)!.gameChanger);
+      const gcs = deck.main.filter((e) => db.get(e.oracleId)!.gameChanger).map((e) => e.oracleId);
+      expect(gcs.length).toBe(n);
+      expect(bracketFit(deck)).toBe(0);
+      const r = fixDeck(deck, ctx, opts(), 'bracket');
+      for (const id of gcs) expect(qty(r.deck, id), db.get(id)?.name).toBe(0);
+      expect(bracketFit(r.deck)).toBeGreaterThan(bracketFit(deck));
+      // Nothing for other parts: every change cuts one of them.
+      for (const c of r.changes) expect(gcs).toContain(c.out);
+      expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+      expect(r.note).toBeNull();
+    }
+  });
+
+  it("only='synergy' adds on-theme cards to a deck short of them, and says why it cannot when the rating caps the theme", () => {
+    // Lathril's elves deck with 30 of its on-theme cards swapped for off-theme cards that fill no role.
+    const weights = resolveThemeWeights(upgraded, ctx);
+    const fit = (id: string) => Math.max(0, ...Object.entries(db.features(id)?.axes ?? {}).map(([axis, s]) => (weights[axis] ?? 0) * Math.max(s.e, s.p)));
+    const have = new Set([...upgraded.commanders, ...upgraded.main.map((e) => e.oracleId)]);
+    const identity = new Set(upgraded.commanders.flatMap((id) => db.get(id)!.colorIdentity));
+    const offTheme = db.all().filter((c) => !have.has(c.oracleId) && !isLand(c.oracleId) && c.colorIdentity.every((k) => identity.has(k)) && !c.gameChanger
+      && fit(c.oracleId) < 0.3 && (db.features(c.oracleId)?.roles.length ?? 0) === 0 && db.combosFor(c.oracleId).length === 0).slice(0, 30).map((c) => c.oracleId);
+    const short = swapInto(upgraded, offTheme, (id) => fit(id) >= 0.5);
+    const before = rateDeck(short, ctx).subscores.find((s) => s.key === 'synergy')!;
+    expect(before.fixes.some((f) => f.filter?.axis)).toBe(true);
+    const r = fixDeck(short, ctx, opts(), 'synergy');
+    expect(r.changes.length).toBeGreaterThan(0);
+    const after = rateDeck(r.deck, ctx).subscores.find((s) => s.key === 'synergy')!;
+    expect(after.value).toBeGreaterThan(before.value);
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+
+    // Eshki names no theme the engine knows: synergy is capped until the theme weights are set, so
+    // no swap can raise it. The note says that, and does not blame the cards allowed.
+    const capped = fixDeck(precon, ctx, opts(), 'synergy');
+    expect(capped.changes).toEqual([]);
+    expect(capped.note).toMatch(/theme weights/);
+    expect(capped.note).not.toMatch(/cards allowed/);
+  });
+
+  it('a run without goals stops before a swap that lowers the rating', () => {
+    // Talrand at Bracket 2 with three Game Changers: no fix names a role or a theme, so Improve runs
+    // its plain route, whose first repair dips the rating before the last cut lifts it.
+    const talrand = autoBuild({ id: null, name: 'Talrand', commanders: [card('Talrand, Sky Summoner').oracleId], companion: null, chosenColor: null, main: [], targetBracket: 2, themeWeights: null }, ctx, opts());
+    const deck = swapInto(talrand, gameChangersFor(talrand, 3), (id) => !db.get(id)!.gameChanger);
+    const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
+    expect(fixes.length).toBeGreaterThan(0);
+    expect(fixes.some((f) => f.filter?.role || f.filter?.axis)).toBe(false);
+    const r = fixDeck(deck, ctx, opts());
+    let d = deck;
+    let prev = r.ratingBefore;
+    for (const c of r.changes) {
+      d = replay(d, c);
+      const now = shownRating(rateDeck(d, ctx));
+      expect(now, `${db.get(c.out)?.name} -> ${db.get(c.in)?.name}`).toBeGreaterThanOrEqual(prev);
+      prev = now;
+    }
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+    if (r.changes.length === 0) expect(r.note).toMatch(/lower the rating/);
   });
 
   it('an unknown part of the rating changes nothing', () => {

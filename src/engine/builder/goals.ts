@@ -418,12 +418,21 @@ function swapProposal(outId: string, outName: string, inName: string, inId: stri
  * Swaps the engine thinks are worse still come back, with `agrees: false` and an objection.
  */
 export function replaceCard(deck: Deck, ctx: EngineContext, opts: BuildOptions, outId: string, count = 6): SwapProposal[] {
+  if (!deck.main.some((e) => e.oracleId === outId)) return [];
+  return replaceCardFrom(deck, ctx, buildPool(deck, ctx, { ...opts, goals: null }), outId, count);
+}
+
+/**
+ * `replaceCard` drawing from a pool the caller built (`buildPool` with the options and
+ * `goals: null`). The pool is read from the commanders, the options, the target bracket and the
+ * theme, so a caller replacing several cards of one deck builds it once (`fixDeck`).
+ */
+export function replaceCardFrom(deck: Deck, ctx: EngineContext, pool: Pool, outId: string, count = 6): SwapProposal[] {
   const n = Math.min(12, Math.max(1, Math.floor(Number.isFinite(count) ? count : 6)));
   const { db } = ctx;
   if (!deck.main.some((e) => e.oracleId === outId)) return [];
   const outCard = db.get(outId);
   const outF = db.features(outId);
-  const pool = buildPool(deck, ctx, { ...opts, goals: null });
   const scorer = createScorer(deck, ctx);
   const have = idsOf(deck);
   const fits = planFilter(deck, ctx, pool);

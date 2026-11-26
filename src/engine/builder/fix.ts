@@ -1,14 +1,15 @@
-import { RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
+import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
 import { ROLE_LABEL } from '../targets';
-import type { AxisId, BuildOptions, Deck, DeckRating, EngineContext, Fix, FixChange, FixResult, Role, Violation } from '../types';
+import type { AxisId, BuildOptions, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, SwapProposal, Violation } from '../types';
 import { fillRestReport } from './auto';
-import { improveDeck, replaceCard } from './goals';
+import { improveDeck, replaceCardFrom } from './goals';
 import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from './improve';
 import { buildPool, deckCount, qtyOf, removeCard } from './pool';
+import type { Pool } from './pool';
 
 const DECK_SIZE = 100;
 /** Swaps the improve step asks for. */
@@ -35,6 +36,8 @@ const counts = (deck: Deck): Map<string, number> => {
   for (const e of deck.main) out.set(e.oracleId, (out.get(e.oracleId) ?? 0) + qtyOf(e));
   return out;
 };
+const unique = <T>(xs: T[]): T[] => [...new Set(xs)];
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
 
 /** The note for a deck whose commanders are what breaks the rules (or that has none), else null. */
 function commanderFault(deck: Deck, violations: readonly Violation[]): string | null {
@@ -46,7 +49,7 @@ function commanderFault(deck: Deck, violations: readonly Violation[]): string | 
 }
 
 /** Every card that breaks a rule (never a commander, never a locked card): the best agreeing replacement, else removed. */
-function repairRules(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixChange[]): Deck {
+function repairRules(start: Deck, ctx: EngineContext, pool: () => Pool, changes: FixChange[]): Deck {
   let deck = start;
   for (let n = 0; n < MAX_REPAIRS; n++) {
     let target: { id: string; v: Violation } | null = null;
@@ -59,7 +62,7 @@ function repairRules(start: Deck, ctx: EngineContext, opts: BuildOptions, change
     const { id, v } = target;
     const what = OFFENCE[v.code] ?? 'a card that breaks a rule';
     const known = ctx.db.get(id) !== undefined;
-    const into = known ? replaceCard(deck, ctx, opts, id, REPLACEMENTS).find((p) => p.agrees !== false) : undefined;
+    const into = known ? replaceCardFrom(deck, ctx, pool(), id, REPLACEMENTS).find((p) => p.agrees !== false) : undefined;
     if (into) {
       deck = swapOne(deck, id, into.in);
       changes.push({ out: id, in: into.in, reason: `Replaces ${what}: ${v.message}` });
@@ -75,11 +78,11 @@ function repairRules(start: Deck, ctx: EngineContext, opts: BuildOptions, change
  * Over 100 cards: the weakest unlocked cards go, one copy at a time, in the order Improve would cut
  * them (`cuttable`: weakest first, combo pieces, side plans and strong on-theme cards last).
  */
-function trim(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixChange[]): Deck {
+function trim(start: Deck, ctx: EngineContext, pool: Pool, changes: FixChange[]): Deck {
   let deck = start;
   const scorer = createScorer(deck, ctx);
   const locked = new Set(deck.main.filter((e) => e.locked).map((e) => e.oracleId));
-  const first = cuttable(deck, ctx, buildPool(deck, ctx, opts), locked, comboPieces(deck, ctx), scorer).map((o) => o.id);
+  const first = cuttable(deck, ctx, pool, locked, comboPieces(deck, ctx), scorer).map((o) => o.id);
   const scoreOf = (id: string): number => { const c = ctx.db.get(id); return c ? scorer.score(c).score : -1; };
   const taken = new Set(first);
   const rest = [...new Set(deck.main.filter((e) => !e.locked && qtyOf(e) >= 1).map((e) => e.oracleId))]
@@ -112,7 +115,107 @@ function fill(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixC
   return built;
 }
 
-const unique = <T>(xs: T[]): T[] => [...new Set(xs)];
+/** " from the cards allowed (owned cards only, up to $2)" when the options narrow the search, else ''. */
+function searched(opts: BuildOptions): string {
+  const limits: string[] = [];
+  if (opts.ownedOnly) limits.push('owned cards only');
+  if (typeof opts.maxPriceUsd === 'number' && Number.isFinite(opts.maxPriceUsd)) limits.push(`up to $${opts.maxPriceUsd}`);
+  return limits.length > 0 ? ` from the cards allowed (${limits.join(', ')})` : '';
+}
+
+/** What the improve step kept, and (when it kept nothing) why, in a clause that follows "Nothing to fix: ". */
+interface Stage { deck: Deck; rating: DeckRating; changes: FixChange[]; why: string }
+
+/**
+ * Step 2 of `fixDeck`, on a deck the legality step is done with. The goals come from the rating's
+ * fixes (all parts, or `part` alone). Proposals are applied in order: one the engine objects to is
+ * skipped, and the run stops before one that lowers the rating. While every proposal so far has
+ * been applied, the run's own check stands and no rating is taken: a directed run's `agrees`, or
+ * the plain run's own `ratingBefore -> ratingAfter`.
+ *
+ * With `part`, a step is taken only for the kind of card that part asks for (its fix filters) and
+ * when the part does not fall; the part is judged over the whole run (bracket fit stays 0 until the
+ * last offender goes), and the run is kept up to its last step that raised the part. A run that
+ * never raises it is dropped.
+ */
+function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, opts: BuildOptions, part: SubScore | null): Stage {
+  const none = (why: string): Stage => ({ deck: start, rating: startRating, changes: [], why });
+  const fixes = part ? part.fixes : startRating.subscores.flatMap((s) => s.fixes);
+  if (fixes.length === 0) return none(`the rating lists no problems${part ? ` with ${part.label}` : ''}`);
+  if (ratingCapped(start, startRating.violations)) return none('a deck that breaks a rule is capped, so no swap can raise its rating');
+
+  const roles = unique(fixes.map((f) => f.filter?.role).filter((r): r is Role => r !== undefined && ROLE_LABEL[r] !== undefined));
+  const axes = unique(fixes.map((f) => f.filter?.axis).filter((a): a is AxisId => typeof a === 'string' && a.length > 0));
+  const proposals = improveDeck(start, ctx, { ...opts, goals: { maxSwaps: FIX_SWAPS, emphasizeRoles: roles, emphasizeAxes: axes } });
+  if (proposals.length === 0) return none(`Improve found no swap for the problems the rating lists${searched(opts)}`);
+
+  const filters = fixes.flatMap((f) => (f.filter ? [f.filter] : []));
+  const ofKind = (id: string): boolean => {
+    if (!part || filters.length === 0) return true;
+    const card = ctx.db.get(id);
+    const f = ctx.db.features(id);
+    return !!card && !!f && filters.some((x) => matches({ card, f, land: isLandCard(f) }, x));
+  };
+  const holds = (d: Deck, id: string): boolean => {
+    const card = ctx.db.get(id);
+    return !card || (!isBasicLand(card) && (d.commanders.includes(id) || d.main.some((e) => e.oracleId === id && qtyOf(e) >= 1)));
+  };
+  const value = (r: DeckRating): number => (part ? (r.subscores.find((s) => s.key === part.key)?.value ?? 0) : 0);
+  const name = (id: string): string => ctx.db.get(id)?.name ?? 'an unknown card';
+
+  let deck = start;
+  let known: DeckRating | null = startRating;
+  let synced = true;
+  const made: FixChange[] = [];
+  // With a part: the run's best point so far (the part at its highest).
+  let best = { deck: start, count: 0, rating: startRating, value: value(startRating) };
+  let objected = 0;
+  let offKind = 0;
+  let partFell = 0;
+  let stop: { p: SwapProposal; from: number; to: number } | null = null;
+  for (const p of proposals) {
+    if (p.agrees === false) { objected++; synced = false; continue; }
+    if (!ofKind(p.in)) { offKind++; synced = false; continue; }
+    if ((p.out !== '' && !removable(deck, p.out)) || holds(deck, p.in)) { synced = false; continue; }
+    const next = applySwaps(deck, [p]);
+    if (synced && !part) {
+      // The plain run gives no verdict: its own ratings are for this very deck.
+      if (p.agrees === undefined && p.ratingAfter < p.ratingBefore) { stop = { p, from: p.ratingBefore, to: p.ratingAfter }; break; }
+      known = null;
+    } else {
+      const before: DeckRating = known ?? rateDeck(deck, ctx);
+      const after: DeckRating = rateDeck(next, ctx);
+      if (shownRating(after) < shownRating(before)) { stop = { p, from: shownRating(before), to: shownRating(after) }; known = before; break; }
+      if (part && value(after) < value(before)) { partFell++; synced = false; known = before; continue; }
+      known = after;
+    }
+    deck = next;
+    made.push({ out: p.out, in: p.in, reason: p.reason });
+    if (part && known && value(known) > best.value) best = { deck, count: made.length, rating: known, value: value(known) };
+  }
+
+  let rating = known ?? rateDeck(deck, ctx);
+  let kept = made;
+  if (part) {
+    deck = best.deck;
+    rating = best.rating;
+    kept = made.slice(0, best.count);
+  } else if (shownRating(rating) < shownRating(startRating)) {
+    deck = start;
+    rating = startRating;
+    kept = [];
+  }
+  if (kept.length > 0) return { deck, rating, changes: kept, why: '' };
+
+  const because: string[] = [];
+  if (objected > 0) because.push(`the engine objects to ${objected === 1 ? 'one' : objected} of them`);
+  if (part && offKind > 0) because.push(`${offKind === 1 ? 'one brings in a card' : `${offKind} bring in cards`} of another kind than ${part.label} asks for`);
+  if (part && partFell > 0) because.push(`${partFell === 1 ? 'one lowers' : `${partFell} lower`} ${part.label}`);
+  if (part && made.length > 0) because.push(`the swaps Fix deck could make leave ${part.label} where it was`);
+  if (stop) because.push(`${name(stop.p.out)} for ${name(stop.p.in)} would lower the rating from ${stop.from} to ${stop.to}, and Fix deck stops before a swap that lowers the rating`);
+  const tail = because.length > 0 ? `, but ${because.join('; ')}` : ', but none of them could be applied to the deck as it is';
+  return none(`Improve proposed ${plural(proposals.length, 'swap')}${searched(opts)}${tail}`);
+}
 
 /**
  * "Fix deck": solves the problems the deck's own rating lists, and says what it did.
@@ -121,19 +224,22 @@ const unique = <T>(xs: T[]): T[] => [...new Set(xs)];
  *    over the copy limit, unknown) is replaced by the best `replaceCard` proposal the engine agrees
  *    with, or removed when there is none. Over 100 cards, the weakest unlocked cards are cut; under
  *    100, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not 100
- *    cards, `only` or not.
+ *    cards, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
+ *    is capped at 40 and cannot be played (`note` then says what it cost). One card pool serves
+ *    every replacement of the call.
  * 2. Then a directed `improveDeck` run whose goals come from the rating's current fixes (all parts,
  *    or only the part `only` names): role filters are emphasised roles, axis filters emphasised theme
  *    axes, at most 15 swaps, the deck's own target bracket. Proposals are applied in order; one the
  *    engine objects to (`agrees === false`) is skipped, and the run stops before one that would lower
- *    the rating. With `only`, a swap is kept only when its card is of the kind that part asks for and
- *    it raises that part.
- * 3. A result that rates below the start is not returned: the deck comes back unchanged with a note.
+ *    the rating. With `only`, a swap must bring in the kind of card that part asks for and must not
+ *    lower the part, and the run is kept up to its last step that raised the part (see `improveStage`).
+ * 3. The improve step never ends below the rating the legality step left: if it would, only its own
+ *    swaps are dropped.
  *
  * Commanders and locked cards are never cut, and the options (owned only, free copies, price) hold
  * for every card brought in. A deck whose commanders break a rule comes back unchanged with a note,
- * as does an unknown `only`. `note` also says why nothing changed, or what still keeps the deck from
- * being legal. Never throws.
+ * as does an unknown `only`. `note` also says what the legality step cost, why nothing changed, or
+ * what still keeps the deck from being legal. Never throws.
  */
 export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only: string | null = null): FixResult {
   const start = rateDeck(deck, ctx);
@@ -148,75 +254,41 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   const plain: BuildOptions = { ...opts, goals: null };
   const changes: FixChange[] = [];
   let current = deck;
+  // The pool is read from the commanders, the options, the bracket and the theme: one per call.
+  let pool: Pool | null = null;
+  const poolOf = (): Pool => (pool ??= buildPool(deck, ctx, plain));
 
   // 1. Legal, then 100 cards.
   if (start.violations.length > 0) {
-    current = repairRules(current, ctx, plain, changes);
+    current = repairRules(current, ctx, poolOf, changes);
     if (validateDeck(current, ctx.db).some((v) => v.code === 'size')) {
-      if (deckCount(current) > DECK_SIZE) current = trim(current, ctx, plain, changes);
+      if (deckCount(current) > DECK_SIZE) current = trim(current, ctx, poolOf(), changes);
       else if (deckCount(current) < DECK_SIZE) current = fill(current, ctx, plain, changes);
     }
   }
+  const legalChanges = changes.length;
+  const mid = legalChanges > 0 ? rateDeck(current, ctx) : start;
 
   // 2. The rating's own fixes, as the goals of a directed improve.
-  let rating: DeckRating = changes.length > 0 ? rateDeck(current, ctx) : start;
-  const part = only ? (rating.subscores.find((s) => s.key === only) ?? null) : null;
-  const fixes: Fix[] = only ? (part?.fixes ?? []) : rating.subscores.flatMap((s) => s.fixes);
-  if (fixes.length > 0 && !ratingCapped(current, rating.violations)) {
-    const roles = unique(fixes.map((f) => f.filter?.role).filter((r): r is Role => r !== undefined && ROLE_LABEL[r] !== undefined));
-    const axes = unique(fixes.map((f) => f.filter?.axis).filter((a): a is AxisId => typeof a === 'string' && a.length > 0));
-    const proposals = improveDeck(current, ctx, { ...opts, goals: { maxSwaps: FIX_SWAPS, emphasizeRoles: roles, emphasizeAxes: axes } });
-
-    const filters = fixes.flatMap((f) => (f.filter ? [f.filter] : []));
-    const serves = (id: string): boolean => {
-      if (!only || filters.length === 0) return true;
-      const card = ctx.db.get(id);
-      const f = ctx.db.features(id);
-      return !!card && !!f && filters.some((x) => matches({ card, f, land: isLandCard(f) }, x));
-    };
-    const holds = (d: Deck, id: string): boolean => {
-      const card = ctx.db.get(id);
-      return !card || (!isBasicLand(card) && (d.commanders.includes(id) || d.main.some((e) => e.oracleId === id && qtyOf(e) >= 1)));
-    };
-    const value = (r: DeckRating): number => r.subscores.find((s) => s.key === only)?.value ?? 0;
-
-    // While every proposal so far has been applied, the deck is the one the run proposed on: its own
-    // check (`agrees`, or the plain run's rising ratings) stands, and no rating is needed.
-    let synced = true;
-    let known: DeckRating | null = rating;
-    for (const p of proposals) {
-      if (p.agrees === false || !serves(p.in) || (p.out !== '' && !removable(current, p.out)) || holds(current, p.in)) { synced = false; continue; }
-      const next = applySwaps(current, [p]);
-      if (!synced || only) {
-        const before: DeckRating = known ?? rateDeck(current, ctx);
-        const after: DeckRating = rateDeck(next, ctx);
-        if (shownRating(after) < shownRating(before)) break;
-        if (only && value(after) <= value(before)) { synced = false; known = before; continue; }
-        known = after;
-      } else {
-        known = null;
-      }
-      current = next;
-      changes.push({ out: p.out, in: p.in, reason: p.reason });
-    }
-    rating = known ?? rateDeck(current, ctx);
-  }
-
-  // 3. Never below the start.
+  const part = only ? (mid.subscores.find((s) => s.key === only) ?? null) : null;
+  const stage = improveStage(current, mid, ctx, opts, part);
+  current = stage.deck;
+  changes.push(...stage.changes);
+  const rating = stage.rating;
   const ratingAfter = shownRating(rating);
-  if (ratingAfter < ratingBefore) {
-    const still = start.violations.length > 0 ? ` The deck still breaks a rule: ${start.violations.map((v) => v.message).join(' ')}` : '';
-    return untouched(`Fix deck's changes would lower the rating from ${ratingBefore} to ${ratingAfter}, so nothing was changed.${still}`);
-  }
 
-  let note: string | null = null;
+  const notes: string[] = [];
+  if (ratingAfter < ratingBefore) {
+    notes.push(ratingCapped(deck, start.violations)
+      ? `Making the deck legal cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck that breaks a rule is capped at ${ILLEGAL_CAP} and cannot be played as it was.`
+      : `Filling the deck to 100 cards cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck under 100 cards cannot be played as it was.`);
+  }
   if (rating.violations.length > 0) {
     const lockedBlock = rating.violations.some((v) => v.oracleIds.some((id) => current.main.some((e) => e.oracleId === id && e.locked)));
-    note = `Still not legal: ${rating.violations.map((v) => v.message).join(' ')}${lockedBlock ? ' Locked cards are never cut: unlock them to let Fix deck replace them.' : ''}`;
-  } else if (changes.length === 0) {
-    note = fixes.length === 0
-      ? `Nothing to fix: the rating lists no problems${part ? ` with ${part.label}` : ''}.`
-      : `Nothing to fix with the cards allowed${opts.ownedOnly ? ' (owned cards only)' : ''}: no change the engine agrees with improves ${part ? `the ${part.label.toLowerCase()} part of the rating` : 'the rating'}.`;
+    notes.push(`Still not legal: ${rating.violations.map((v) => v.message).join(' ')}${lockedBlock ? ' Locked cards are never cut: unlock them to let Fix deck replace them.' : ''}`);
+  } else if (stage.changes.length === 0 && (legalChanges === 0 || part)) {
+    const said = part && part.fixes.length > 0 ? ` The rating says about ${part.label}: ${part.fixes.map((f) => f.text).join(' ')}` : '';
+    notes.push(`Nothing ${legalChanges > 0 ? 'more ' : ''}to fix${part ? ` in ${part.label}` : ''}: ${stage.why}.${said}`);
   }
-  return { deck: current, changes, ratingBefore, ratingAfter, note };
+  return { deck: current, changes, ratingBefore, ratingAfter, note: notes.length > 0 ? notes.join(' ') : null };
 }
