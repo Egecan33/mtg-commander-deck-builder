@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { completePackage, overlapKey, rankPackage } from '@/engine/builder';
+import { completePackage, fallNote, overlapKey, rankPackage } from '@/engine/builder';
 import { packageDef, packageMembers, packagePlan } from '@/engine/packages';
 import { deckCount } from '@/engine/builder/pool';
+import { rateDeck } from '@/engine/rating';
 import { validateDeck } from '@/engine/rules';
+import { bandRoles } from '@/engine/targets';
 import type { BuildOptions, Deck, EngineContext } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck } from '../helpers/network';
@@ -104,6 +106,61 @@ describe('completePackage', () => {
     expect(r.note).toMatch(/nothing more was cut/);
     completePackage(upgraded, ctx, opts(), 'draw');
     expect(JSON.stringify(upgraded)).toBe(frozen);
+  });
+
+  // Review C3: completing Protection cut a win condition and the deck's graveyard hate.
+  const KEPT_ROLES = ['win-condition', 'graveyard-hate', 'recursion', 'tutor'];
+  const runs = (): { deck: Deck; id: 'ramp' | 'draw' | 'removal' | 'protection' }[] => {
+    const out: { deck: Deck; id: 'ramp' | 'draw' | 'removal' | 'protection' }[] = [];
+    for (const deck of [upgraded, fixtureDeck('precon', 2), fixtureDeck('cedh', 5), { ...upgraded, roleTargets: { protection: 14, draw: 16 } }]) {
+      for (const id of ['ramp', 'draw', 'removal', 'protection'] as const) out.push({ deck, id });
+    }
+    return out;
+  };
+
+  it("never cuts a win condition, graveyard hate, recursion, a tutor or another package's card", () => {
+    let cuts = 0;
+    for (const { deck, id } of runs()) {
+      const plan = packagePlan(deck, ctx);
+      const kept = new Set(plan.packages.flatMap((p) => p.cards));
+      for (const c of completePackage(deck, ctx, opts(), id).changes) {
+        if (!c.out) continue;
+        cuts++;
+        const name = `${id}: ${db.get(c.out)!.name}`;
+        expect(bandRoles(db.get(c.out)!, db.features(c.out)!, deck.targetBracket).filter((r) => KEPT_ROLES.includes(r)), name).toEqual([]);
+        expect(kept.has(c.out), name).toBe(false);
+      }
+    }
+    expect(cuts).toBeGreaterThan(0);
+  });
+
+  it('a filled core package is never "over" in the rating, and a lower rating is said with its reason', () => {
+    const label = { ramp: 'ramp', draw: 'card draw', removal: 'removal', protection: 'protection' } as const;
+    for (const { deck, id } of runs()) {
+      const r = completePackage(deck, ctx, opts(), id);
+      if (r.changes.length === 0) continue;
+      const fixes = rateDeck(r.deck, ctx).subscores.flatMap((s) => s.fixes.map((f) => f.text));
+      expect(fixes.filter((t) => t.includes(`over on ${label[id]}`)), id).toEqual([]);
+      if (r.ratingAfter < r.ratingBefore) expect(r.note, id).toMatch(/^The rating falls .+: .+/);
+    }
+  });
+
+  it('the note for a lower rating names the part that lost most, with its fix', () => {
+    const before = rateDeck(upgraded, ctx);
+    const junk = card('Forest').oracleId;
+    const worse: Deck = { ...upgraded, main: upgraded.main.map((e) => (db.features(e.oracleId)!.roles.includes('ramp') && !upgraded.commanders.includes(e.oracleId) ? { ...e, oracleId: junk } : e)) };
+    const after = rateDeck(worse, ctx);
+    expect(after.rating).toBeLessThan(before.rating);
+    expect(fallNote(before, after)).toMatch(/^The rating falls [\d.]+ → [\d.]+: \w[\w ]+ loses [\d.]+ points \(.+\)\. Undo puts the deck back\.$/);
+    expect(fallNote(after, before)).toBeNull();
+    expect(fallNote(before, before)).toBeNull();
+  });
+
+  it('says so when the deck breaks a rule', () => {
+    const offColour = card('Lightning Bolt').oracleId;
+    const illegal: Deck = { ...upgraded, main: [...upgraded.main.slice(1), { oracleId: offColour, qty: 1, locked: false }] };
+    const r = completePackage(illegal, ctx, opts(), 'protection');
+    expect(r.note).toMatch(/This deck breaks a rule \(.+\), so its rating stays capped at 40 until that is fixed\./);
   });
 
   it('Removal fills the board-wipe slot first, one-sided wipes before others', () => {

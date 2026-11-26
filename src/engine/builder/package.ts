@@ -3,9 +3,9 @@ import { deckCounts } from '../rules';
 import { createScorer } from '../scoring';
 import { ONE_SIDED_WIPE_TAG, inPackage, isWipe, packageDef, packageMembers, tagsOf } from '../packages';
 import { packagePlan } from '../packages';
-import { PACKAGE_MIN } from '../targets';
+import { PACKAGE_MIN, bandRoles } from '../targets';
 import { isLandCard, summarizeDeck } from '../summary';
-import type { BuildOptions, Deck, EngineContext, FixChange, FixResult, PackageId, PackagePlan } from '../types';
+import type { BuildOptions, Deck, DeckRating, EngineContext, FixChange, FixResult, PackageId, PackagePlan, Role } from '../types';
 import { searched } from './fix';
 import { shownRating, swapOne } from './improve';
 import { addCard, buildPool, deckCount, qtyOf } from './pool';
@@ -49,16 +49,43 @@ export function rankPackage(
   return o.limit ? picks.slice(0, o.limit) : picks;
 }
 
+/** Roles the rating holds against a band of their own: Complete package never cuts a card that fills one. */
+const KEPT_ROLES: readonly Role[] = ['win-condition', 'graveyard-hate', 'recursion', 'tutor'];
+
+/**
+ * Why a rating fell, for a result panel: the sub-score that lost the most, and its first fix after.
+ * "The rating falls 73 → 71: Win conditions loses 3.6 points (1 short on win conditions: have 3, want 4-6)."
+ */
+export function fallNote(before: DeckRating, after: DeckRating): string | null {
+  const a = shownRating(before);
+  const b = shownRating(after);
+  if (!(b < a)) return null;
+  let worst: { label: string; lost: number; fix: string | null } | null = null;
+  for (const s of after.subscores) {
+    const was = before.subscores.find((x) => x.key === s.key);
+    if (!was) continue;
+    const lost = s.weight * (was.value - s.value);
+    if (lost > 0 && (!worst || lost > worst.lost)) worst = { label: s.label, lost, fix: s.fixes[0]?.text ?? null };
+  }
+  const why = worst ? `${worst.label} loses ${Math.round(worst.lost * 10) / 10} points${worst.fix ? ` (${worst.fix.replace(/\.$/, '')})` : ''}` : 'the cards cut were doing more for the deck';
+  return `The rating falls ${a} → ${b}: ${why}. Undo puts the deck back.`;
+}
+
 /**
  * Adds a package's best missing cards, up to its target (8 for a package that is not planned yet).
  * Under 100 cards they are plain adds; at 100 each add cuts the weakest card that is in none of the
- * deck's packages. Never cuts a commander, a locked card, or a land below the land target.
+ * deck's planned packages and fills none of the rating's other bands (win conditions, graveyard
+ * hate, recursion, tutors). Never cuts a commander, a locked card, or a land below the land target.
+ * A result that rates lower, or a deck that breaks a rule, says so in the note.
  */
 export function completePackage(deck: Deck, ctx: EngineContext, opts: BuildOptions, id: PackageId): FixResult {
   const { db } = ctx;
   const def = packageDef(id);
-  const before = shownRating(rateDeck(deck, ctx));
-  const untouched = (note: string): FixResult => ({ deck, changes: [], ratingBefore: before, ratingAfter: before, note });
+  const rated = rateDeck(deck, ctx);
+  const before = shownRating(rated);
+  const illegal = rated.violations.filter((v) => v.code !== 'size');
+  const ruleNote = illegal.length > 0 ? `This deck breaks a rule (${illegal[0].message.replace(/\.$/, '')}), so its rating stays capped at 40 until that is fixed.` : null;
+  const untouched = (note: string): FixResult => ({ deck, changes: [], ratingBefore: before, ratingAfter: before, note: [note, ruleNote].filter(Boolean).join(' ') });
   if (!def) return untouched(`"${String(id)}" is not a package.`);
   const plan = packagePlan(deck, ctx);
   const entry = plan.packages.find((p) => p.id === id);
@@ -102,6 +129,7 @@ export function completePackage(deck: Deck, ctx: EngineContext, opts: BuildOptio
           const f = db.features(e.oracleId);
           if (!c || !f || e.locked || qtyOf(e) < 1 || d.commanders.includes(e.oracleId) || e.oracleId === d.companion) return false;
           if (tracked.has(e.oracleId) || brought.has(e.oracleId)) return false;
+          if (bandRoles(c, f, d.targetBracket).some((r) => KEPT_ROLES.includes(r))) return false;
           return !isLandCard(f) || landsNow - f.landWeight >= plan.lands.target;
         })
         .map((e) => ({ id: e.oracleId, score: scorer.score(db.get(e.oracleId)!).score }))
@@ -114,16 +142,19 @@ export function completePackage(deck: Deck, ctx: EngineContext, opts: BuildOptio
     added++;
     if (wipes && wipeOf(pick)) wipeCount++;
     const alsoNames = pick.also.map(nameOf).join(' and ');
-    const reason = `Completes ${def.name}${pick.also.length ? ` (also ${alsoNames})` : ''}${out ? "; takes out the weakest card that is in none of the deck's packages" : ''}.`;
+    const reason = `Completes ${def.name}${pick.also.length ? ` (also ${alsoNames})` : ''}${out ? "; takes out the weakest card that is in none of the deck's packages and is no finisher, graveyard answer, recursion or tutor" : ''}.`;
     changes.push({ out, in: pick.oracleId, reason, summary: `${def.name} ${count} → ${count + 1} of ${target}${pick.also.length ? `, also ${alsoNames}` : ''}` });
     count++;
   }
   let note: string | null = null;
+  const kept = "every other card is in one of the deck's packages, a finisher, graveyard answer, recursion or tutor, locked, or a land the deck needs, so nothing more was cut";
   if (added === 0) note = cutsRanOut
-    ? `Added 0 of ${missing}: every other card is in one of the deck's packages, locked, or a land the deck needs, so nothing more was cut.`
+    ? `Added 0 of ${missing}: ${kept}.`
     : `No ${def.name} card the options allow is left to add${searched(opts)}.`;
   else if (added < missing) note = cutsRanOut
-    ? `Added ${added} of ${missing}: every other card is in one of the deck's packages, locked, or a land the deck needs, so nothing more was cut.`
+    ? `Added ${added} of ${missing}: ${kept}.`
     : `Added ${added} of ${missing}: no other ${def.name} card the options allow${searched(opts)}.`;
-  return { deck: d, changes, ratingBefore: before, ratingAfter: shownRating(rateDeck(d, ctx)), note };
+  const after = rateDeck(d, ctx);
+  note = [fallNote(rated, after), note, ruleNote].filter(Boolean).join(' ') || null;
+  return { deck: d, changes, ratingBefore: before, ratingAfter: shownRating(after), note };
 }
