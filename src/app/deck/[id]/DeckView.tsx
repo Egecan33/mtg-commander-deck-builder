@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
-import type { CardScore, Deck, DeckEntry, FoundCombo } from '@/engine/types';
+import type { CardScore, Deck, DeckEntry, FoundCombo, PlannedPackage } from '@/engine/types';
 import { CardGrid } from '../../components/CardGrid';
 import { ComboRow } from '../../components/ComboRow';
 import { CardTile, LockIcon, unknownCard, type TileMark } from '../../components/CardTile';
@@ -13,7 +13,7 @@ import { Mana, ScoreBadge } from '../../components/card';
 import { HeldMark } from '../../components/held';
 import type { CardLookup, ClientCard, HeldBy } from '../../lib/api';
 import { useFilters } from '../../lib/filters';
-import { ROLE_GROUPS, TYPE_GROUPS, roleGroup, typeGroup } from '../../lib/ui';
+import { ROLE_GROUPS, TYPE_GROUPS, packageNote, roleGroup, typeGroup } from '../../lib/ui';
 
 export type Grouping = 'role' | 'type';
 
@@ -32,8 +32,10 @@ const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead, combos, comboHeld, onPutIn,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead, combos, comboHeld, onPutIn, packages,
 }: {
+  /** The deck's planned packages: a role heading whose package counts a different number says so ("Ramp 6 · 8 in the package"). */
+  packages?: readonly PlannedPackage[] | null;
   /** The deck's combos (null while the analysis loads: no Combos section yet). */
   combos?: DeckCombos | null;
   /** Boxes and built decks holding the cards a combo is missing. */
@@ -246,6 +248,7 @@ export function DeckView({
                 id={sectionId(g.label)}
                 title={g.label}
                 count={g.rows.reduce((s, r) => s + r.entry.qty, 0)}
+                note={packageNote(g.label, g.rows.reduce((s, r) => s + r.entry.qty, 0), grouping === 'role' ? packages : null)}
                 testId="deck-group"
                 data={{ 'data-group': g.label }}
               >

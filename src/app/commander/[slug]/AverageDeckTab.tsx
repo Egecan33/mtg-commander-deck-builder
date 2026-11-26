@@ -95,6 +95,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
         scoreOf={(id) => analysis.deckScores[id]}
         weakest={NO_WEAK}
         held={analysis.conflicts.cards ?? NO_HELD}
+        packages={analysis.packages.packages}
         onOpen={setDetail}
       />}
       {detail && <CardDetail id={detail} card={analysis.cards[detail]} score={analysis.deckScores[detail]} held={analysis.conflicts.cards?.[detail]} bracket={deck.targetBracket} onClose={() => setDetail(null)} />}

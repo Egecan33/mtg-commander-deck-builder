@@ -138,7 +138,7 @@ function PackageRow({
     >
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-[1.02rem] leading-tight">{p.name}</h3>
-        <span className={`ml-auto tabular-nums ${done ? 'text-band-good' : 'text-bone'}`} data-testid="package-count">{p.count} of {p.target}</span>
+        <span className={`ml-auto tabular-nums ${done ? 'text-bone' : 'text-ash'}`} data-testid="package-count">{p.count} of {p.target}</span>
       </div>
       <p className="mb-2.5 text-[0.86rem] text-ash">{p.reason}</p>
       {/* odds are drawn from the library (99, or 59): the commanders in the package are not in it */}

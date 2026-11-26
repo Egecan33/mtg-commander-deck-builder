@@ -165,6 +165,17 @@ const ROLE_GROUP_ORDER: { label: string; roles: Role[] }[] = [
   { label: 'Win conditions', roles: ['win-condition'] },
   { label: 'Stax', roles: ['stax'] },
 ];
+/** The core package a role group is the cards of (each card once in the group, overlaps counted in the package). */
+export const ROLE_GROUP_PACKAGE: Record<string, 'ramp' | 'draw' | 'removal' | 'protection'> = {
+  Ramp: 'ramp', 'Card draw': 'draw', 'Removal and counters': 'removal', Protection: 'protection',
+};
+/** "8 in the package" when the package the heading belongs to counts another number than the heading (cards in two packages count in both). */
+export function packageNote(label: string, shown: number, packages: readonly { id: string; count: number }[] | null | undefined): string | undefined {
+  const id = ROLE_GROUP_PACKAGE[label];
+  const pkg = id ? packages?.find((p) => p.id === id) : undefined;
+  return pkg && pkg.count !== shown ? `${pkg.count} in the package` : undefined;
+}
+
 export const ROLE_GROUPS = [...ROLE_GROUP_ORDER.map((g) => g.label), 'Theme and everything else', 'Lands'];
 export function roleGroup(card: ClientCard): string {
   if (card.roles.includes('land')) return 'Lands';

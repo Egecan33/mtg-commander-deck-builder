@@ -1224,6 +1224,7 @@ export function Builder({ id }: { id: string }) {
           notice={notice}
           result={fixResult}
           combos={analysis?.bracket.combos ?? null}
+          packages={analysis?.packages.packages ?? null}
           comboHeld={heldHints}
           onPutIn={openCard}
           onRemove={remove}
@@ -1244,14 +1245,14 @@ export function Builder({ id }: { id: string }) {
           }
         />}
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
-          <div className="flex shrink-0 border-b border-slag" role="tablist">
+          <div className="flex shrink-0 flex-wrap border-b border-slag" role="tablist">
             {PANELS.filter((p) => !(std && p.id === 'bracket')).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 role="tab"
                 aria-selected={panel === p.id}
-                className={`display flex-1 border-b-2 px-1 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                className={`display flex-auto whitespace-nowrap border-b-2 px-2 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                 onClick={() => setPanel(p.id)}
                 data-testid={`tab-${p.id}`}
               >
