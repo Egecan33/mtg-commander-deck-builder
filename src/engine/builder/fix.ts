@@ -3,9 +3,9 @@ import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
-import { isLandCard } from '../summary';
-import { ROLE_LABEL } from '../targets';
-import type { AxisId, BuildOptions, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, Violation } from '../types';
+import { isLandCard, summarizeDeck } from '../summary';
+import { ROLE_LABEL, roleNeeds, targetsFor } from '../targets';
+import type { AxisId, BuildOptions, Color, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, Violation } from '../types';
 import { fillRestReport } from './auto';
 import { improveDeck, replaceCardFrom } from './goals';
 import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from './improve';
@@ -26,6 +26,64 @@ const OFFENCE: Record<string, string> = {
   banned: 'a banned card', identity: "a card outside the commander's colours", copies: 'an extra copy',
   'unknown-card': 'a card the card database does not know', companion: "a card the companion's condition rules out",
 };
+
+/** A rule's offender in a change's one-line summary ("Legal: replaces an off-colour card"). */
+const BROKE: Record<string, string> = {
+  banned: 'a banned card', identity: 'an off-colour card', copies: 'an extra copy',
+  'unknown-card': 'an unknown card', companion: 'a card the companion rules out',
+};
+/** What cutting a card does for the target bracket, by the bracket rule it broke. */
+const BRACKET_CUT: Record<string, string> = {
+  'game-changer': 'Bracket: cuts a Game Changer', 'game-changer-limit': 'Bracket: cuts a fourth Game Changer',
+  'mass-land-denial': 'Bracket: cuts mass land denial', 'extra-turn': 'Bracket: cuts an extra-turn card',
+  'two-card-combo': 'Bracket: breaks up a two-card combo', 'early-combo': 'Bracket: breaks up an early combo',
+};
+const COLOUR_WORD: Record<Color, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+const span = (lo: number, hi: number): string => (lo === hi ? `${lo}` : `${lo}–${hi}`);
+
+/**
+ * One short line on what a swap of an improve step did, from the deck before and after it: a card
+ * the target bracket forbids that it cut; else the role it moved toward its band ("Ramp 6 → 7 of
+ * 10–13": the largest shortfall it filled, else the largest surplus it trimmed); else the land count, the
+ * tapped lands or a colour's sources; else a much cheaper card; else the scores of the two cards.
+ */
+function swapSummary(before: Deck, after: Deck, c: { out: string; in: string }, ctx: EngineContext): string {
+  if (c.out !== '') {
+    const v = analyzeBracket(before, ctx).violationsOfTarget.find((x) => x.oracleIds.includes(c.out));
+    if (v) return BRACKET_CUT[v.code] ?? 'Bracket: cuts a card the target bracket forbids';
+  }
+  // A shortfall the change filled says more than a surplus it trimmed; the largest of either wins.
+  const was = roleNeeds(before, ctx);
+  let role: { line: string; rank: number } | null = null;
+  for (const n of roleNeeds(after, ctx)) {
+    const b = was.find((x) => x.role === n.role);
+    if (!b || n.count === b.count) continue;
+    const rank = n.count > b.count ? (b.short > 0 ? 1000 + b.short : 0) : b.over;
+    if (rank > 0 && (!role || rank > role.rank)) role = { line: `${capital(b.label)} ${b.count} → ${n.count} of ${span(b.band.lo, b.band.hi)}`, rank };
+  }
+  if (role) return role.line;
+
+  const sb = summarizeDeck(before, ctx.db);
+  const sa = summarizeDeck(after, ctx.db);
+  if (sa.landCount !== sb.landCount) return `Lands ${sb.landCount} → ${sa.landCount} of ${Math.round(targetsFor(after, ctx, sa).lands)}`;
+  const inCard = ctx.db.get(c.in);
+  const outCard = c.out !== '' ? ctx.db.get(c.out) : undefined;
+  const inF = ctx.db.features(c.in);
+  const outF = c.out !== '' ? ctx.db.features(c.out) : undefined;
+  if (inF && outF && isLandCard(inF) && isLandCard(outF)) {
+    if (Math.round(sa.taplands) < Math.round(sb.taplands)) return `Tapped lands ${Math.round(sb.taplands)} → ${Math.round(sa.taplands)}`;
+    const colour = (Object.keys(COLOUR_WORD) as Color[])
+      .map((k) => ({ k, gain: Math.round(sa.sources[k]) - Math.round(sb.sources[k]) }))
+      .sort((x, y) => y.gain - x.gain)[0];
+    if (colour && colour.gain > 0) return `${COLOUR_WORD[colour.k]} sources ${Math.round(sb.sources[colour.k])} → ${Math.round(sa.sources[colour.k])}`;
+    return 'Better land for the deck';
+  }
+  if (inCard && outCard && outCard.cmc - inCard.cmc >= 2) return `Cheaper: mana value ${outCard.cmc} → ${inCard.cmc}`;
+  const scorer = createScorer(before, ctx);
+  const scoreOf = (card: typeof inCard): number => (card ? Math.max(0, scorer.score(card).score) : 0);
+  return outCard ? `Stronger card: scores ${scoreOf(inCard)} against ${scoreOf(outCard)}` : `Adds a card that scores ${scoreOf(inCard)}`;
+}
 
 /** True for a key of `RATING_WEIGHTS` (a part of the rating `fixDeck` can be asked to fix alone). */
 export const isRatingKey = (key: unknown): key is RatingKey => typeof key === 'string' && Object.prototype.hasOwnProperty.call(RATING_WEIGHTS, key);
@@ -66,10 +124,13 @@ function repairRules(start: Deck, ctx: EngineContext, pool: () => Pool, changes:
     const into = known ? replaceCardFrom(deck, ctx, pool(), id, REPLACEMENTS).find((p) => p.agrees !== false) : undefined;
     if (into) {
       deck = swapOne(deck, id, into.in);
-      changes.push({ out: id, in: into.in, reason: `Replaces ${what}: ${v.message}` });
+      changes.push({ out: id, in: into.in, reason: `Replaces ${what}: ${v.message}`, summary: `Legal: replaces ${BROKE[v.code] ?? 'a card that breaks a rule'}` });
     } else {
       deck = removeCard(deck, id);
-      changes.push({ out: id, in: '', reason: known ? `Removes ${what} that no card the options allow can replace: ${v.message}` : `Removes ${what}: ${v.message}` });
+      changes.push({
+        out: id, in: '', reason: known ? `Removes ${what} that no card the options allow can replace: ${v.message}` : `Removes ${what}: ${v.message}`,
+        summary: `Legal: removes ${BROKE[v.code] ?? 'a card that breaks a rule'}`,
+      });
     }
   }
   return deck;
@@ -96,7 +157,7 @@ function trim(start: Deck, ctx: EngineContext, pool: Pool, changes: FixChange[])
       if (deckCount(deck) <= DECK_SIZE) break;
       if (!removable(deck, id)) continue;
       deck = removeCard(deck, id);
-      changes.push({ out: id, in: '', reason: 'Cuts one of the weakest cards to bring the deck down to 100.' });
+      changes.push({ out: id, in: '', reason: 'Cuts one of the weakest cards to bring the deck down to 100.', summary: 'Cuts the deck down to 100' });
     }
     if (deckCount(deck) === before) break; // what is left over is locked
   }
@@ -108,11 +169,13 @@ function fill(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixC
   const { deck: built, notes } = fillRestReport(start, ctx, opts);
   const before = counts(start);
   const after = counts(built);
-  for (const [id, n] of before) for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: 'Makes room while filling the deck to 100.' });
-  if (start.companion && built.companion !== start.companion) {
-    changes.push({ out: start.companion, in: '', reason: notes.find((x) => /companion/.test(x)) ?? 'Drops the companion: the deck cannot meet its condition.' });
+  for (const [id, n] of before) {
+    for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: 'Makes room while filling the deck to 100.', summary: 'Makes room to fill the deck to 100' });
   }
-  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: 'Fills the deck to 100.' });
+  if (start.companion && built.companion !== start.companion) {
+    changes.push({ out: start.companion, in: '', reason: notes.find((x) => /companion/.test(x)) ?? 'Drops the companion: the deck cannot meet its condition.', summary: 'Drops the companion' });
+  }
+  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: 'Fills the deck to 100.', summary: 'Fills the deck to 100' });
   return built;
 }
 
@@ -168,7 +231,8 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
   let deck = start;
   let current: DeckRating | null = startRating; // null while only the plain run's own number is known
   let synced = true;
-  const made: FixChange[] = [];
+  // Each applied swap with the deck before and after it (for its summary, made for the kept ones only).
+  const made: { out: string; in: string; reason: string; before: Deck; after: Deck }[] = [];
   /** The best point of the run so far: the prefix of `made` that ends there, and its rating. */
   let best: { deck: Deck; count: number; shown: number; rating: DeckRating | null; value: number } = { deck: start, count: 0, shown: startShown, rating: startRating, value: value(startRating) };
   let objected = 0;
@@ -191,9 +255,9 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
         if (value(after) < value(before)) { partFell++; synced = false; current = before; continue; }
       }
     }
+    made.push({ out: p.out, in: p.in, reason: p.reason, before: deck, after: next });
     deck = next;
     current = after;
-    made.push({ out: p.out, in: p.in, reason: p.reason });
     if (part) {
       if (after && shown >= startShown && value(after) > best.value) best = { deck, count: made.length, shown, rating: after, value: value(after) };
     } else if (shown > best.shown) {
@@ -201,7 +265,10 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
     }
   }
 
-  if (best.count > 0) return { deck: best.deck, rating: best.rating ?? rateDeck(best.deck, ctx), changes: made.slice(0, best.count), why: '' };
+  if (best.count > 0) {
+    const changes = made.slice(0, best.count).map((m) => ({ out: m.out, in: m.in, reason: m.reason, summary: swapSummary(m.before, m.after, m, ctx) }));
+    return { deck: best.deck, rating: best.rating ?? rateDeck(best.deck, ctx), changes, why: '' };
+  }
 
   const because: string[] = [];
   if (objected > 0) because.push(`the engine objects to ${objected === 1 ? 'one' : objected} of them`);

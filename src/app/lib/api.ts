@@ -53,7 +53,8 @@
  *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
  *        the engine objects to are skipped; the run may dip on the way, and the prefix that ends at its
  *        highest rating is kept, when that is above the rating the legality step left, else none of it).
- *        Every change is in `changes` ({ out, in, reason }; `out` '' for an add, `in` '' for a cut).
+ *        Every change is in `changes` ({ out, in, reason, summary }; `out` '' for an add, `in` '' for a cut;
+ *        `summary` one short line such as "Ramp 6 → 7 of 10–13", `reason` the full sentence).
  *        Making the deck legal and 100 cards always stands, even when it costs rating points (a deck that
  *        breaks a rule is capped at 40 and cannot be played; `note` then says what it cost), so
  *        `ratingAfter` can be below `ratingBefore` only for that reason; the improve part never ends below

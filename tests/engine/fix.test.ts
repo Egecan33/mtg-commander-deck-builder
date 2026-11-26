@@ -4,7 +4,7 @@ import { shownRating } from '@/engine/builder/improve';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { resolveThemeWeights } from '@/engine/summary';
-import { ROLE_LABEL } from '@/engine/targets';
+import { ROLE_LABEL, roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -112,6 +112,9 @@ describe('fixDeck', () => {
     }
     expect(qty(r.deck, signet)).toBeLessThanOrEqual(1);
     expect(r.changes.find((c) => c.out === offenders[1])?.reason).toMatch(/banned/i);
+    expect(r.changes.find((c) => c.out === swords)?.summary).toMatch(/^Legal: (replaces|removes) an off-colour card$/);
+    expect(r.changes.find((c) => c.out === offenders[1])?.summary).toMatch(/^Legal: (replaces|removes) a banned card$/);
+    expect(r.changes.find((c) => c.out === signet)?.summary).toMatch(/^Legal: (replaces|removes) an extra copy$/);
     for (const c of r.changes) expect(c.reason.length).toBeGreaterThan(0);
     expect(r.ratingBefore).toBeLessThanOrEqual(40);
     expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
@@ -127,7 +130,7 @@ describe('fixDeck', () => {
     expect(size(r.deck)).toBe(100);
     expect(validateDeck(r.deck, db)).toEqual([]);
     expect(qty(r.deck, junk)).toBe(0);
-    expect(r.changes[0]).toMatchObject({ out: junk, in: '' });
+    expect(r.changes[0]).toMatchObject({ out: junk, in: '', summary: 'Cuts the deck down to 100' });
 
     // Locked, the junk stays and the deck's weakest unlocked card goes in its place.
     const locked: Deck = { ...deck, main: deck.main.map((e) => (e.oracleId === junk ? { ...e, locked: true } : e)) };
@@ -154,6 +157,7 @@ describe('fixDeck', () => {
     const fills = r.changes.filter((c) => c.out === '');
     expect(fills.length).toBeGreaterThanOrEqual(20);
     for (const c of fills) expect(c.reason).toMatch(/Fills the deck to 100/);
+    for (const c of fills) expect(c.summary).toBe('Fills the deck to 100');
     expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
     expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
   });
@@ -328,6 +332,7 @@ describe('fixDeck', () => {
       expect(bracketFit(r.deck)).toBeGreaterThan(bracketFit(deck));
       // Nothing for other parts: every change cuts one of them.
       for (const c of r.changes) expect(gcs).toContain(c.out);
+      for (const c of r.changes) expect(c.summary).toBe('Bracket: cuts a Game Changer');
       expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
       expect(r.note).toBeNull();
     }
@@ -401,6 +406,49 @@ describe('fixDeck', () => {
     expect(r.deck).toEqual(precon);
     expect(r.changes).toEqual([]);
     expect(r.note).toBeTruthy();
+  });
+
+  /** What Fix deck's button counts: the fixes it can act on, plus the rules the deck breaks. */
+  const actionable = (d: Deck): number => {
+    const r = rateDeck(d, ctx);
+    return r.subscores.reduce((n, s) => n + s.fixes.filter((f) => f.actionable).length, 0) + r.violations.length;
+  };
+
+  it('after Fix deck on the precon at Bracket 3, the problems it can act on do not rise', () => {
+    const deck = fixtureDeck('precon', 3);
+    const r = fixDeck(deck, ctx, opts());
+    expect(r.changes.length).toBeGreaterThan(0);
+    expect(actionable(r.deck)).toBeLessThanOrEqual(actionable(deck));
+  });
+
+  it('each change of a fix of the precon says in one short line what it did, with the true numbers', () => {
+    const ROLE_LINE = /^(.+) (\d+) → (\d+) of (\d+)(?:–(\d+))?$/;
+    const OTHER = /^(Bracket: .+|Lands \d+ → \d+ of \d+|Tapped lands \d+ → \d+|[A-Z][a-z]+ sources \d+ → \d+|Better land for the deck|Cheaper: mana value \d+ → \d+|Stronger card: scores \d+ against \d+|Adds a card that scores \d+)$/;
+    let roleLines = 0;
+    // The precon as it is at Bracket 3, and the precon short of ramp.
+    for (const deck of [fixtureDeck('precon', 3), swapInto(fixtureDeck('precon', 3), junkFor(precon, 6), (id) => hasRole(id, 'ramp'))]) {
+      const r = fixDeck(deck, ctx, opts());
+      expect(r.changes.length).toBeGreaterThan(0);
+      let d = deck;
+      for (const c of r.changes) {
+        expect(c.summary.length, c.reason).toBeGreaterThan(0);
+        expect(c.summary.length, c.summary).toBeLessThanOrEqual(48);
+        const next = replay(d, c);
+        const m = ROLE_LINE.exec(c.summary);
+        if (m && m[1] !== 'Lands') {
+          // "Ramp 6 → 7 of 10–13": the role's count before and after this change, against its band.
+          const of = (x: Deck) => roleNeeds(x, ctx).find((n) => n.label.toLowerCase() === m[1].toLowerCase());
+          expect(of(d), c.summary).toBeDefined();
+          expect([of(d)!.count, of(next)!.count], c.summary).toEqual([Number(m[2]), Number(m[3])]);
+          expect([of(d)!.band.lo, of(d)!.band.hi], c.summary).toEqual([Number(m[4]), Number(m[5] ?? m[4])]);
+          roleLines++;
+        } else {
+          expect(c.summary).toMatch(OTHER);
+        }
+        d = next;
+      }
+    }
+    expect(roleLines).toBeGreaterThan(0);
   });
 
   it('times one call on a fixture deck', () => {
