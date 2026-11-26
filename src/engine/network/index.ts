@@ -52,6 +52,7 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
   const weights = resolveThemeWeights(deck, ctx);
   const scorer = opts.scorer ?? createScorer(deck, ctx);
   const named = namedTypes(weights);
+  const bracket = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)));
   const commanderIds = new Set(deck.commanders);
   const links: LinkCard[] = [];
   const qty = new Map<string, number>();
@@ -90,7 +91,7 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
   const index = linkIndex(deck, db, weights);
   const nodes: NetworkNode[] = links.map(({ card, f, commander }) => {
     const link = commander ? 1 : round3(scorer.commanderLink(card) ?? 0);
-    const staple = isRingCard(f);
+    const staple = isRingCard(f, card, bracket);
     const strongest = commander ? 1 : index.strongest(card)?.weight ?? 0;
     const axes = Object.entries(f.axes)
       .map(([axis, s]) => ({ axis, v: Math.max(s?.e ?? 0, s?.p ?? 0) }))

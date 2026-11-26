@@ -885,7 +885,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
 
     // A spell with no partner in the deck, no ring role and little synergy with the commander loses
     // up to CONNECTION_LOSS synergy points (the same test the network uses for "unconnected").
-    if (!stat.land && stat.f && !isRingCard(stat.f) && !commanderSlots.has(card.oracleId)) {
+    if (!stat.land && stat.f && !isRingCard(stat.f, card, bracket) && !commanderSlots.has(card.oracleId)) {
       const link = commanderLink(card) ?? 0;
       if (link < UNCONNECTED_LINK) {
         const strongest = connectionIndex().strongest(card)?.weight ?? 0;

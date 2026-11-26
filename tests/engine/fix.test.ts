@@ -393,9 +393,8 @@ describe('fixDeck', () => {
     const deck = swapInto(talrand, gcs, (id) => !db.get(id)!.gameChanger);
     const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
     expect(fixes.length).toBeGreaterThan(0);
-    // (The cards that connect to nothing are a theme fix since the network, and a one-card graveyard answer a role fix
-    // since the plan's numbers moved the auto-build; neither is what this test is about.)
-    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/connects? to nothing|graveyard/i.test(f.text))).toBe(false);
+    // (A one-card graveyard answer is a role fix since the plan's numbers moved the auto-build; not what this test is about.)
+    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/graveyard/i.test(f.text))).toBe(false);
     const r = fixDeck(deck, ctx, opts());
     const path = ratingsAlong(deck, r.changes);
     expect(path.some((x, i) => x < (i === 0 ? r.ratingBefore : path[i - 1]))).toBe(true); // it dipped

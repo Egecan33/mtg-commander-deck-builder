@@ -1,10 +1,14 @@
 import { axisLabel } from '../features';
 import { cardFitsDeck } from '../rules';
 import { AXIS_MEMBER, deckCards, isLandCard, namedTypes } from '../summary';
+import { ROLE_LABEL, bandRoles } from '../targets';
 import type { AxisId, Card, CardDb, CardFeatures, Combo, Deck, NetworkEdge, Role } from '../types';
 
-/** Roles that put a card on the staple ring: they are in the deck for the deck's balance, not for a partner. */
-export const RING_ROLES: readonly Role[] = ['ramp', 'fast-mana', 'draw', 'spot-removal', 'protection', 'tutor', 'wipe', 'counterspell'];
+/**
+ * Roles that put a card on the staple ring: they are in the deck for the deck's balance, not for a
+ * partner. Every role the rating holds against a band is one (`ROLE_LABEL`), plus fast mana.
+ */
+export const RING_ROLES: readonly Role[] = [...(Object.keys(ROLE_LABEL) as Role[]), 'fast-mana'];
 /** The weakest link that still counts as a connection. */
 export const UNCONNECTED_EDGE = 0.15;
 /** Commander synergy from here up also keeps a card from being unconnected. */
@@ -19,7 +23,12 @@ const PAYOFF = 0.5;
 export const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 const num = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
 
-export const isRingCard = (f: CardFeatures): boolean => f.roles.some((r) => RING_ROLES.includes(r));
+/**
+ * A staple: a card with a ring role. Given the card and the deck's bracket, the bracket's own band
+ * roles count too (a cheap cantrip is card draw at Brackets 4-5).
+ */
+export const isRingCard = (f: CardFeatures, card?: Card, bracket?: number): boolean =>
+  f.roles.some((r) => RING_ROLES.includes(r)) || (!!card && bracket !== undefined && bandRoles(card, f, bracket).length > 0);
 
 /** The name without its epithet: Ezuri, Claw of Progress -> Ezuri. */
 export function shortName(card: Card): string {
