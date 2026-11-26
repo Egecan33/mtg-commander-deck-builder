@@ -51,6 +51,9 @@ describe('Best from collection on the Arena collection', () => {
         const t = wildcardTiers(c.oracleId, ctx, mine, 3, budget);
         expect(t.crafted.rating, `${name} crafted`).toBeGreaterThanOrEqual(t.owned.rating);
         expect(t.unlimited.rating, `${name} unlimited`).toBeGreaterThanOrEqual(t.crafted.rating);
+        // A tie spends nothing: the looser tier is then the tighter tier's deck.
+        if (t.crafted.rating === t.owned.rating) expect(t.crafted.buys, `${name} crafted tie`).toEqual(t.owned.buys);
+        if (t.unlimited.rating === t.crafted.rating) expect(t.unlimited.buys, `${name} unlimited tie`).toEqual(t.crafted.buys);
       }
     }
   }, 120_000);
