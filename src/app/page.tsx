@@ -55,7 +55,8 @@ export default function DecksPage() {
   const duplicate = async (tile: DeckTile) => {
     try {
       const { deck } = await getDeck(tile.id);
-      await createDeck({ ...deck, id: null, name: `${deck.name} (copy)` });
+      // A copy is a new list, not the assembled cards: it is never built.
+      await createDeck({ ...deck, id: null, name: `${deck.name} (copy)`, built: false });
       notify.info(`Duplicated ${deck.name}`);
       await load();
     } catch (e) {
