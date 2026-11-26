@@ -10,7 +10,7 @@ import { useNotify } from '../../components/Shell';
 import { usePaged } from '../../components/VirtualGrid';
 import { browseCards, type CardSort, type HeldBy, type ScoredCard } from '../../lib/api';
 import {
-  AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, entryOf, fmtInt, toFilters, type BrowserQuery,
+  AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, deckCount, entryOf, fmtInt, toFilters, type BrowserQuery,
 } from '../../lib/ui';
 
 const PAGE = 120;
@@ -43,7 +43,8 @@ export function Browser({
   extraAxes: string[];
   /** The deck's own conflicts: a card already in the deck shows its "!" from these. */
   held: HeldBy;
-  onAdd: (card: ScoredCard) => void;
+  /** "+" on a card. The deck page opens the card with what it could replace when the deck is full. */
+  onAdd: (card: BrowserCard) => void;
   onRemove: (id: string) => void;
   onOpen: (card: BrowserCard) => void;
   searchRef: RefObject<HTMLInputElement | null>;
@@ -77,6 +78,8 @@ export function Browser({
   const axes = useMemo(() => [...new Set([...extraAxes, ...AXIS_IDS])], [extraAxes]);
   const active = activeFilterCount(query);
   const clearFilters = () => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort });
+  // A full deck: "+" opens the card with the deck cards it could replace.
+  const full = deckCount(deck) >= 100;
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Card browser" data-testid="browser">
@@ -237,7 +240,15 @@ export function Browser({
                         </button>
                       )}
                       {(!entry || c.roles.includes('land')) && (
-                        <button type="button" className="tile-btn tile-btn-add" onClick={() => onAdd(c)} aria-label={`Add ${c.name} to the deck`} title="Add to the deck" data-testid="browser-add">
+                        <button
+                          type="button"
+                          className="tile-btn tile-btn-add"
+                          onClick={() => onAdd(c)}
+                          aria-label={full ? `Put ${c.name} in instead of a deck card` : `Add ${c.name} to the deck`}
+                          title={full ? 'The deck has 100 cards: opens the card with the deck cards it could replace' : 'Add to the deck'}
+                          data-testid="browser-add"
+                          data-full={full || undefined}
+                        >
                           +
                         </button>
                       )}

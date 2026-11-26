@@ -7,11 +7,11 @@ import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { Menu } from '../../components/Menu';
-import { ResultPanel } from '../../components/ResultPanel';
+import { ResultPanel, type Change } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
-  type AnalyzeResponse, type BoxInfo, type BuildRequestOptions, type CardLookup, type ClientCard, type ConflictReport, type FixResponse, type HeldBy, type ScoredCard,
+  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type ConflictReport, type HeldBy, type RatingKey, type ScoredCard,
 } from '../../lib/api';
 import { setFilters, useFilters } from '../../lib/filters';
 import {
@@ -21,7 +21,7 @@ import {
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
 import {
-  ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet,
+  ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, PutItIn, RatingPanel, ThemesPanel, whyNotIn, type ImproveOptions, type PanelId, type ProposalSet,
 } from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
@@ -32,6 +32,27 @@ const PANELS: { id: PanelId; label: string }[] = [
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
+const DECK_SIZE = 100;
+const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(card.typeLine);
+
+/**
+ * What the panel above the deck shows after Fix deck, a per-part Fix or a "Put it in instead of" swap:
+ * the deck before (for Undo) and the deck it applied (null: nothing changed).
+ */
+interface DeckResult {
+  seq: number;
+  kind: 'fix' | 'swap';
+  title: string;
+  changes: Change[];
+  ratingBefore: number;
+  ratingAfter: number;
+  note: string | null;
+  heldBy: HeldBy;
+  before: Deck;
+  after: Deck | null;
+  /** The message after Undo. */
+  undone: string;
+}
 
 /** The deck's conflicts without one holder (a box just linked to this deck), matched by its id; cards it was the only holder of drop out. */
 function withoutHolderId(report: ConflictReport, holderId: string): ConflictReport {
@@ -82,12 +103,17 @@ export function Builder({ id }: { id: string }) {
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
   const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string; heldBy?: HeldBy } | null>(null);
-  // The last Fix deck: what it returned, the deck before it (for Undo) and the deck it applied (null: nothing changed).
-  const [fixed, setFixed] = useState<{ seq: number; res: FixResponse; before: Deck; after: Deck | null } | null>(null);
+  // The last Fix deck, per-part Fix or swap from the card detail, shown above the deck with one Undo.
+  const [fixed, setFixed] = useState<DeckResult | null>(null);
   const fixSeq = useRef(0);
-  // When a Fix deck run ends, the focus goes back to its button (it was disabled while the run worked).
+  // When a fix run ends, the focus goes back to the button that started it (it was disabled while the
+  // run worked): the part's key, or 'deck' for Fix deck.
   const fixButton = useRef<HTMLButtonElement>(null);
-  const refocusFix = useRef(false);
+  const refocusFix = useRef<string | null>(null);
+  // "Put it in instead of" for the card in the detail: the deck cards it could replace (list null while loading).
+  const [swapin, setSwapin] = useState<{ id: string; list: SwapProposal[] | null; heldBy: HeldBy; error?: string } | null>(null);
+  // The card opened by the card search's "+" on a full deck: its detail scrolls to the suggestions.
+  const [revealFor, setRevealFor] = useState<string | null>(null);
   const [freeOnlyPref, setFreeOnly] = useFreeOnly();
   const freeOnly = freeOnlyPref ?? false;
   // "!" of cards outside the deck, from where they were last seen (a browser result, a proposal).
@@ -264,6 +290,7 @@ export function Builder({ id }: { id: string }) {
 
   const openCard = useCallback(
     (card: BrowserCard | string) => {
+      setRevealFor(null);
       if (typeof card !== 'string') {
         learn([card]);
         setHints((h) => ({ ...h, [card.oracleId]: card.score }));
@@ -326,14 +353,72 @@ export function Builder({ id }: { id: string }) {
   }, [analysis]);
 
   // ---- build actions
-  const buildOpts = () => {
+  // The card options every build mode gets: only my collection, free copies only, the price limit.
+  const cardOpts = useMemo(() => {
     const price = Number(options.maxPrice);
     return {
       ownedOnly: options.ownedOnly || undefined,
       freeOnly: (options.ownedOnly && freeOnly) || undefined,
       maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
     };
-  };
+  }, [options.ownedOnly, options.maxPrice, freeOnly]);
+  const buildOpts = () => cardOpts;
+
+  // ---- "Put it in instead of" for the card in the detail: a card not in the deck, or one more basic land
+  const swapWhy = detail && detailCard
+    ? whyNotIn(detailCard, {
+        gate: detailScore?.gate?.message ?? null,
+        basic: isBasicLand(detailCard),
+        ownedOnly: !!cardOpts.ownedOnly,
+        freeOnly: !!cardOpts.freeOnly,
+        maxPriceUsd: cardOpts.maxPriceUsd,
+        held: heldHints[detail],
+      })
+    : null;
+  // The card to ask about; null when the card options already rule it out (the detail says why) or it does not apply.
+  const swapinId =
+    detail && detailCard && settled && settled.commanders.length > 0 && !settled.commanders.includes(detail) && settled.companion !== detail &&
+    (!entryOf(settled, detail) || isBasicLand(detailCard)) && !swapWhy
+      ? detail
+      : null;
+  useEffect(() => {
+    if (!swapinId || !settled) {
+      setSwapin(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    setSwapin({ id: swapinId, list: null, heldBy: {} });
+    // Under 100 cards the plain add comes first, so one more is asked for to keep five swaps.
+    buildDeck(settled, 'swapin', { ...cardOpts, in: swapinId, count: deckCount(settled) < DECK_SIZE ? 6 : 5 }, ctrl.signal).then(
+      (res) => {
+        learn(res.cards);
+        if (res.proposals.length > 0) learnHeld([swapinId], res.heldBy);
+        setSwapin({ id: swapinId, list: res.proposals, heldBy: res.heldBy });
+      },
+      (e) => {
+        if (!isAbort(e)) setSwapin({ id: swapinId, list: [], heldBy: {}, error: errText(e) });
+      },
+    );
+    return () => ctrl.abort();
+  }, [swapinId, settled, cardOpts, learn, learnHeld]);
+
+  // The card search's "+": on a full deck it opens the card with the deck cards it could replace instead of adding a 101st card.
+  const addFromBrowser = useCallback(
+    (card: BrowserCard) => {
+      const d = deckRef.current;
+      if (d && deckCount(d) >= DECK_SIZE) {
+        openCard(card);
+        setRevealFor(card.oracleId);
+        return;
+      }
+      add(card);
+    },
+    [add, openCard],
+  );
+  const closeDetail = useCallback(() => {
+    setDetail(null);
+    setRevealFor(null);
+  }, []);
   const rebuild = async (mode: 'auto' | 'fill', label: string, seed?: number) => {
     if (!deck) return;
     setBusy(label);
@@ -360,15 +445,17 @@ export function Builder({ id }: { id: string }) {
    * works on what the rating lists, with the same card options as Improve. The result goes through the
    * normal save, and the panel above the deck lists every change with one Undo.
    */
-  const runFix = async (only?: BuildRequestOptions['only']) => {
+  const runFix = async (only?: RatingKey) => {
     if (!deck) return;
     const before = deck;
+    // "card quality" in "Fixed card quality: 3 changes".
+    const part = only ? (analysis?.rating.subscores.find((s) => s.key === only)?.label ?? only).toLowerCase() : null;
     setBusy(only ? `fix:${only}` : 'fix');
     try {
       const res = await buildDeck(before, 'fix', { ...buildOpts(), ...(only ? { only } : {}) });
       learn(res.cards);
       if (deckRef.current !== before) {
-        notify.info('The deck changed while Fix deck was working, so nothing was applied. Press Fix deck again.');
+        notify.info(`The deck changed while ${part ? 'the fix' : 'Fix deck'} was working, so nothing was applied. Press ${part ? 'Fix' : 'Fix deck'} again.`);
         return;
       }
       let after: Deck | null = null;
@@ -381,27 +468,77 @@ export function Builder({ id }: { id: string }) {
         mutate(() => next);
         setProposals(null);
       }
-      setFixed({ seq: ++fixSeq.current, res, before, after });
+      const n = res.changes.length;
+      setFixed({
+        seq: ++fixSeq.current,
+        kind: 'fix',
+        title: after ? `Fixed${part ? ` ${part}` : ''}: ${n} ${n === 1 ? 'change' : 'changes'}` : part ? `Fixing ${part} changed nothing` : 'Fix deck changed nothing',
+        changes: res.changes,
+        ratingBefore: res.ratingBefore,
+        ratingAfter: res.ratingAfter,
+        note: res.note,
+        heldBy: res.heldBy,
+        before,
+        after,
+        undone: part ? 'Undone. The deck is back as it was before the fix.' : 'Undone. The deck is back as it was before Fix deck.',
+      });
     } catch (e) {
       notify.error(e);
     } finally {
-      refocusFix.current = true;
+      refocusFix.current = only ?? 'deck';
       setBusy(null);
     }
   };
   useEffect(() => {
     if (busy || !refocusFix.current) return;
-    refocusFix.current = false;
-    fixButton.current?.focus({ preventScroll: true });
+    const part = refocusFix.current;
+    refocusFix.current = null;
+    const target = (part === 'deck' ? null : document.querySelector<HTMLButtonElement>(`[data-testid="fix-part"][data-part="${part}"]`)) ?? fixButton.current;
+    // Only when the run left the focus nowhere (its button was disabled while it worked): never take it
+    // from where the user has moved on to.
+    const el = document.activeElement;
+    if (el && el !== document.body && el !== target) return;
+    target?.focus({ preventScroll: true });
   }, [busy]);
-  /** Puts back the deck exactly as it was before the fix; offered only while the fixed deck is unchanged. */
-  const undoFix = () => {
+  /** Puts back the deck exactly as it was before the fix or swap; offered only while the deck it made is unchanged. */
+  const undoResult = () => {
     if (!fixed?.after || deck !== fixed.after) return;
     const before = fixed.before;
     mutate(() => before);
     setFixed(null);
-    fixButton.current?.focus({ preventScroll: true });
-    notify.info('Undone. The deck is back as it was before Fix deck.');
+    if (fixed.kind === 'fix') fixButton.current?.focus({ preventScroll: true });
+    notify.info(fixed.undone);
+  };
+  /**
+   * "Put it in instead of": takes the proposal's card out and puts the detail's card in through the
+   * normal save, closes the detail and shows "Put in X, took out Y" with Undo above the deck.
+   */
+  const putIn = (p: SwapProposal) => {
+    const before = deckRef.current;
+    if (!before) return;
+    const inName = lookup[p.in]?.name ?? 'the card';
+    const outName = lookup[p.out]?.name ?? 'the card';
+    if (p.out !== '' && !entryOf(before, p.out)) {
+      notify.info(`${outName} is no longer in the deck, so nothing was swapped.`);
+      return;
+    }
+    const after = p.out === '' ? addCard(before, p.in) : swapCard(before, p.out, p.in);
+    mutate(() => after);
+    setDetail(null);
+    setRevealFor(null);
+    setFixed({
+      seq: ++fixSeq.current,
+      kind: 'swap',
+      title: p.out === '' ? `Put in ${inName}` : `Put in ${inName}, took out ${outName}`,
+      changes: [{ out: p.out, in: p.in, reason: p.reason }],
+      ratingBefore: p.ratingBefore,
+      ratingAfter: p.ratingAfter,
+      note: p.agrees === false && p.objection ? `The engine advised against it: ${p.objection}` : null,
+      heldBy: swapin?.id === p.in ? swapin.heldBy : {},
+      before,
+      after,
+      undone: p.out === '' ? `Undone. ${inName} is out again.` : `Undone. ${outName} is back in place of ${inName}.`,
+    });
   };
   // A new result panel scrolls into view at the top of the deck.
   const revealResult = useCallback((el: HTMLDivElement | null) => {
@@ -469,7 +606,7 @@ export function Builder({ id }: { id: string }) {
     if (!deck) return;
     const wanted = [...deck.commanders.map((oracleId) => ({ oracleId, qty: 1 })), ...deck.main.map((e) => ({ oracleId: e.oracleId, qty: e.qty }))].filter((i) => {
       const card = lookup[i.oracleId];
-      return card && !/\bBasic\b.*\bLand\b/.test(card.typeLine) && (all || !card.owned);
+      return card && !isBasicLand(card) && (all || !card.owned);
     });
     if (wanted.length === 0) {
       notify.info(all ? 'The deck has no cards to proxy besides basic lands.' : 'You own every card in this deck (basic lands are not counted).');
@@ -643,22 +780,26 @@ export function Builder({ id }: { id: string }) {
   const fixResult = fixed ? (
     <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
       <ResultPanel
-        title={fixed.after ? `Fixed: ${fixed.res.changes.length} ${fixed.res.changes.length === 1 ? 'change' : 'changes'}` : 'Fix deck changed nothing'}
-        before={fixed.after ? fixed.res.ratingBefore : undefined}
-        after={fixed.after ? fixed.res.ratingAfter : undefined}
-        changes={fixed.res.changes}
+        title={fixed.title}
+        before={fixed.after ? fixed.ratingBefore : undefined}
+        after={fixed.after ? fixed.ratingAfter : undefined}
+        changes={fixed.changes}
         lookup={lookup}
-        heldBy={fixed.res.heldBy}
-        note={[fixed.res.note, fixed.after && deck !== fixed.after ? 'The deck changed after the fix, so it can no longer be undone in one step.' : null].filter(Boolean).join(' ') || null}
-        onUndo={fixed.after && deck === fixed.after ? undoFix : undefined}
+        heldBy={fixed.heldBy}
+        note={
+          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after the ${fixed.kind}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
+        }
+        onUndo={fixed.after && deck === fixed.after ? undoResult : undefined}
         onDismiss={() => {
           setFixed(null);
-          fixButton.current?.focus({ preventScroll: true });
+          if (fixed.kind === 'fix') fixButton.current?.focus({ preventScroll: true });
         }}
-        testId="fix-panel"
+        testId={fixed.kind === 'swap' ? 'swap-panel' : 'fix-panel'}
       />
     </div>
   ) : null;
+  // The detail offers "Put it in instead of" for a card not in the deck (or one more basic land) once the deck has a commander.
+  const swapHere = !!detail && !!detailCard && !detailIsCommander && deck.commanders.length > 0 && deck.companion !== detail && (!detailEntry || isBasicLand(detailCard));
 
   return (
     <div className="flex h-full flex-col" data-testid="builder">
@@ -865,7 +1006,7 @@ export function Builder({ id }: { id: string }) {
             setQuery={setQuery}
             extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
             held={held}
-            onAdd={add}
+            onAdd={addFromBrowser}
             onRemove={remove}
             onOpen={openCard}
             searchRef={searchRef}
@@ -932,6 +1073,7 @@ export function Builder({ id }: { id: string }) {
                 lookup={lookup}
                 busy={busy}
                 onFix={applyFix}
+                onFixPart={(key) => void runFix(key)}
                 onOpen={openCard}
                 onAddOne={(role) => void addOne(role)}
                 onWanted={(role, n) => mutate((d) => {
@@ -1004,7 +1146,7 @@ export function Builder({ id }: { id: string }) {
                 ))
               : undefined
           }
-          onClose={() => setDetail(null)}
+          onClose={closeDetail}
           note={detailEntry?.locked ? 'Locked: auto-build and improve keep this card.' : undefined}
           actions={
             <>
@@ -1019,7 +1161,7 @@ export function Builder({ id }: { id: string }) {
                   <button type="button" className="btn" onClick={() => lock(detail)} data-testid="detail-lock">{detailEntry.locked ? 'Unlock' : 'Lock in the deck'}</button>
                   {detailCard?.roles.includes('land') && <button type="button" className="btn" onClick={() => add(detail)}>Add another copy ({detailEntry.qty} now)</button>}
                 </>
-              ) : (
+              ) : swapHere ? null : (
                 <button type="button" className="btn btn-primary" disabled={!detailCard || !!detailScore?.gate} onClick={() => add(detail)} data-testid="detail-add">
                   Add to the deck
                 </button>
@@ -1036,7 +1178,23 @@ export function Builder({ id }: { id: string }) {
               )}
             </>
           }
-        />
+        >
+          {swapHere && detailCard && (
+            <PutItIn
+              card={detailCard}
+              count={count}
+              another={!!detailEntry}
+              state={swapin?.id === detail ? swapin : null}
+              why={swapWhy}
+              lookup={lookup}
+              deckHeld={held}
+              scoreOf={scoreOf}
+              onSwap={putIn}
+              add={detailEntry ? undefined : { onAdd: () => add(detail), disabled: !!detailScore?.gate }}
+              reveal={revealFor === detail}
+            />
+          )}
+        </CardDetail>
       )}
 
       {replacing && deck && (
