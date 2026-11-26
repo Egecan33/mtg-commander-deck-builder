@@ -508,6 +508,8 @@ export const ONE_DROP_MAX = 4;
 export const ONE_DROP_CREATURES = 12;
 /** Band roles that make a one-drop part of the plan wherever it sits in the network. */
 const ONE_DROP_ROLES: readonly Role[] = ['ramp', 'draw', 'spot-removal', 'protection', 'tutor'];
+/** Weight an edge (theme, combo, typal, package) to another card needs for a one-drop to count as connected; commander spokes do not count. */
+export const ONE_DROP_EDGE = 0.3;
 /** Theme fit from which a card counts as connected before a network exists (the builder's reading of "not unconnected"). */
 export const ONE_DROP_THEME_FIT = 0.5;
 
@@ -524,7 +526,7 @@ export function hasCoreRole(card: Card, f: CardFeatures, tags: readonly string[]
 /**
  * The one definition of a one-drop, for the rating, the builder and Fix deck: a nonland creature
  * (front face) of mana value 1 or less that helps the plan, meaning it fills a core role or it is
- * connected in the deck (`connected`: the deck network does not list it as unconnected; the
+ * connected in the deck (`connected`: an edge of weight >= `ONE_DROP_EDGE` to another nonland card, not a commander spoke; the
  * builder, with no network yet, passes whether the card is on theme). Vanilla and off-plan
  * one-drops do not count. A commander is not a one-drop of its own deck: callers skip it.
  */

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, fixDeck } from '@/engine/builder';
+import { deckNetwork } from '@/engine/network';
 import { oneDropsOf, rateDeck } from '@/engine/rating';
-import { ONE_DROP_CREATURES, ONE_DROP_MAX, ONE_DROP_MIN, isOneDrop, isOneDropShape, oneDropWant } from '@/engine/targets';
+import { ONE_DROP_CREATURES, ONE_DROP_EDGE, ONE_DROP_MAX, ONE_DROP_MIN, isOneDrop, isOneDropShape, oneDropWant } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -59,6 +60,27 @@ describe('one-drop definition', () => {
     expect(oneDropsOf(d, ctx).names).toContain('Joraga Warcaller');
     // the same card, no role, with nothing connecting it, is not a one-drop
     expect(isOneDrop(card('Joraga Warcaller'), feats('Joraga Warcaller'), tags('Joraga Warcaller'), 3, false)).toBe(false);
+  });
+});
+
+describe('one-drop edges', () => {
+  const edgesOf = (d: Deck, name: string) => deckNetwork(d, ctx).edges.filter((e) => (e.a === card(name).oracleId || e.b === card(name).oracleId) && e.kind !== 'commander' && e.weight >= ONE_DROP_EDGE);
+
+  it('counts Llanowar Elves (ramp, and typal in an elf deck) but not a one-drop with no role and no edge', () => {
+    const elves = withCards(bare(), ['Llanowar Elves']);
+    expect(edgesOf(elves, 'Llanowar Elves').length).toBeGreaterThan(0);
+    expect(oneDropsOf(elves, ctx).names).toContain('Llanowar Elves');
+    const delver = withCards(bare(), ['Delver of Secrets']);
+    expect(edgesOf(delver, 'Delver of Secrets')).toHaveLength(0);
+    expect(oneDropsOf(delver, ctx).names).toEqual([]);
+  });
+
+  it('does not count a commander spoke as a link', () => {
+    // Ragavan has no edge but the commander spoke; it counts through its ramp role (Treasure), not through a link.
+    const rag = withCards(bare(), ['Ragavan, Nimble Pilferer']);
+    expect(edgesOf(rag, 'Ragavan, Nimble Pilferer')).toHaveLength(0);
+    expect(isOneDrop(card('Ragavan, Nimble Pilferer'), feats('Ragavan, Nimble Pilferer'), tags('Ragavan, Nimble Pilferer'), 3, false)).toBe(true);
+    expect(ONE_DROP_EDGE).toBe(0.3);
   });
 });
 

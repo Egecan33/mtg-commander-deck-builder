@@ -8,7 +8,7 @@ import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
-import { LAND_PLAN_SLACK, ONE_DROP_MAX, ONE_DROP_MIN, coverageRoles, isOneDrop, isOneDropShape, oneDropWant, roleNeeds, scaleTargets, targetPlan } from '../targets';
+import { LAND_PLAN_SLACK, ONE_DROP_EDGE, ONE_DROP_MAX, ONE_DROP_MIN, coverageRoles, isOneDrop, isOneDropShape, oneDropWant, roleNeeds, scaleTargets, targetPlan } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
   AxisId, Bracket, BracketReport, Color, Deck, DeckNetwork, Format, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
@@ -518,14 +518,22 @@ const ONE_DROP_COST = 0.08;
 function oneDropCount(f: Pick<Facts, 'cards' | 'commanderIds' | 'ctx' | 'bracket' | 'network'>, names?: string[]): { oneDrops: number; creatures: number } {
   let oneDrops = 0;
   let creatures = 0;
-  let unconnected: Set<string> | null = null;
+  let linked: Set<string> | null = null;
   for (const c of f.cards) {
     if (!nonland(c) || f.commanderIds.has(c.card.oracleId)) continue;
     if (!hasType(c.card, 'Creature')) continue;
     creatures += c.qty;
     if (!isOneDropShape(c.card, c.features)) continue;
-    unconnected ??= new Set(f.network().unconnected);
-    if (isOneDrop(c.card, c.features, f.ctx.db.tagSlugs?.(c.card.oracleId) ?? [], f.bracket, !unconnected.has(c.card.oracleId))) {
+    if (!linked) {
+      // Helps the plan: an edge of weight >= ONE_DROP_EDGE to another nonland card; commander spokes do not count.
+      linked = new Set();
+      for (const e of f.network().edges) {
+        if (e.kind === 'commander' || e.weight < ONE_DROP_EDGE || f.commanderIds.has(e.a) || f.commanderIds.has(e.b)) continue;
+        linked.add(e.a);
+        linked.add(e.b);
+      }
+    }
+    if (isOneDrop(c.card, c.features, f.ctx.db.tagSlugs?.(c.card.oracleId) ?? [], f.bracket, linked.has(c.card.oracleId))) {
       oneDrops += c.qty;
       names?.push(c.card.name);
     }
