@@ -58,7 +58,7 @@ export function ScoreBadge({ score, className = '', large = false }: { score: Ca
       data-testid="score-badge"
       data-band={band}
       title={score.gate ? score.gate.message : `Score ${score.score} of 100 for this deck`}
-      className={`display inline-flex items-center justify-center rounded-[5px] font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
+      className={`inline-flex items-center justify-center rounded-[5px] font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
         large ? 'h-12 min-w-14 px-2 text-[1.9rem]' : 'h-[1.35rem] min-w-[1.7rem] px-1 text-[0.9rem]'
       } ${className}`}
       style={{ background: BAND_VAR[band] }}
