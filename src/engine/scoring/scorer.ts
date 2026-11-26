@@ -3,6 +3,7 @@ import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
 import { karstenSources } from '../mana';
+import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
 import { ROLE_LABEL, bandRoles, roleNeeds, targetsFor } from '../targets';
@@ -33,6 +34,8 @@ const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R
 const clamp01 = (n: number) => (n > 0 ? (n < 1 ? n : 1) : 0);
 const finite = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
 const r1 = (n: number) => Math.round(n * 10) / 10;
+/** Most synergy points a card loses for connecting to nothing in the deck. */
+export const CONNECTION_LOSS = 15;
 const signed = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 
 // ---- quality -------------------------------------------------------------------------------
@@ -657,6 +660,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   score(card: Card): CardScore;
   scoreAll(filter?: (c: Card) => boolean): CardScore[];
   quality(card: Card): number | null;
+  commanderLink(card: Card): number | null;
 } {
   const { db } = ctx;
   const bracket = (Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)))) as Bracket;
@@ -860,6 +864,9 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const bracketGated = (card: Card, stat: Stat): Gate | null =>
     (bracket <= 3 && (stat.checkBracket || overrides) ? bracketGate(card, deck, ctx) : null);
 
+  let index: ReturnType<typeof linkIndex> | null = null;
+  const connectionIndex = () => (index ??= linkIndex(pinned, db, theme));
+
   function score(card: Card): CardScore {
     const stat = statOf(card);
     if (stat.gate) return gated(card, stat.gate);
@@ -916,8 +923,24 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
       if (combo.strength > syn) { syn = combo.strength; synText = combo.text; }
       else synText = synText ? `${synText}; ${combo.text}` : combo.text;
     }
-    const synPts = r1(weights.synergy * syn);
+    let synPts = r1(weights.synergy * syn);
     if (synPts >= 0.5) reasons.push(`+${Math.round(synPts)} ${stat.land ? 'mana' : 'synergy'}: ${synText}`);
+
+    // A spell with no partner in the deck, no ring role and little synergy with the commander loses
+    // up to CONNECTION_LOSS synergy points (the same test the network uses for "unconnected").
+    if (!stat.land && stat.f && !isRingCard(stat.f) && !commanderSlots.has(card.oracleId)) {
+      const link = commanderLink(card) ?? 0;
+      if (link < UNCONNECTED_LINK) {
+        const strongest = connectionIndex().strongest(card)?.weight ?? 0;
+        if (strongest < UNCONNECTED_EDGE) {
+          const loss = Math.min(synPts, r1(CONNECTION_LOSS * Math.min(1 - strongest / UNCONNECTED_EDGE, 1 - link / UNCONNECTED_LINK)));
+          synPts = r1(synPts - loss);
+          reasons.push(Math.round(loss) >= 1
+            ? `${signed(-Math.round(loss))} synergy: connects to nothing in this deck (no combo, theme or typal partner, little synergy with the commander)`
+            : 'connects to nothing in this deck');
+        }
+      }
+    }
 
     if (weights.coplay > 0) reasons.push(`+${Math.round(stat.coplay)} co-play: ${stat.coplayText}`);
     reasons.push(`+${Math.round(stat.qualityPts)} quality: ${stat.qualityText}`);
@@ -1034,5 +1057,19 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
     return stat.qualityPts / weights.quality;
   }
 
-  return { score, scoreAll, quality };
+  /**
+   * How well a card works with the commander and the theme, 0..1: its static synergy share, plus up
+   * to a quarter for its EDHREC lift when cached. Null when the card is gated; 0 for a land.
+   */
+  function commanderLink(card: Card): number | null {
+    const stat = statOf(card);
+    if (stat.gate) return null;
+    if (stat.land) return 0;
+    let link = stat.syn;
+    const entry = ctx.edhrec?.cards?.[card.oracleId];
+    if (entry && typeof entry.lift === 'number' && Number.isFinite(entry.lift) && cache.lifts) link += 0.25 * percentile(cache.lifts, entry.lift);
+    return clamp01(link);
+  }
+
+  return { score, scoreAll, quality, commanderLink };
 }

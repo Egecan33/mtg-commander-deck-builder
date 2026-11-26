@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, fixDeck, improveDeck } from '@/engine/builder';
 import { shownRating } from '@/engine/builder/improve';
+import { deckNetwork } from '@/engine/network';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { resolveThemeWeights } from '@/engine/summary';
@@ -8,6 +9,7 @@ import { ROLE_LABEL, roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
+import { withFiveUnconnected } from '../helpers/network';
 
 const db = fixtureDb();
 const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
@@ -389,7 +391,8 @@ describe('fixDeck', () => {
     const deck = swapInto(talrand, gcs, (id) => !db.get(id)!.gameChanger);
     const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
     expect(fixes.length).toBeGreaterThan(0);
-    expect(fixes.some((f) => f.filter?.role || f.filter?.axis)).toBe(false);
+    // (The cards that connect to nothing are a theme fix since the network; they are not what this test is about.)
+    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/connect to nothing/.test(f.text))).toBe(false);
     const r = fixDeck(deck, ctx, opts());
     const path = ratingsAlong(deck, r.changes);
     expect(path.some((x, i) => x < (i === 0 ? r.ratingBefore : path[i - 1]))).toBe(true); // it dipped
@@ -399,6 +402,26 @@ describe('fixDeck', () => {
     for (const id of gcs) expect(qty(r.deck, id), db.get(id)?.name).toBe(0);
     expect(bracketFit(r.deck)).toBeGreaterThan(bracketFit(deck));
     expect(r.note).toBeNull();
+  });
+
+  it('Swap the unconnected cards: a synergy fix cuts cards that connect to nothing', () => {
+    const { deck, added } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const before = deckNetwork(deck, ctx).unconnected.length;
+    const r = fixDeck(deck, ctx, opts(), 'synergy');
+    expect(deckNetwork(r.deck, ctx).unconnected.length).toBeLessThan(before);
+    expect(added.filter((id) => qty(r.deck, id) === 0).length).toBeGreaterThanOrEqual(3);
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+  });
+
+  it('a synergy fix with nothing connected allowed leaves the deck untouched', () => {
+    const { deck } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const own = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+    const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned: own }), 'synergy');
+    expect(r.changes).toEqual([]);
+    expect(r.deck).toEqual(deck);
+    expect(typeof r.note).toBe('string');
+    expect((r.note ?? '').length).toBeGreaterThan(0);
   });
 
   it('an unknown part of the rating changes nothing', () => {

@@ -8,6 +8,9 @@ import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { Menu } from '../../components/Menu';
+import { NetworkSummary } from '../../components/network/NetworkSummary';
+import { NetworkView } from '../../components/network/NetworkView';
+import { useNetwork } from '../../components/network/useNetwork';
 import { ResultPanel, type Change } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
@@ -30,6 +33,7 @@ const PANELS: { id: PanelId; label: string }[] = [
   { id: 'bracket', label: 'Bracket' },
   { id: 'themes', label: 'Themes' },
   { id: 'improve', label: 'Improve' },
+  { id: 'network', label: 'Network' },
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
@@ -98,6 +102,10 @@ export function Builder({ id }: { id: string }) {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>('saved');
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelId>('rating');
+  const net = useNetwork(deck, panel === 'network');
+  const [networkFocus, setNetworkFocus] = useState<number | null>(null);
+  const networkNow = net.network;
+  useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
@@ -139,6 +147,8 @@ export function Builder({ id }: { id: string }) {
       return next;
     });
   }, []);
+  const networkCards = net.network?.cards;
+  useEffect(() => { if (networkCards) learn(networkCards); }, [networkCards, learn]);
 
   // ---- load
   useEffect(() => {
@@ -1004,10 +1014,10 @@ export function Builder({ id }: { id: string }) {
       </header>
 
       <div
-        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown && panel !== 'network' ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
         data-browser={browserShown ? 'shown' : 'hidden'}
       >
-        {browserShown && (
+        {browserShown && panel !== 'network' && (
           <Browser
             deck={deck}
             settled={settled}
@@ -1023,7 +1033,20 @@ export function Builder({ id }: { id: string }) {
             onHide={() => setFilters({ browser: false })}
           />
         )}
-        <DeckView
+        {panel === 'network' && (
+          <div className="min-h-0 min-w-0 overflow-y-auto p-4" data-testid="network-area">
+            {fixResult}
+            <NetworkView
+              network={net.network}
+              error={net.error}
+              focusCluster={networkFocus}
+              onOpen={openCard}
+              onRetry={net.reload}
+              onEmpty={() => setPanel('rating')}
+            />
+          </div>
+        )}
+        {panel !== 'network' && <DeckView
           lead={
             browserShown ? undefined : (
               <button type="button" className="btn btn-sm" onClick={showBrowser} title="Show the card search beside the deck (or press /)" data-testid="browser-show">
@@ -1057,7 +1080,7 @@ export function Builder({ id }: { id: string }) {
               {noCollection ? 'Proxy whole deck' : 'Proxy cards I don’t own'}
             </button>
           }
-        />
+        />}
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
           <div className="flex shrink-0 border-b border-slag" role="tablist">
             {PANELS.map((p) => (
@@ -1098,12 +1121,24 @@ export function Builder({ id }: { id: string }) {
               />
             ) : panel === 'bracket' ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
+            ) : panel === 'network' ? (
+              net.network ? (
+                <NetworkSummary
+                  network={net.network}
+                  focus={networkFocus}
+                  onFocus={setNetworkFocus}
+                  onOpen={openCard}
+                  onSwap={() => void runFix('synergy')}
+                  busy={busy !== null}
+                />
+              ) : <p className="p-4 text-ash" data-testid="panel-network">Reading how the cards connect</p>
             ) : panel === 'themes' ? (
               <ThemesPanel
                 analysis={analysis}
                 deck={deck}
                 onChange={(axis, w) => mutate((d) => ({ ...d, themeWeights: { ...(d.themeWeights ?? analysis.themeWeights), [axis]: w } }))}
                 onReset={() => mutate((d) => ({ ...d, themeWeights: null }))}
+                onFocus={() => mutate((d) => ({ ...d, themeWeights: analysis.themeFocus.weights }))}
                 onShow={(axis) => {
                   setQuery({ ...DEFAULT_QUERY, axis, fromFix: null });
                   showBrowser();

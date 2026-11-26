@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { AnalyzeResponse, EdhrecStatus } from '@/app/lib/api';
+import type { AnalyzeResponse, EdhrecStatus, NetworkResponse } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
+import { deckNetwork } from '@/engine/network';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
-import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
+import { focusThemeWeights, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
 import { targetsFor } from '@/engine/targets';
-import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
@@ -42,6 +43,8 @@ export interface Report {
   /** The targets without the deck's own wanted counts (`Deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<string, number>;
+  /** The themes the deck is focused on, whether it already is, and the weights Focus on these two saves. */
+  themeFocus: { axes: string[]; focused: boolean; weights: Record<string, number> };
   deckScores: Record<string, CardScore>;
   unknown: string[];
 }
@@ -60,6 +63,8 @@ export interface Analysis {
   edhrec: EdhrecStatus;
   scorer: ReturnType<typeof createScorer>;
   report(): Report;
+  /** The deck's network, built from this analysis' scorer on first use. */
+  network(): DeckNetwork;
   pool(): ScoredPool;
 }
 
@@ -67,12 +72,17 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
   const scorer = createScorer(deck, ctx);
   let report: Report | null = null;
   let pool: ScoredPool | null = null;
+  let network: DeckNetwork | null = null;
   return {
     key, deck, ctx, edhrec, scorer,
+    network() {
+      return (network ??= deckNetwork(deck, ctx, { scorer }));
+    },
     report() {
       if (report) return report;
       const { db } = ctx;
       const summary = summarizeDeck(deck, db);
+      const themeWeights = resolveThemeWeights(deck, ctx);
       const deckScores: Record<string, CardScore> = {};
       const unknown: string[] = [];
       for (const id of [...deck.commanders, deck.companion, ...deck.main.map((e) => e.oracleId)]) {
@@ -87,7 +97,8 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         summary,
         targets: targetsFor(deck, ctx, summary),
         defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
-        themeWeights: resolveThemeWeights(deck, ctx),
+        themeWeights,
+        themeFocus: { ...themeFocus(themeWeights), weights: focusThemeWeights(themeWeights) },
         deckScores, unknown,
       });
     },
@@ -154,4 +165,10 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
   for (const reason of r.bracket.reasons) for (const id of reason.oracleIds) ids.add(id);
   for (const v of [...r.rating.violations, ...r.bracket.violationsOfTarget]) for (const id of v.oracleIds) ids.add(id);
   return { ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
+}
+
+/** The body of POST /api/network: the deck's network and a card for every node. */
+export function networkResponse(deck: Deck): NetworkResponse {
+  const net = getAnalysis(deck).network();
+  return { ...net, cards: cardLookup(net.nodes.map((n) => n.oracleId)) };
 }

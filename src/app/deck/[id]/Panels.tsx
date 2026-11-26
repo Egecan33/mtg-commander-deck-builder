@@ -9,7 +9,7 @@ import { HeldMark, heldText } from '../../components/held';
 import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
-export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve';
+export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve' | 'network';
 
 function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string; held?: string[] }) {
   const card = lookup[id];
@@ -627,12 +627,13 @@ export function BracketPanel({ analysis, deck, lookup, onOpen, onShowCombos }: {
 // Themes
 
 export function ThemesPanel({
-  analysis, deck, onChange, onReset, onShow,
+  analysis, deck, onChange, onReset, onFocus, onShow,
 }: {
   analysis: AnalyzeResponse;
   deck: Deck;
   onChange: (axis: string, weight: number) => void;
   onReset: () => void;
+  onFocus: () => void;
   onShow: (axis: string) => void;
 }) {
   const live = deck.themeWeights;
@@ -645,6 +646,8 @@ export function ThemesPanel({
   if (fresh.length) order.current = [...order.current, ...fresh];
   const ids = order.current.filter((a) => present.includes(a));
   const rest = AXIS_IDS.filter((a) => !ids.includes(a));
+  const { focused, axes: focusAxes } = analysis.themeFocus;
+  const focusLabels = focusAxes.filter((a) => a !== 'typal').map(axisLabel);
 
   return (
     <div data-testid="panel-themes">
@@ -653,6 +656,11 @@ export function ThemesPanel({
           Every card is scored on how well it serves these themes. Move a slider and the whole pool is scored again.
         </p>
         {ids.length === 0 && <p className="text-ash">No theme yet. Add one below, or pick a commander.</p>}
+        {focusLabels.length > 0 && (
+          <p className="mb-3 text-[0.86rem]" data-testid="theme-focus-line">
+            Focused on {focusLabels.length > 1 ? `${focusLabels.slice(0, -1).join(', ')} and ${focusLabels[focusLabels.length - 1]}` : focusLabels[0]}
+          </p>
+        )}
         <ul className="grid gap-3">
           {ids.map((axis) => {
             const w = weightOf(axis);
@@ -695,6 +703,16 @@ export function ThemesPanel({
             <option value="">Add a theme</option>
             {rest.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
           </select>
+          <button
+            type="button"
+            className="btn"
+            disabled={focused}
+            onClick={onFocus}
+            title={focused ? 'Already focused' : `Keep ${focusLabels.join(', ')} at full weight and turn every other theme down to a quarter`}
+            data-testid="theme-focus"
+          >
+            Focus on these two
+          </button>
           <button type="button" className="btn" disabled={!deck.themeWeights} onClick={() => { order.current = []; onReset(); }} data-testid="theme-reset">
             Reset to the commander
           </button>
