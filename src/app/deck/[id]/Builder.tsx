@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
+import { isPackageId, packageDef, pinPackage } from '@/engine/packages';
+import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, PackageId, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
@@ -23,12 +24,14 @@ import {
 } from '../../lib/ui';
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
+import { PackagesPanel } from './PackagesPanel';
 import {
   ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, PutItIn, RatingPanel, ThemesPanel, whyNotIn, type ImproveOptions, type PanelId, type ProposalSet,
 } from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'rating', label: 'Rating' },
+  { id: 'packages', label: 'Packages' },
   { id: 'bracket', label: 'Bracket' },
   { id: 'themes', label: 'Themes' },
   { id: 'improve', label: 'Improve' },
@@ -45,7 +48,7 @@ const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(ca
  */
 interface DeckResult {
   seq: number;
-  kind: 'fix' | 'swap';
+  kind: 'fix' | 'swap' | 'package';
   title: string;
   changes: Change[];
   ratingBefore: number;
@@ -106,6 +109,14 @@ export function Builder({ id }: { id: string }) {
   const networkNow = net.network;
   useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
+  /** The package the Packages page pointed at (`?panel=packages&package=<id>`). */
+  const [highlight, setHighlight] = useState<PackageId | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('panel') === 'packages') setPanel('packages');
+    const wanted = params.get('package');
+    if (wanted && isPackageId(wanted)) setHighlight(wanted);
+  }, []);
   const themePackages = useMemo(
     () => (analysis?.packages.packages ?? []).filter((p) => p.kind === 'theme').map((p) => ({ id: p.id, name: p.name })),
     [analysis],
@@ -517,6 +528,52 @@ export function Builder({ id }: { id: string }) {
     if (el && el !== document.body && el !== target) return;
     target?.focus({ preventScroll: true });
   }, [busy]);
+  /**
+   * Complete package (and Add a package, which first pins the package at 8): the same panel and Undo as
+   * Fix deck. The deck before is what Undo restores, so an added package's pin goes with it.
+   */
+  const runPackage = async (id: PackageId, add: boolean) => {
+    if (!deck || !analysis) return;
+    const before = deck;
+    const name = analysis.packages.packages.find((p) => p.id === id)?.name ?? analysis.packages.offers.find((o) => o.id === id)?.name ?? packageDef(id)?.name ?? 'the package';
+    const start = add ? pinPackage(before, analysis.packages, analysis.targets, id, 8) : before;
+    setBusy(`package:${id}`);
+    try {
+      const res = await buildDeck(start, 'package', { ...buildOpts(), package: id });
+      learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info('The deck changed while the package was being completed, so nothing was applied. Try again.');
+        return;
+      }
+      const n = res.changes.filter((c) => c.in !== '').length;
+      let after: Deck | null = null;
+      if (res.changes.length > 0 || add) {
+        const next: Deck = { ...res.deck, id: before.id, name: before.name };
+        if (before.built) next.built = true;
+        else delete next.built;
+        after = next;
+        mutate(() => next);
+        setProposals(null);
+      }
+      setFixed({
+        seq: ++fixSeq.current,
+        kind: 'package',
+        title: n > 0 ? `Completed ${name}: added ${n}` : `${name}: nothing added`,
+        changes: res.changes,
+        ratingBefore: res.ratingBefore,
+        ratingAfter: res.ratingAfter,
+        note: res.note,
+        heldBy: res.heldBy,
+        before,
+        after,
+        undone: 'Undone. The deck is back as it was before Complete package.',
+      });
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setBusy(null);
+    }
+  };
   /** Puts back the deck exactly as it was before the fix or swap; offered only while the deck it made is unchanged. */
   const undoResult = () => {
     if (!fixed?.after || deck !== fixed.after) return;
@@ -801,7 +858,7 @@ export function Builder({ id }: { id: string }) {
         lookup={lookup}
         heldBy={fixed.heldBy}
         note={
-          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after the ${fixed.kind}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
+          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after ${fixed.kind === 'package' ? 'Complete package' : `the ${fixed.kind}`}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
         }
         onUndo={fixed.after && deck === fixed.after ? undoResult : undefined}
         onDismiss={() => {
@@ -1113,6 +1170,20 @@ export function Builder({ id }: { id: string }) {
                   else next[role] = n;
                   return { ...d, roleTargets: Object.keys(next).length > 0 ? next : null };
                 })}
+              />
+            ) : panel === 'packages' ? (
+              <PackagesPanel
+                analysis={analysis}
+                deck={deck}
+                busy={busy}
+                highlight={highlight}
+                onComplete={(id) => void runPackage(id, false)}
+                onAdd={(id) => void runPackage(id, true)}
+                onPin={(id, n) => mutate((d) => pinPackage(d, analysis.packages, analysis.targets, id, n))}
+                onShow={(id) => {
+                  setQuery({ ...DEFAULT_QUERY, package: id, hideInDeck: true, fromFix: null });
+                  showBrowser();
+                }}
               />
             ) : panel === 'bracket' ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />

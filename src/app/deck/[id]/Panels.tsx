@@ -9,7 +9,7 @@ import { HeldMark, heldText } from '../../components/held';
 import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
-export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve' | 'network';
+export type PanelId = 'rating' | 'packages' | 'bracket' | 'themes' | 'improve' | 'network';
 
 function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string; held?: string[] }) {
   const card = lookup[id];
@@ -119,7 +119,7 @@ export function BoxMatchOffer({ name, busy, onLink }: { name: string; busy: bool
   );
 }
 
-const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
+export const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
   <section className="border-t border-slag px-4 py-4 first:border-t-0">
     <div className="mb-2.5 flex items-baseline gap-2">
       <h3 className="text-[1.02rem] leading-tight">{title}</h3>
