@@ -705,7 +705,7 @@ export const GOAL_CHIPS: { id: GoalChip; label: string; roles: Role[] }[] = [
 ];
 
 export interface ImproveOptions {
-  bracket: Bracket | 'keep'; ownedOnly: boolean; maxPrice: string;
+  bracket: Bracket | 'keep'; maxPrice: string;
   /** "Change at most N cards", as typed. */
   maxSwaps: string;
   goals: GoalChip[];
@@ -727,11 +727,15 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, showFreeOnly, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
   /** Name of the active collection, for the owned-only box. */
   collectionName: string | null;
+  /** "Only my collection", the shared filter (the header's box shows and sets the same value). */
+  ownedOnly: boolean;
+  /** Sets (and remembers) "Only my collection". */
+  onOwnedOnly: (on: boolean) => void;
   /** The active collection can have boxes and built decks, so "Use free copies only" applies. */
   showFreeOnly: boolean;
   /** "Use free copies only" (with owned-only: copies held by boxes and other built decks do not count). */
@@ -829,12 +833,12 @@ export function ImprovePanel({
             <span className="text-ash">dollars per card</span>
           </label>
           <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOptions({ ...options, ownedOnly: e.target.checked })} data-testid="improve-owned" />
+            <input type="checkbox" checked={ownedOnly} onChange={(e) => onOwnedOnly(e.target.checked)} data-testid="improve-owned" />
             <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>
           </label>
           {showFreeOnly && (
-            <label className={`flex items-center gap-2 pl-6 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`} title="Leave out copies that are sealed in a box or in another built deck">
-              <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => onFreeOnly(e.target.checked)} data-testid="improve-free-only" />
+            <label className={`flex items-center gap-2 pl-6 ${ownedOnly ? 'cursor-pointer' : 'text-smoke'}`} title="Leave out copies that are sealed in a box or in another built deck">
+              <input type="checkbox" checked={freeOnly} disabled={!ownedOnly} onChange={(e) => onFreeOnly(e.target.checked)} data-testid="improve-free-only" />
               <span>Use free copies only</span>
             </label>
           )}

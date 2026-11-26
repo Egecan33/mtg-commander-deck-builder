@@ -100,7 +100,7 @@ export function Builder({ id }: { id: string }) {
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
-  const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
+  const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
   const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string; heldBy?: HeldBy } | null>(null);
   // The last Fix deck, per-part Fix or swap from the card detail, shown above the deck with one Undo.
@@ -243,8 +243,11 @@ export function Builder({ id }: { id: string }) {
     deckRef.current = deck;
   }, [deck]);
 
-  // ---- the card search column, shown or hidden (remembered for every deck)
-  const { ready: filtersReady, ownedOnly: storedOwnedOnly, browser: browserShown } = useFilters();
+  // ---- the card search column, shown or hidden (remembered for every deck). "Only my collection" is a
+  // choice about the player, not about one deck: it is one of the shared filters, and both of its boxes
+  // (the header's and the Improve tab's) read and write it there.
+  const { ownedOnly, browser: browserShown } = useFilters();
+  const setOwnedOnly = useCallback((on: boolean) => setFilters({ ownedOnly: on }), []);
   // "/" on a hidden card search shows it, then the search box takes the focus.
   const focusSearch = useRef(false);
   const showBrowser = useCallback(() => setFilters({ browser: true }), []);
@@ -357,11 +360,11 @@ export function Builder({ id }: { id: string }) {
   const cardOpts = useMemo(() => {
     const price = Number(options.maxPrice);
     return {
-      ownedOnly: options.ownedOnly || undefined,
-      freeOnly: (options.ownedOnly && freeOnly) || undefined,
+      ownedOnly: ownedOnly || undefined,
+      freeOnly: (ownedOnly && freeOnly) || undefined,
       maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
     };
-  }, [options.ownedOnly, options.maxPrice, freeOnly]);
+  }, [ownedOnly, options.maxPrice, freeOnly]);
   const buildOpts = () => cardOpts;
 
   // ---- "Put it in instead of" for the card in the detail: a card not in the deck, or one more basic land
@@ -626,12 +629,6 @@ export function Builder({ id }: { id: string }) {
     setProposals({ ...proposals, asked: true, items: proposals.kind === 'add' ? [] : proposals.items.filter((p) => !list.includes(p)) });
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
-  // "Only my collection" is a choice about the player, not about one deck: it is one of the shared filters.
-  useEffect(() => {
-    if (filtersReady) setOptions((o) => (o.ownedOnly === storedOwnedOnly ? o : { ...o, ownedOnly: storedOwnedOnly }));
-  }, [filtersReady, storedOwnedOnly]);
-  const setOwnedOnly = (ownedOnly: boolean) => setFilters({ ownedOnly });
-
   // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
   const toggleBuilt = () => {
     if (!deck) return;
@@ -979,15 +976,15 @@ export function Builder({ id }: { id: string }) {
               className="flex min-w-0 cursor-pointer items-center gap-1.5"
               title="Fix deck, Build, Improve, Suggest swaps, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
             >
-              <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
+              <input type="checkbox" checked={ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
               <span className="max-w-[15rem] truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
             </label>
             {manual && (
               <label
-                className={`flex shrink-0 items-center gap-1.5 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
-                title={options.ownedOnly ? 'Fix deck, builds and suggestions leave out copies sealed in a box or in another built deck' : 'Tick “Only my collection” first'}
+                className={`flex shrink-0 items-center gap-1.5 ${ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
+                title={ownedOnly ? 'Fix deck, builds and suggestions leave out copies sealed in a box or in another built deck' : 'Tick “Only my collection” first'}
               >
-                <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => setFreeOnly(e.target.checked)} data-testid="free-only" />
+                <input type="checkbox" checked={freeOnly} disabled={!ownedOnly} onChange={(e) => setFreeOnly(e.target.checked)} data-testid="free-only" />
                 <span>Use free copies only</span>
               </label>
             )}
@@ -1108,6 +1105,8 @@ export function Builder({ id }: { id: string }) {
                 themeAxes={themeAxes}
                 options={options}
                 collectionName={activeCollection?.name ?? null}
+                ownedOnly={ownedOnly}
+                onOwnedOnly={setOwnedOnly}
                 showFreeOnly={manual}
                 freeOnly={freeOnly}
                 onFreeOnly={setFreeOnly}
