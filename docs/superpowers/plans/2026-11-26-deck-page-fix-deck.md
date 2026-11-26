@@ -96,3 +96,16 @@
 - Produces (UI): a small **Fix** button (`data-testid="fix-part"`, `data-part=<key>`) beside each sub-score that has fixes; it runs the same panel/Undo flow as Fix deck. Card detail of a card not in the deck: section "Put it in instead of" (`data-testid="swapin"`) listing up to 5 proposals (thumb, name, rating change with sign, objection text when `agrees === false`, "!" with holder names), each with **Swap** (`data-testid="swapin-apply"`), plus "Add without cutting" when the deck is under 100. The browser's "+" on a 100-card deck opens this detail instead of adding.
 
 - [ ] Step 1: implement. Step 2: verify on the scratch copy: a per-part Fix then Undo; click a browser card on a full deck → the suggestions show → Swap → the deck has the new card and lost the chosen one → undo it by swapping back (net zero, deck JSON identical). Screenshots. Step 3: `pnpm typecheck && pnpm test`. Step 4: commit `feat(deck): fix one problem at a time, and suggest what a new card replaces`.
+
+### Task 1b: Best from collection rates with the same EDHREC data the deck page uses
+
+**Files:** Modify `src/server/discover.ts` (`context()` and the job/cache key), `src/app/lib/api.ts` (`DiscoverEntry.basis`), `src/app/discover/page.tsx` (show the basis); Test: `tests/server/discover.test.ts` or a new server test.
+
+**Interfaces:**
+- Consumes: `peekEdhrec(commanders, bracket)` from `src/server/edhrec.ts` (cache only, never a request).
+- Produces: each commander in a Discover run is built and rated with `ctx.edhrec` = the cached EDHREC data for that commander and bracket when EDHREC is enabled and cached, else null — exactly what `engineContext(deck)` would give the saved deck. `DiscoverEntry.basis: 'edhrec' | 'text'`. The job cache key changes when the set of commanders with cached EDHREC data changes (e.g. include a short hash of which commanders had data). The discover page shows "Scored with EDHREC data" / "Scored from card text" per entry (small, under the rating).
+- Why: the deck page and home tiles rate with cached EDHREC data, Discover never did, so the same deck showed scores up to 15 points apart.
+
+- [ ] Step 1: failing test — with EDHREC enabled and data cached for one commander (seed the `edhrec_cache` table the way tests/server tests do, or stub through the store), the Discover tier rating for that commander equals `analyzeResponse(tier.deck).rating.rating`, and its `basis` is `'edhrec'`; a commander without cached data has `basis: 'text'` and also equals the deck page's rating.
+- [ ] Step 2: run → FAIL. Step 3: implement (no network on any path). Step 4: `pnpm vitest run tests/server && pnpm typecheck` → PASS.
+- [ ] Step 5: commit `fix(discover): rate with the same cached EDHREC data the deck page uses`.
