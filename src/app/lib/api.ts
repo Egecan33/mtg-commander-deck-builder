@@ -50,6 +50,10 @@
  *        Oddball and Core 2, Exhibition 1), its other cards are in the collection (`owned=1`) and cost at most
  *        the budget. `total` counts them all, `combos` lists the first 100, `withCommander` is how many of
  *        them use the commander.
+ * GET  /api/cards/:id/commanders?bracket -> WantedByResponse
+ *        Commanders that want a card: of the 40 commanders whose theme fits the card best (colour identity
+ *        containing the card's), the up-to-12 whose own deck scores it highest at `bracket`. Cached EDHREC data
+ *        only, never a request. A banned card gets none and `note` says why. 404 unknown card, 400 bad bracket.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
  * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
@@ -380,6 +384,13 @@ export interface SimilarResponse {
   commanders: (CommanderTile & { similarity: number | null; colorsOff: 0 | 1 })[];
 }
 export interface CommanderCombosResponse { total: number; withCommander: number; combos: FoundCombo[]; cards: CardLookup; heldBy: HeldBy }
+export interface WantedByResponse {
+  oracleId: string; bracket: Bracket;
+  /** Commanders whose scores were compared. */
+  considered: number;
+  commanders: { commander: CommanderTile; score: number; synergy: number }[];
+  note: string | null;
+}
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
 // ---------------------------------------------------------------------------------------------
@@ -736,6 +747,8 @@ export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string 
 export const getThemes = (signal?: AbortSignal) => call<ThemesResponse>('GET', '/api/themes', undefined, signal);
 export const getTheme = (slug: string, o: { colors?: ColorLetter[]; bracket: Bracket }, signal?: AbortSignal) =>
   call<ThemeResponse>('GET', `/api/themes/${encodeURIComponent(slug)}${query({ colors: o.colors?.join(''), bracket: o.bracket })}`, undefined, signal);
+export const getWantedBy = (oracleId: string, bracket: Bracket, signal?: AbortSignal) =>
+  call<WantedByResponse>('GET', `/api/cards/${encodeURIComponent(oracleId)}/commanders${query({ bracket })}`, undefined, signal);
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 

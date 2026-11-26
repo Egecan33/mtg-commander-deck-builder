@@ -1133,6 +1133,7 @@ export function Builder({ id }: { id: string }) {
           card={detailCard}
           score={detailScore}
           held={detailHeld}
+          bracket={deck.targetBracket}
           heldActions={
             detail && detailBoxes.length > 0
               ? detailBoxes.map((h) => (

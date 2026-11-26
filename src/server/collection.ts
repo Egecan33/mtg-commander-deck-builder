@@ -12,7 +12,7 @@ const ACTIVE_KEY = 'activeCollection';
 /** Forgets everything that depends on which cards are owned, or which of them sit in boxes. */
 export function forgetOwned(): void {
   const caches = serverState().caches;
-  for (const name of ['collection', 'collection-set', 'collection-active', 'deck-tiles', 'commander-recs', 'theme-pages']) caches.delete(name);
+  for (const name of ['collection', 'collection-set', 'collection-active', 'deck-tiles', 'commander-recs', 'theme-pages', 'wanted-by']) caches.delete(name);
 }
 
 /** Id of the collection that "owned" means everywhere: builds, scores, green dots, the Collection page. */

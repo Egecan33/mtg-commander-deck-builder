@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { CardScore } from '@/engine/types';
+import type { Bracket, CardScore } from '@/engine/types';
 import type { ClientCard } from '../lib/api';
 import { BAND_VAR, PART_LABEL, ROLE_LABEL, bandOf, fmtPrice } from '../lib/ui';
 import { CardImage, Mana, Overlay, ScoreBadge } from './card';
 import { HeldMark, heldText } from './held';
 import { useProxies } from './Shell';
+import { WantedBy } from './WantedBy';
 
 /**
  * The card at full size with why it scores what it scores. Two-faced cards flip.
@@ -15,7 +16,7 @@ import { useProxies } from './Shell';
  * `children`: a section under the score that the page adds (the deck page's "Put it in instead of").
  */
 export function CardDetail({
-  id, card, score, onClose, actions, note, held, heldActions, children,
+  id, card, score, onClose, actions, note, held, heldActions, bracket, children,
 }: {
   id: string;
   card: ClientCard | undefined;
@@ -26,6 +27,8 @@ export function CardDetail({
   held?: string[];
   /** Under the "!" line, e.g. "I took it out of the … box". */
   heldActions?: ReactNode;
+  /** The bracket "Commanders that want this card" scores at; the shared filter's when absent. */
+  bracket?: Bracket;
   children?: ReactNode;
 }) {
   const [face, setFace] = useState<0 | 1>(0);
@@ -135,6 +138,7 @@ export function CardDetail({
           )}
 
           {children}
+          {card && <WantedBy oracleId={id} bracket={bracket} />}
           {note && <div className="mt-4 text-ash">{note}</div>}
           <div className="mt-auto flex flex-wrap gap-2 pt-6">
             {actions}
