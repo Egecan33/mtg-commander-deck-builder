@@ -45,11 +45,13 @@ const LAND_MAX = 44;
 
 /**
  * Standard Brawl (60 cards, one opponent, 25 life), designer's calls from the Standard Brawl spec:
- * lands = round(22 + 0.8 x average mana value of the spells) held to 22-26; each Commander role
+ * lands = round(22 + 0.8 x average mana value of the spells - 0.17 x cheap ramp and draw) held to 22-26; each Commander role
  * band scales by 59/99; removal then x1.2, protection x0.8, board wipes 0-1.
  */
 const STD_LAND_BASE = 22;
 const STD_LAND_PER_MV = 0.8;
+/** The Commander formula's 0.28 lands per cheap ramp or draw card, scaled to 59 cards. */
+const STD_LAND_PER_CHEAP = 0.28 * (59 / 99);
 const STD_LAND_BAND: Band = [22, 26];
 const STD_LAND_USER: Band = [16, 30];
 const STD_ROLE_SHARE = 59 / 99;
@@ -306,7 +308,7 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
   // Standard Brawl keeps its own land formula (Standard Brawl spec); every other format starts from
   // the bracket's band and, once the deck has spells, takes the plan's land target below.
   let lands = std
-    ? STD_LAND_BASE + STD_LAND_PER_MV * mv
+    ? STD_LAND_BASE + STD_LAND_PER_MV * mv - STD_LAND_PER_CHEAP * cheap
     : Math.min(LAND_BAND[i][1], Math.max(LAND_BAND[i][0], landTarget(mv, cheap, bracket)));
   const onPlan = !std && nonlandCopies > 0;
 
@@ -402,7 +404,7 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
   if (std) {
     const n = clamp(Math.round(lands), STD_LAND_BAND[0], STD_LAND_BAND[1]);
     source = 'plan';
-    reason = `${n} lands for an average mana value of ${r1(mv)} (22 + 0.8 per mana value, held to 22–26): ${STD_NOTES.lands[0].toLowerCase()}${STD_NOTES.lands.slice(1)}`;
+    reason = `${n} lands for an average mana value of ${r1(mv)} (22 + 0.8 per mana value, less ${r1(STD_LAND_PER_CHEAP * cheap)} for cheap ramp, held to 22–26): ${STD_NOTES.lands[0].toLowerCase()}${STD_NOTES.lands.slice(1)}`;
   } else if (onPlan) {
     let ramp2 = 0;
     let cantrips = 0;

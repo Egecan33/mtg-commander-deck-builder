@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { karstenSources } from '@/engine/mana';
-import { summarizeDeck } from '@/engine/summary';
+import { deckCards, summarizeDeck } from '@/engine/summary';
 import { roleNeeds, scaleTargets, targetsFor } from '@/engine/targets';
 import { brawlFixtureDb, standardBrawlFixtureDb } from '../helpers/fixture-db';
 import { ctxOf, redDeck } from '../helpers/standard-brawl';
@@ -11,12 +11,25 @@ describe('Standard Brawl targets', () => {
   const summary = summarizeDeck(deck, std);
   const at = (avgMv: number) => targetsFor(deck, ctxOf(std), { ...summary, avgMv });
 
+  // The fixture deck's cheap ramp and draw, taken out for the plain curve formula.
+  const cheapIds = new Set(deckCards(deck, std).cards
+    .filter((c) => c.card.cmc <= 2 && (c.features.roles.includes('ramp') || c.features.roles.includes('draw'))).map((c) => c.card.oracleId));
+  const bare = { ...deck, main: deck.main.filter((e) => !cheapIds.has(e.oracleId)) };
+  const bareAt = (avgMv: number) => targetsFor(bare, ctxOf(std), { ...summarizeDeck(bare, std), avgMv });
+
   it('lands = round(22 + 0.8 x average mana value), 22 to 26: 24 / 24 / 25 for curves 2 / 3 / 4', () => {
-    expect(at(2).lands).toBe(24);
-    expect(at(3).lands).toBe(24);
-    expect(at(4).lands).toBe(25);
+    expect(bareAt(2).lands).toBe(24);
+    expect(bareAt(3).lands).toBe(24);
+    expect(bareAt(4).lands).toBe(25);
+    expect(bareAt(0.5).lands).toBe(22);
+    expect(bareAt(9).lands).toBe(26);
+  });
+
+  it('takes 0.28 x 59/99 lands off per cheap ramp or draw card, still held to 22 to 26', () => {
+    expect(cheapIds.size).toBeGreaterThan(0);
+    expect(at(2).lands).toBeLessThan(bareAt(2).lands);
+    expect(at(2).lands).toBeGreaterThanOrEqual(22);
     expect(at(0.5).lands).toBe(22);
-    expect(at(9).lands).toBe(26);
   });
 
   it('says why in a note the UI shows', () => {
