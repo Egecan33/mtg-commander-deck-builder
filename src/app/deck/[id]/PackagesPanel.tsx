@@ -19,17 +19,19 @@ const PACKAGE_SLOTS = 8;
  * deck has, and the ones it could add. Every number is the engine's (`AnalyzeResponse.packages`).
  */
 export function PackagesPanel({
-  analysis, deck, busy, highlight, onComplete, onAdd, onPin, onShow,
+  analysis, deck, busy = null, highlight = null, readOnly = false, onComplete, onAdd, onPin, onShow,
 }: {
   analysis: AnalyzeResponse;
   deck: Deck;
-  busy: string | null;
+  busy?: string | null;
   /** A package to point at (from the Packages page): scrolled into view with a brass outline. */
-  highlight: PackageId | null;
-  onComplete: (id: PackageId) => void;
-  onAdd: (id: PackageId) => void;
-  onPin: (id: PackageId, n: number | null) => void;
-  onShow: (id: PackageId) => void;
+  highlight?: PackageId | null;
+  /** Only the plan: no Complete, Show cards, size or Add (the commander page's average deck is not a saved deck). */
+  readOnly?: boolean;
+  onComplete?: (id: PackageId) => void;
+  onAdd?: (id: PackageId) => void;
+  onPin?: (id: PackageId, n: number | null) => void;
+  onShow?: (id: PackageId) => void;
 }) {
   const plan = analysis.packages;
   // The library the odds draw from: the format's deck (100, or 60 in Standard Brawl) without the commanders.
@@ -61,7 +63,7 @@ export function PackagesPanel({
       </Section>
 
       {plan.packages.map((p) => (
-        <PackageRow key={p.id} p={p} min={min} librarySize={librarySize} highlighted={highlight === p.id} busy={busy} onComplete={onComplete} onPin={onPin} onShow={onShow} />
+        <PackageRow key={p.id} p={p} min={min} librarySize={librarySize} highlighted={highlight === p.id} busy={busy} readOnly={readOnly} onComplete={onComplete} onPin={onPin} onShow={onShow} />
       ))}
 
       {open > 0 && (
@@ -70,7 +72,7 @@ export function PackagesPanel({
         </p>
       )}
 
-      <Section title="Add a package" aside={offers.length > 0 ? `${offers.length}` : undefined}>
+      {!readOnly && <Section title="Add a package" aside={offers.length > 0 ? `${offers.length}` : undefined}>
         <div data-testid="package-offers">
           {offers.length === 0 ? (
             <EmptyState message="Every package this commander supports is in the plan." />
@@ -86,7 +88,7 @@ export function PackagesPanel({
                     type="button"
                     className="btn btn-sm shrink-0"
                     disabled={busy !== null}
-                    onClick={() => onAdd(o.id)}
+                    onClick={() => onAdd?.(o.id)}
                     title={`Sets ${o.name} to ${min} cards and adds the best ones for this deck`}
                     data-testid="package-add"
                   >
@@ -97,13 +99,13 @@ export function PackagesPanel({
             </ul>
           )}
         </div>
-      </Section>
+      </Section>}
     </div>
   );
 }
 
 function PackageRow({
-  p, min, librarySize, highlighted, busy, onComplete, onPin, onShow,
+  p, min, librarySize, highlighted, busy, readOnly, onComplete, onPin, onShow,
 }: {
   p: PlannedPackage;
   /** The fewest cards a package holds in the deck's format. */
@@ -111,9 +113,10 @@ function PackageRow({
   librarySize: number;
   highlighted: boolean;
   busy: string | null;
-  onComplete: (id: PackageId) => void;
-  onPin: (id: PackageId, n: number | null) => void;
-  onShow: (id: PackageId) => void;
+  readOnly: boolean;
+  onComplete?: (id: PackageId) => void;
+  onPin?: (id: PackageId, n: number | null) => void;
+  onShow?: (id: PackageId) => void;
 }) {
   const done = p.count >= p.target;
   // The stepper shows its own clicks at once; the plan catches up after the deck is read again.
@@ -123,7 +126,7 @@ function PackageRow({
   const step = (n: number) => {
     const next = Math.min(PACKAGE_PIN_MAX, Math.max(min, n));
     setLocal(next);
-    onPin(p.id, next);
+    onPin?.(p.id, next);
   };
   const loose = p.cohesion && p.cohesion.of >= 4 && p.cohesion.linked / p.cohesion.of < LOOSE_SHARE ? p.cohesion : null;
   return (
@@ -135,7 +138,7 @@ function PackageRow({
     >
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-[1.02rem] leading-tight">{p.name}</h3>
-        <span className={`ml-auto tabular-nums ${done ? 'text-band-good' : 'text-bone'}`} data-testid="package-count">{p.count} of {p.target}</span>
+        <span className={`ml-auto tabular-nums ${done ? 'text-bone' : 'text-ash'}`} data-testid="package-count">{p.count} of {p.target}</span>
       </div>
       <p className="mb-2.5 text-[0.86rem] text-ash">{p.reason}</p>
       {/* odds are drawn from the library (99, or 59): the commanders in the package are not in it */}
@@ -147,18 +150,18 @@ function PackageRow({
         </p>
       )}
       {loose && <p className="mt-2.5 text-[0.86rem] text-ash" data-testid="package-cohesion-hint">{looseText(loose.linked, loose.of)}</p>}
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      {!readOnly && <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <button
           type="button"
           className="btn btn-sm"
           disabled={busy !== null || done}
-          onClick={() => onComplete(p.id)}
+          onClick={() => onComplete?.(p.id)}
           title={done ? 'Already at its target' : `Adds the ${p.target - p.count} best ${p.name} cards for this deck; on a full deck each one replaces the weakest card outside your packages. Undo puts the deck back.`}
           data-testid="package-complete"
         >
           {busy === `package:${p.id}` ? 'Completing' : 'Complete package'}
         </button>
-        <button type="button" className="btn btn-sm btn-quiet" onClick={() => onShow(p.id)} title={`Open the card search on ${p.name} cards that are not in the deck`} data-testid="package-show">
+        <button type="button" className="btn btn-sm btn-quiet" onClick={() => onShow?.(p.id)} title={`Open the card search on ${p.name} cards that are not in the deck`} data-testid="package-show">
           Show cards
         </button>
         <span className="ml-auto flex items-center gap-1.5 text-[0.86rem]" role="group" aria-label={`${p.name} size`}>
@@ -166,9 +169,9 @@ function PackageRow({
           {/* brass is for the one primary action: a size you set reads bold, Reset is a quiet link */}
           <span className={`w-6 text-center tabular-nums ${p.pinned || local !== null ? 'font-semibold text-bone' : ''}`} data-testid="package-pin-value">{size}</span>
           <button type="button" className="btn btn-sm px-2" disabled={size >= PACKAGE_PIN_MAX} onClick={() => step(size + 1)} aria-label={`Want one more: ${p.name}`} data-testid="package-pin-more">+</button>
-          <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${p.pinned || local !== null ? '' : 'invisible'}`} onClick={() => { setLocal(null); onPin(p.id, null); }} data-testid="package-pin-reset">Reset</button>
+          <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${p.pinned || local !== null ? '' : 'invisible'}`} onClick={() => { setLocal(null); onPin?.(p.id, null); }} data-testid="package-pin-reset">Reset</button>
         </span>
-      </div>
+      </div>}
     </section>
   );
 }

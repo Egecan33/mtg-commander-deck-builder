@@ -32,7 +32,7 @@ export const LockIcon = ({ open = false, size = 11 }: { open?: boolean; size?: n
 );
 
 /** The score as a small plate in its band colour; "–" with the reason as its title when the card cannot go in. */
-function ScoreChip({ score, gate }: { score: number | null | undefined; gate: string | null | undefined }) {
+function ScoreChip({ score, gate, title }: { score: number | null | undefined; gate: string | null | undefined; title?: string }) {
   if (score == null && !gate) return null;
   const band = bandOf(score ?? 0, !!gate);
   return (
@@ -41,7 +41,7 @@ function ScoreChip({ score, gate }: { score: number | null | undefined; gate: st
       data-band={band}
       role="img"
       aria-label={gate ? `No score: ${gate}` : `Score ${score} of 100`}
-      title={gate ? gate : `Score ${score} of 100 for this deck`}
+      title={gate ? gate : (title ?? `Score ${score} of 100 for this deck`)}
       className="inline-flex h-[18px] min-w-[1.6rem] shrink-0 items-center justify-center rounded-[4px] px-1 text-[13px] font-bold leading-none text-[#15110a]"
       style={{ background: BAND_VAR[band] }}
     >
@@ -63,12 +63,14 @@ const OUTLINE: Partial<Record<TileMark, string>> = {
  * the bottom right of the image. With `onOpen` the image is a button, so the tile takes keyboard focus.
  */
 export function CardTile({
-  card, size = 'M', score, gate, stats, heldBy, marks = [], qty, status, onOpen, actions, known = true, dim = false, testId, data,
+  card, size = 'M', score, scoreTitle, gate, stats, heldBy, marks = [], qty, status, onOpen, actions, known = true, dim = false, testId, data,
 }: {
   card: ClientCard;
   size?: TileSize;
   /** 0-100 for this deck, or null when there is none. */
   score?: number | null;
+  /** The score chip's tooltip, when "for this deck" is not what the number means. */
+  scoreTitle?: string;
   /** Why the card cannot go in this deck (off colour, banned, over the bracket). The chip shows "–". */
   gate?: string | null;
   stats?: TileStat[];
@@ -132,7 +134,7 @@ export function CardTile({
       </div>
 
       <div className="mt-1 flex h-5 items-center gap-1.5 overflow-hidden text-[13px] leading-none" data-testid="tile-caption">
-        <ScoreChip score={score} gate={gate} />
+        <ScoreChip score={score} gate={gate} title={scoreTitle} />
         {card.owned && <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-ash" title="In your collection" aria-label="In your collection" role="img" data-testid="owned-dot" />}
         {held && <HeldMark names={held} small />}
         {has('locked') && (

@@ -12,11 +12,50 @@
  * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'products'|'all';
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active. 'all' runs
  *        the steps in that order, products last.
- * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
+ * GET  /api/commanders?q&colors&mode&page&pageSize&axis&owned&sort&bracket&free&arenaFormat -> CommandersResponse
  *        Eligible commanders, most popular first (while an MTG Arena collection is active: Brawl
  *        commanders, the ones on Arena, planeswalkers included; /api/partners likewise). `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
  *        'within' (identity inside the chosen colours). page is 1-based, pageSize 1..200 (60).
+ *        `axis` keeps the commanders that lead that theme (`CommanderTile.lead`), `owned=1` only commanders in the
+ *        collection. `sort`: popularity (default), name, price (unpriced last) or best; anything else is a 400.
+ *        `best` puts the commanders of a finished Best from collection run (`bracket`, `free` as for /api/discover)
+ *        first, by their owned-only rating (`best`), the rest by popularity; `bestReady` says whether a finished run
+ *        exists, and without one `best` is the popularity order.
+ * GET  /api/themes[?arenaFormat]       -> ThemesResponse   every theme (axis) with the number of commanders that lead it, most first.
+ * GET  /api/themes/:axis?colors&bracket -> ThemeResponse    :axis is the slug ("typal-elf", "tokens"; 404 when not listed). The commanders
+ *        that lead the theme (inside `colors` when given, most played first) and up to 60 cards that serve it best, scored
+ *        as in a deck of that theme alone at `bracket`. Text only: no EDHREC data.
+ * GET  /api/commander/:slug?with&bracket&arenaFormat&color -> CommanderPageResponse
+ *        The header of a commander page. `slug` is EDHREC's URL form of the front name ("mr-spock-science-officer");
+ *        the full-name form and any letter case also resolve, and two names that slug alike get "<slug>-<8 id characters>".
+ *        `with` is a partner's slug (the page is then the pair's: identity is the union, `decks` only the decks with
+ *        exactly these two). Unknown commander or partner: 404; the same commander twice or a pair that cannot be one:
+ *        400. `bracket` 1-5 (default 3). `color` W|U|B|R|G is the colour chosen for a colour-choice commander (the
+ *        recs, combos and header then use it; every other commander ignores it, anything else is a 400). Cached EDHREC data only (`peekEdhrec`): never a request, and the EDHREC fields
+ *        (`edhrecDecks`, `edhrecThemes`) are absent when nothing is cached.
+ * GET  /api/commander/:slug/recs?with&bracket&budget&owned&free -> CommanderRecsResponse
+ *        Card recommendations in EDHREC's sections, scored by the app's own scorer for a deck of just the commander(s)
+ *        at `bracket` (one cached scoring pass per commander and bracket; the filters only narrow it). Sections, in
+ *        order: new (first printed in the two newest sets), synergy, top, game-changers (Bracket 3-5 only), owned,
+ *        then one per card type; each lists its first 100 cards and a `total`, and a headline section that comes out
+ *        empty says why in `empty`. `budget` any|under-5|under-1 (else 400), `owned=1` only the collection,
+ *        `free=1` (with `owned`) only free copies. Forge numbers always (`synergy`, `quality`, `scores`); an `edhrec`
+ *        block on a card only when EDHREC data for this commander is already cached. Never a request.
+ * GET  /api/commander/:slug/similar?with&budget&owned -> SimilarResponse
+ *        `budget` and `owned=1` filter before the cut. Up to 24 commanders within one colour of this page's identity, ranked by how alike their theme weights
+ *        are (`similarity` 0-1, 0.85 times for one colour off). A commander that names no theme gets the most
+ *        played commanders of its colours (`basis: 'popularity'`, `similarity: null`). Text only: no EDHREC data.
+ * GET  /api/commander/:slug/combos?with&bracket&budget&owned&free -> CommanderCombosResponse
+ *        Commander Spellbook combos made only of cards inside the commander's identity, nothing else needed,
+ *        the commander's own first; kept when the combo's tag fits `bracket` (Ruthless 4, Spicy and Powerful 3,
+ *        Oddball and Core 2, Exhibition 1), its other cards are in the collection (`owned=1`) and cost at most
+ *        the budget. `total` counts them all, `combos` lists the first 100, `withCommander` is how many of
+ *        them use the commander.
+ * GET  /api/cards/:id/commanders?bracket[&arenaFormat] -> WantedByResponse
+ *        Commanders that want a card: of the 40 commanders whose theme fits the card best (colour identity
+ *        containing the card's), the up-to-12 whose own deck scores it highest at `bracket`. Cached EDHREC data
+ *        only, never a request. A banned card gets none and `note` says why. 404 unknown card, 400 bad bracket.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
  * GET  /api/decks                       -> DecksResponse      saved decks of the ACTIVE collection, newest first.
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201). It belongs to
@@ -274,10 +313,11 @@
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
+import type { Budget } from './budget';
 import type { RoleNeed } from '@/engine/targets';
 import type {
   ArenaRarity, AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackageId, PackageKind, PackagePlan, DeckSummary,
-  FixChange, FixResult, Format, ImproveGoals, Role, SwapProposal, Targets, Wildcards,
+  FixChange, FixResult, Format, FoundCombo, ImproveGoals, Role, SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
 /** The two MTG Arena formats a deck of an Arena collection can be in (`Deck.arenaFormat`; missing is 'brawl'). */
@@ -293,6 +333,8 @@ export type ClientCard = Pick<
   'oracleId' | 'name' | 'frontName' | 'manaCost' | 'cmc' | 'typeLine' | 'colorIdentity' | 'imageFaces' | 'gameChanger' | 'priceUsd'
 > & {
   roles: Role[]; owned: boolean;
+  /** A commander page slug that differs from its plain name slug (two commanders share the name). */
+  slug?: string;
   /** Rarity of the cheapest printing on MTG Arena (the wildcard that crafts it); null when the card is not on Arena. */
   arenaRarity: ArenaRarity | null;
 };
@@ -373,9 +415,82 @@ export interface CommanderCard extends ClientCard {
   /** The deck is illegal until a colour is chosen. */
   requiresColorChoice: boolean;
 }
-/** `arenaFormat` picks Brawl or Standard Brawl while an MTG Arena collection is active (default 'brawl'). */
-export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number; arenaFormat?: ArenaFormat }
-export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderCard[] }
+export type CommanderSort = 'popularity' | 'name' | 'price' | 'best';
+export interface CommandersQuery {
+  q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number;
+  axis?: AxisId; ownedOnly?: boolean; sort?: CommanderSort; bracket?: Bracket; freeOnly?: boolean;
+  /** Picks Brawl or Standard Brawl while an MTG Arena collection is active (default 'brawl'). */
+  arenaFormat?: ArenaFormat;
+}
+export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderTile[]; bestReady: boolean }
+export interface ThemeInfo { axis: AxisId; slug: string; label: string; commanders: number }
+export interface ThemesResponse { themes: ThemeInfo[] }
+export interface ThemeResponse {
+  theme: ThemeInfo; colors: ColorLetter[]; bracket: Bracket;
+  commanders: CommanderTile[];
+  /** Oracle ids of the cards that serve this theme best, best first. */
+  top: string[];
+  scores: Record<string, CardScore>; cards: CardLookup;
+}
+/** A commander in a list: its page slug, Scryfall's popularity rank and the themes it leads. */
+export interface CommanderTile extends CommanderCard {
+  slug: string;
+  /** Scryfall's EDHREC rank. */
+  rank: number | null;
+  /** leadAxes of its text-only weights. */
+  lead: AxisId[];
+  /** Tier-0 rating from Best from collection (sort 'best' only). */
+  best?: number;
+}
+export interface CommanderPageResponse {
+  commanders: CommanderTile[]; identity: Color[]; bracket: Bracket;
+  /** resolveThemeWeights of the shell at this bracket (with cached EDHREC themes when there are any): weight >= 0.1, `typal` left out, strongest first, at most 8, two decimals. */
+  themes: { axis: AxisId; label: string; weight: number }[];
+  edhrec: EdhrecStatus; edhrecDecks?: number;
+  /** Top 8 by count. */
+  edhrecThemes?: { slug: string; count: number }[];
+  /** Sum of the commanders' prices; null when one has none. */
+  price: number | null;
+  heldBy: HeldBy;
+  /** Owned, legal, non-basic cards inside the identity (0 disables Best from my collection). */
+  ownedCards: number;
+  /** Saved decks with this commander among theirs; for a pair, exactly these two. */
+  decks: DeckTile[];
+}
+export interface RecsQuery {
+  bracket: Bracket; budget: Budget; ownedOnly: boolean; freeOnly: boolean;
+  /** The colour chosen for a colour-choice commander (Clara Oswald and the like). */
+  color?: Color | null;
+  /** 'standardbrawl' while an MTG Arena collection is active and Standard Brawl is chosen; else absent (Brawl on Arena, Commander otherwise). */
+  arenaFormat?: ArenaFormat;
+}
+export type RecTypeId = 'creatures' | 'instants' | 'sorceries' | 'utility-artifacts' | 'mana-artifacts' | 'enchantments' | 'planeswalkers' | 'utility-lands' | 'lands' | 'other';
+export type RecSectionId = 'new' | 'synergy' | 'top' | 'game-changers' | 'owned' | RecTypeId;
+export interface RecCard {
+  oracleId: string;
+  /** 0-100, Forge */
+  synergy: number;
+  /** 0-100, Forge */
+  quality: number;
+  edhrec?: { inclusion: number; decks: number; lift: number | null };
+}
+export interface RecSection { id: RecSectionId; title: string; total: number; cards: RecCard[]; note?: string; empty?: string }
+export interface CommanderRecsResponse {
+  commanders: string[]; query: RecsQuery; edhrec: EdhrecStatus; sections: RecSection[];
+  scores: Record<string, CardScore>; cards: CardLookup; heldBy: HeldBy;
+}
+export interface SimilarResponse {
+  basis: 'themes' | 'popularity';
+  commanders: (CommanderTile & { similarity: number | null; colorsOff: 0 | 1 })[];
+}
+export interface CommanderCombosResponse { total: number; withCommander: number; combos: FoundCombo[]; cards: CardLookup; heldBy: HeldBy }
+export interface WantedByResponse {
+  oracleId: string; bracket: Bracket;
+  /** Commanders whose scores were compared. */
+  considered: number;
+  commanders: { commander: CommanderTile; score: number; synergy: number }[];
+  note: string | null;
+}
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
 // ---------------------------------------------------------------------------------------------
@@ -384,6 +499,8 @@ export interface PartnersResponse { commander: CommanderCard; partners: Commande
 export interface DeckTile {
   id: string; name: string; updatedAt: string;
   commanders: ClientCard[];
+  /** The colour chosen for a colour-choice commander. */
+  chosenColor?: Color | null;
   targetBracket: Bracket;
   cardCount: number;
   rating: number; legal: boolean;
@@ -777,10 +894,38 @@ export const startSync = (step: SyncStep | 'all') => call<SyncState>('POST', '/a
 export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal) =>
   call<CommandersResponse>(
     'GET',
-    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize, arenaFormat: params.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
+    `/api/commanders${query({
+      q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize,
+      axis: params.axis, owned: params.ownedOnly ? 1 : undefined, sort: params.sort, bracket: params.bracket, free: params.freeOnly ? 1 : undefined,
+      arenaFormat: params.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined,
+    })}`,
     undefined,
     signal,
   );
+export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket; color?: Color | null; arenaFormat?: ArenaFormat }, signal?: AbortSignal) =>
+  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query({ with: o.with, bracket: o.bracket, color: o.color ?? undefined, arenaFormat: o.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
+  call<CommanderRecsResponse>(
+    'GET',
+    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
+    undefined,
+    signal,
+  );
+export const getSimilarCommanders = (slug: string, withSlug: string | undefined, q: Pick<RecsQuery, 'budget' | 'ownedOnly' | 'arenaFormat'>, signal?: AbortSignal) =>
+  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
+  call<CommanderCombosResponse>(
+    'GET',
+    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
+    undefined,
+    signal,
+  );
+export const getThemes = (signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<ThemesResponse>('GET', `/api/themes${query({ arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getTheme = (slug: string, o: { colors?: ColorLetter[]; bracket: Bracket; arenaFormat?: ArenaFormat | null }, signal?: AbortSignal) =>
+  call<ThemeResponse>('GET', `/api/themes/${encodeURIComponent(slug)}${query({ colors: o.colors?.join(''), bracket: o.bracket, arenaFormat: o.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getWantedBy = (oracleId: string, bracket: Bracket, signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<WantedByResponse>('GET', `/api/cards/${encodeURIComponent(oracleId)}/commanders${query({ bracket, arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 

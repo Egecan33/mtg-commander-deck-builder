@@ -8,6 +8,7 @@ import { CardImage } from '../components/card';
 import { useFreeOnly } from '../components/held';
 import { useBuildFormat, useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
 import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverScope, type DiscoverState, type DiscoverTier } from '../lib/api';
+import { commanderHref } from '../lib/links';
 import { BAND_VAR, BRACKETS, bandOf, bracketName, fmtPrice } from '../lib/ui';
 
 const tierLabel = (t: DiscoverTier) =>
@@ -223,6 +224,15 @@ export default function DiscoverPage() {
                   </span>
                 ))}
               </button>
+              <div className="pb-2 pl-[7.3rem]">
+                <Link
+                  href={`${commanderHref(entry.commander)}?owned=1${freeOnly ? '&free=1' : ''}`}
+                  className="text-[0.8rem] text-ash hover:text-bone hover:underline"
+                  data-testid="discover-commander-link"
+                >
+                  Commander page
+                </Link>
+              </div>
 
               {isOpen && (
                 <div className="border-t border-slag p-3" data-testid="discover-detail">

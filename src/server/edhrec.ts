@@ -1,4 +1,5 @@
 import type { EdhrecStatus } from '@/app/lib/api';
+import { cardSlug } from '@/engine/text/slug';
 import type { Bracket, Card, EdhrecCard, EdhrecData } from '@/engine/types';
 import { getSettings } from './settings';
 import { cacheSlot } from './state';
@@ -67,15 +68,7 @@ export function parseEdhrecPage(raw: unknown): Page | { redirect: string } {
   return { numDecks: dict.card.num_decks, cards, themes };
 }
 
-/** EDHREC's URL form of a card name: front face, no diacritics or punctuation, hyphens for spaces. */
-export function edhrecSlug(card: Pick<Card, 'frontName'>): string {
-  return card.frontName
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/['’,.!?:"()]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
+export const edhrecSlug = cardSlug;
 
 /** Page paths to try, in order. A pair's slug order is not documented, so both orders are candidates. */
 function basePaths(commanders: Card[]): string[] {

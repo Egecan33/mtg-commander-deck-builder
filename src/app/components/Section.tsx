@@ -35,12 +35,14 @@ export function useSectionLimit(tiles: number): number | null {
  * JumpScope the section lists itself in the JumpRail.
  */
 export function Section({
-  id, title, count, actions, cap, children, testId, data, className = '',
+  id, title, count, note, actions, cap, children, testId, data, className = '',
 }: {
   id: string;
   title: string;
   /** The number beside the title (copies, so ×4 counts four). */
   count?: number;
+  /** Quiet text after the count ("8 in the package"). */
+  note?: string;
   actions?: ReactNode;
   /** Tiles shown before "Show all". */
   cap?: number;
@@ -72,6 +74,7 @@ export function Section({
       <header className="sticky top-0 z-10 flex items-baseline gap-2 bg-soot/95 pb-2 pt-2.5">
         <h3 id={`${id}-title`} className="text-[18px] leading-tight">{title}</h3>
         {count !== undefined && <span className="text-[13px] text-smoke" data-testid="section-count">{count}</span>}
+        {note && <span className="text-[13px] text-smoke" data-testid="section-note">&middot; {note}</span>}
         {actions && <div className="ml-auto flex items-center gap-1.5 self-center">{actions}</div>}
       </header>
       <LimitContext.Provider value={cap === undefined ? null : { limit, report }}>{children}</LimitContext.Provider>

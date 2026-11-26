@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, type ReactNode } from 'react';
-import type { CardScore, Deck, DeckEntry, FoundCombo } from '@/engine/types';
+import type { CardScore, Deck, DeckEntry, FoundCombo, PlannedPackage } from '@/engine/types';
 import { CardGrid } from '../../components/CardGrid';
 import { ComboRow } from '../../components/ComboRow';
 import { CardTile, LockIcon, unknownCard, type TileMark } from '../../components/CardTile';
@@ -13,7 +13,7 @@ import { Mana, ScoreBadge } from '../../components/card';
 import { HeldMark } from '../../components/held';
 import type { CardLookup, ClientCard, HeldBy } from '../../lib/api';
 import { useFilters } from '../../lib/filters';
-import { ROLE_GROUPS, TYPE_GROUPS, roleGroup, typeGroup } from '../../lib/ui';
+import { ROLE_GROUPS, TYPE_GROUPS, packageNote, roleGroup, typeGroup } from '../../lib/ui';
 
 export type Grouping = 'role' | 'type';
 
@@ -32,8 +32,10 @@ const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead, combos, comboHeld, onPutIn,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead, combos, comboHeld, onPutIn, packages,
 }: {
+  /** The deck's planned packages: a role heading whose package counts a different number says so ("Ramp 6 · 8 in the package"). */
+  packages?: readonly PlannedPackage[] | null;
   /** The deck's combos (null while the analysis loads: no Combos section yet). */
   combos?: DeckCombos | null;
   /** Boxes and built decks holding the cards a combo is missing. */
@@ -54,12 +56,14 @@ export function DeckView({
   weakest: Set<string>;
   /** Deck cards whose free copies do not cover the deck, with the boxes and built decks holding them. */
   held: HeldBy;
-  onRemove: (id: string) => void;
-  onAdd: (id: string) => void;
-  onLock: (id: string) => void;
+  /** Without all three the deck is read-only: tiles carry no actions. */
+  onRemove?: (id: string) => void;
+  onAdd?: (id: string) => void;
+  onLock?: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
   const filters = useFilters();
+  const editable = !!(onRemove && onAdd && onLock);
   const grouping = pickOption(filters.groupBy, GROUPS) as Grouping;
   const layout = filters.view;
 
@@ -153,12 +157,12 @@ export function DeckView({
           'data-held': holders ? true : undefined,
         }}
         actions={
-          zone === 'main' ? (
+          !editable ? undefined : zone === 'main' ? (
             <>
               <button
                 type="button"
                 className={`tile-btn tile-hover ${entry.locked ? 'tile-btn-on' : ''}`}
-                onClick={() => onLock(id)}
+                onClick={() => onLock?.(id)}
                 aria-pressed={entry.locked}
                 aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name} so it is never cut`}
                 title={entry.locked ? 'Locked: auto-build and improve keep this card. Click to unlock.' : 'Lock: keep this card through auto-build and improve'}
@@ -166,12 +170,12 @@ export function DeckView({
               >
                 <LockIcon open={!entry.locked} />
               </button>
-              <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} title="Remove one copy from the deck" data-testid="deck-remove">
+              <button type="button" className="tile-btn tile-hover" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} from the deck`} title="Remove one copy from the deck" data-testid="deck-remove">
                 &minus;
               </button>
             </>
           ) : zone === 'companion' ? (
-            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} as companion`} title="Remove the companion">
+            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} as companion`} title="Remove the companion">
               &minus;
             </button>
           ) : undefined
@@ -195,15 +199,15 @@ export function DeckView({
         <HeldMark names={held[id]} small />
         {card?.manaCost && <Mana cost={card.manaCost} size="0.95rem" />}
         <ScoreBadge score={score} />
-        {zone === 'main' ? (
+        {!editable ? null : zone === 'main' ? (
           <>
-            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
+            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock?.(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
               <LockIcon open={!entry.locked} />
             </button>
             {card?.roles.includes('land') && (
-              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd(id)} aria-label={`Add another ${name}`}>+</button>
+              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd?.(id)} aria-label={`Add another ${name}`}>+</button>
             )}
-            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
+            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove?.(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
           </>
         ) : (
           <span className="w-[4.6rem] shrink-0 text-right text-[0.75rem] text-smoke">{zone}</span>
@@ -244,6 +248,7 @@ export function DeckView({
                 id={sectionId(g.label)}
                 title={g.label}
                 count={g.rows.reduce((s, r) => s + r.entry.qty, 0)}
+                note={packageNote(g.label, g.rows.reduce((s, r) => s + r.entry.qty, 0), grouping === 'role' ? packages : null)}
                 testId="deck-group"
                 data={{ 'data-group': g.label }}
               >

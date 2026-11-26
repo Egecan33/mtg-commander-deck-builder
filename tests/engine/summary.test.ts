@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
+import { leadAxes, resolveThemeWeights, summarizeDeck } from '@/engine/summary';
 import { scaleTargets, targetsFor } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, Deck, DeckEntry, EngineContext, Role } from '@/engine/types';
@@ -215,5 +215,13 @@ describe('scaleTargets', () => {
     const copy = JSON.parse(JSON.stringify(full));
     scaleTargets(full, 37);
     expect(full).toEqual(copy);
+  });
+});
+
+describe('leadAxes', () => {
+  it('keeps the strongest named themes, ties included', () => {
+    expect(leadAxes({ tokens: 1, counters: 0.8, evasion: 0.8, attack: 0.4 })).toEqual(['tokens', 'counters', 'evasion']);
+    expect(leadAxes({ lifegain: 0.4 })).toEqual([]);
+    expect(leadAxes({ typal: 0.8, 'typal:elf': 1, tokens: 0.6 })).toEqual(['typal:elf', 'tokens']);
   });
 });

@@ -7,7 +7,8 @@ import type { Bracket } from '@/engine/types';
  * store; their stored values are read as they are, never reset.
  */
 
-export type Budget = 'any' | 'under-5' | 'under-1';
+export type { Budget } from './budget';
+import type { Budget } from './budget';
 export type TileSize = 'S' | 'M' | 'L';
 export type ViewMode = 'grid' | 'list';
 
@@ -54,13 +55,8 @@ export const DEFAULT_FILTERS: Filters = {
   bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, craftOnly: true, arenaFormat: 'brawl', size: 'M', view: 'grid', groupBy: '', sort: '', browser: true, ready: false,
 };
 
-export const BUDGETS: { id: Budget; label: string; maxUsd: number | null }[] = [
-  { id: 'any', label: 'Any price', maxUsd: null },
-  { id: 'under-5', label: 'Under $5', maxUsd: 5 },
-  { id: 'under-1', label: 'Under $1', maxUsd: 1 },
-];
-/** Highest price per card the budget allows, or null for any price. */
-export const budgetMax = (b: Budget): number | null => BUDGETS.find((x) => x.id === b)?.maxUsd ?? null;
+export { BUDGETS, budgetMax } from './budget';
+import { BUDGETS } from './budget';
 
 const flag = (v: string | null): boolean | null => (v === '1' ? true : v === '0' ? false : null);
 

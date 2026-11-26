@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { commanderHref } from '../../lib/links';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { packageMinimum } from '@/engine/format';
 import { isPackageId, packageDef, pinPackage } from '@/engine/packages';
@@ -960,11 +961,20 @@ export function Builder({ id }: { id: string }) {
               No commander. Open a legendary creature and choose “Make commander”.
             </div>
           )}
-          {deck.commanders.map((c) => (
-            <button key={c} type="button" className="card w-[3.9rem] cursor-zoom-in" onClick={() => setDetail(c)} aria-label={`Details for ${lookup[c]?.name ?? 'commander'}`} data-testid="commander-thumb">
-              <CardImage id={c} name={lookup[c]?.name ?? 'Commander'} known={!!lookup[c]} />
-            </button>
-          ))}
+          {deck.commanders.map((c) => {
+            const first = lookup[deck.commanders[0]];
+            const second = deck.commanders.length === 2 ? lookup[deck.commanders[1]] : undefined;
+            const self = lookup[c];
+            const href = self ? first && second ? commanderHref(first, second, deck.chosenColor) : commanderHref(self, undefined, deck.chosenColor) : null;
+            const image = <CardImage id={c} name={self?.name ?? 'Commander'} known={!!self} />;
+            return href ? (
+              <Link key={c} href={href} className="card block w-[3.9rem]" title="Open the commander page" aria-label={`Open the commander page for ${self?.name ?? 'the commander'}`} data-testid="commander-thumb">
+                {image}
+              </Link>
+            ) : (
+              <button key={c} type="button" className="card w-[3.9rem] cursor-zoom-in" onClick={() => setDetail(c)} aria-label="Details for commander" data-testid="commander-thumb">{image}</button>
+            );
+          })}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -1214,6 +1224,7 @@ export function Builder({ id }: { id: string }) {
           notice={notice}
           result={fixResult}
           combos={analysis?.bracket.combos ?? null}
+          packages={analysis?.packages.packages ?? null}
           comboHeld={heldHints}
           onPutIn={openCard}
           onRemove={remove}
@@ -1234,14 +1245,14 @@ export function Builder({ id }: { id: string }) {
           }
         />}
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
-          <div className="flex shrink-0 border-b border-slag" role="tablist">
+          <div className="flex shrink-0 flex-wrap border-b border-slag" role="tablist">
             {PANELS.filter((p) => !(std && p.id === 'bracket')).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 role="tab"
                 aria-selected={panel === p.id}
-                className={`display flex-1 border-b-2 px-1 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                className={`display flex-auto whitespace-nowrap border-b-2 px-1 py-2.5 text-[0.82rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                 onClick={() => setPanel(p.id)}
                 data-testid={`tab-${p.id}`}
               >
@@ -1349,6 +1360,7 @@ export function Builder({ id }: { id: string }) {
           card={detailCard}
           score={detailScore}
           held={detailHeld}
+          bracket={deck.targetBracket}
           heldActions={
             detail && detailBoxes.length > 0
               ? detailBoxes.map((h) => (

@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS printings (
   set_code TEXT NOT NULL, collector_number TEXT NOT NULL COLLATE NOCASE, oracle_id TEXT NOT NULL,
   PRIMARY KEY (set_code, collector_number)
 ) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS sets (code TEXT PRIMARY KEY, name TEXT NOT NULL, set_type TEXT NOT NULL, released_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, set_code TEXT NOT NULL, type TEXT NOT NULL, release_date TEXT NOT NULL
 );

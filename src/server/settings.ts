@@ -65,5 +65,6 @@ export function updateSettings(patch: Record<string, unknown>): Settings {
   })();
   serverState().caches.delete('settings');
   serverState().caches.delete('deck-tiles');
+  serverState().caches.delete('commander-recs');
   return getSettings();
 }

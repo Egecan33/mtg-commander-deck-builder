@@ -1,5 +1,5 @@
 import type {
-  CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommandersResponse, PartnersResponse, ScoredCard,
+  CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommanderSort, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
 import { overlapKey } from '@/engine/builder';
 import { normalizeName } from '@/engine/carddb';
@@ -13,6 +13,8 @@ import { poolIndex, toClientCard, toCommanderCard } from './cards';
 import type { ServerCardDb } from './carddb';
 import { activeFormat, deckCollection, ownedSet, ownedSetOf } from './collection';
 import { getAnalysis } from './context';
+import { commanderIndex, toCommanderTile } from './commander-index';
+import { discoverState, readBracket, readFreeOnly } from './discover';
 import { heldByFor } from './holders';
 import { HttpError, intParam, isObject } from './http';
 import { getCardDb } from './store';
@@ -170,12 +172,15 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
 
+const COMMANDER_SORTS: readonly CommanderSort[] = ['popularity', 'name', 'price', 'best'];
+
 /** The card data as the active collection builds: the Brawl (or Standard Brawl, per `arena`) view while an MTG Arena collection is active. */
 const activeDb = (arena?: unknown): ServerCardDb => getCardDb(activeFormat(arena));
 
 /**
- * Eligible commanders, most popular first, filtered by name/text and colour identity. While an MTG
- * Arena collection is active these are Brawl commanders: on Arena, planeswalkers included.
+ * Eligible commanders, filtered by name/text, colour identity, theme and ownership, most popular
+ * first unless another sort is asked for. While an MTG Arena collection is active these are Brawl
+ * commanders: on Arena, planeswalkers included (Standard Brawl: legal there).
  */
 export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const db = activeDb(params.get('arenaFormat'));
@@ -187,10 +192,21 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const colorOk = colorMatcher(parseColors(params.get('colors') ?? ''), MODES.includes(mode as ColorMode) ? (mode as ColorMode) : 'includes');
   const words = tokens(params.get('q'));
   const phrase = words.join(' ');
+  const sort = (params.get('sort') ?? 'popularity') as CommanderSort;
+  if (!COMMANDER_SORTS.includes(sort)) throw new HttpError(400, 'sort must be popularity, name, price or best.');
+  const axis = params.get('axis') || null;
+  const ownedOnly = params.get('owned') === '1';
+  const bracket = readBracket(params.get('bracket') ?? 3);
+  const state = discoverState(bracket, 'owned', readFreeOnly(params.get('free')), params.get('arenaFormat'));
+  const bestReady = state.status === 'done';
+  const format = formatOf(db);
+  const leads = commanderIndex(format).byId;
 
   const tiers: Card[][] = [[], [], []];
   for (const card of index.commanders) {
     if (colorOk && !colorOk(card)) continue;
+    if (ownedOnly && !owned.has(card.oracleId)) continue;
+    if (axis && !leads.get(card.oracleId)?.lead.includes(axis)) continue;
     if (words.length === 0) {
       tiers[0].push(card);
       continue;
@@ -200,9 +216,26 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
     const name = index.names[i];
     tiers[name === phrase || normalizeName(card.frontName) === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(card);
   }
-  const matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  let matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  const best = new Map<string, number>();
+  if (sort === 'name') matches = [...matches].sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'price') {
+    const price = (c: Card) => (typeof c.priceUsd === 'number' ? c.priceUsd : Number.POSITIVE_INFINITY);
+    matches = [...matches].sort((a, b) => (price(a) === price(b) ? 0 : price(a) < price(b) ? -1 : 1));
+  } else if (sort === 'best' && bestReady) {
+    for (const e of state.entries) if (e.tiers[0]) best.set(e.commander.oracleId, e.tiers[0].rating);
+    const ranked = matches.filter((c) => best.has(c.oracleId)).sort((a, b) => (best.get(b.oracleId) as number) - (best.get(a.oracleId) as number));
+    matches = [...ranked, ...matches.filter((c) => !best.has(c.oracleId))];
+  }
   const { start, end } = page(matches.length, pageNo, pageSize);
-  return { total: matches.length, page: pageNo, pageSize, commanders: matches.slice(start, end).map((c) => toCommanderCard(c, db, owned)) };
+  return {
+    total: matches.length, page: pageNo, pageSize, bestReady,
+    commanders: matches.slice(start, end).map((c) => {
+      const tile = toCommanderTile(c, owned, format);
+      const rating = best.get(c.oracleId);
+      return rating === undefined ? tile : { ...tile, best: rating };
+    }),
+  };
 }
 
 /**
@@ -218,5 +251,5 @@ export function partnersOf(oracleId: string): PartnersResponse {
   const rank = (c: Card) => ranks[position.get(c.oracleId) as number];
   const brawl = isBrawlFormat(formatOf(db));
   const partners = brawl ? [] : db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderCard(c, db, owned)) };
+  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned, formatOf(db))) };
 }

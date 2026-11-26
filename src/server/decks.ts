@@ -195,7 +195,7 @@ export function listDecks(collectionId: string = activeCollectionId()): DeckTile
     }
     const lookup = cardLookup(deck.commanders);
     tiles.push({
-      id: row.id, name: row.name, updatedAt: row.updated_at, targetBracket: deck.targetBracket, built: deck.built === true,
+      id: row.id, name: row.name, updatedAt: row.updated_at, targetBracket: deck.targetBracket, built: deck.built === true, chosenColor: deck.chosenColor ?? null,
       collectionId, format,
       commanders: deck.commanders.map((c) => lookup[c]).filter((c) => c !== undefined),
       ...n,
