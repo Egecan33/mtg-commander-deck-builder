@@ -192,8 +192,18 @@ export default function CollectionPage() {
       const prev = all[all.findIndex((x) => x.oracleId === c.oracleId) - 1]?.oracleId ?? null;
       const res = await adjustCollection(c.oracleId, delta);
       if (res.qty === 0) setGhosts((g) => [...g.filter((x) => x.card.oracleId !== c.oracleId), { card: { ...c, qty: 0, inBoxes: 0 }, prev }]);
+      if (delta < 0) {
+        // The tile's + is a plain add; Undo is what puts a copy back into the box it came out of.
+        const from = res.fromBoxes.length > 0 ? `, from ${res.fromBoxes.map((b) => b.name).join(', ')}` : '';
+        notify.info(`−${-delta} ${c.name}${from} (${res.qty} left)`, { label: 'Undo', run: () => void tileUndo(c, -delta, res.fromBoxes) });
+      }
       await changed();
     });
+  const tileUndo = (c: Owned, qty: number, fromBoxes: BoxTake[]) =>
+    exclusive(async () => {
+      await adjustCollection(c.oracleId, qty, fromBoxes);
+      await changed();
+    }, true);
 
   // Every owned card with the ghosts in their old cells (after the card that came before them).
   const all = useMemo(() => withGhosts(collection?.cards ?? [], ghosts), [collection, ghosts]);
