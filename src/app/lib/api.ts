@@ -22,9 +22,9 @@
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201). It belongs to
  *        `deck.collectionId` when that names a collection (400 when it names none), else to the active one.
  * GET  /api/decks/:id                   -> DeckResponse       404 when missing.
- * PUT  /api/decks/:id   {deck}          -> DeckResponse       replaces; 404 when missing. A `deck.collectionId`
- *        other than the deck's moves it to that collection ("Move to MTG Arena"): only `collectionId` changes,
- *        never the cards; without one the deck stays where it is.
+ * PUT  /api/decks/:id   {deck, move?}   -> DeckResponse       replaces; 404 when missing. The deck keeps its
+ *        stored collection whatever `deck.collectionId` says; `move: ID` ("Move to MTG Arena") moves it to that
+ *        collection (400 when there is none): only `collectionId` changes, never the cards.
  * DELETE /api/decks/:id                 -> { ok: true }       404 when missing.
  *        `deck.built: true` (the cards are really in this deck) is kept; any other value is dropped.
  *        Every deck belongs to one collection (`deck.collectionId`; decks saved before that read as
@@ -687,6 +687,9 @@ export const createDeck = (deck: Deck) => call<DeckResponse>('POST', '/api/decks
 export const getDeck = (id: string, signal?: AbortSignal) =>
   call<DeckResponse>('GET', `/api/decks/${encodeURIComponent(id)}`, undefined, signal);
 export const updateDeck = (id: string, deck: Deck) => call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck });
+/** Saves the deck and moves it to another collection (its cards stay as they are). */
+export const moveDeck = (id: string, deck: Deck, collectionId: string) =>
+  call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck, move: collectionId });
 export const deleteDeck = (id: string) => call<{ ok: true }>('DELETE', `/api/decks/${encodeURIComponent(id)}`);
 
 export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeResponse>('POST', '/api/analyze', { deck }, signal);

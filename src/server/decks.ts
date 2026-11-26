@@ -114,9 +114,11 @@ export function getDeck(id: string): { deck: Deck; updatedAt: string } | null {
 /**
  * Saves a deck: as a new one (fresh id) when `id` is omitted, else over the deck with that id.
  * A new deck belongs to the collection it names, else to the active one. An existing deck keeps
- * its collection unless `collectionId` names another (moving it: only `collectionId` changes).
+ * its stored collection whatever `deck.collectionId` says (an autosave from a page that has not seen
+ * a move must not undo it); only `move` (an existing collection's id, else a 400) moves it, and
+ * moving changes nothing but the collection.
  */
-export function saveDeck(deck: Deck, id?: string): { deck: Deck; updatedAt: string } | null {
+export function saveDeck(deck: Deck, id?: string, opts: { move?: string } = {}): { deck: Deck; updatedAt: string } | null {
   const db = getDb();
   const updatedAt = new Date().toISOString();
   if (id === undefined) {
@@ -127,13 +129,14 @@ export function saveDeck(deck: Deck, id?: string): { deck: Deck; updatedAt: stri
   }
   const row = db.prepare('SELECT id, name, json, updated_at FROM decks WHERE id = ?').get(id) as Row | undefined;
   if (!row) return null;
-  let stored: string = PHYSICAL_COLLECTION;
+  let stored: string;
   try {
     stored = readRow(row).collectionId ?? PHYSICAL_COLLECTION;
   } catch {
-    // a damaged row: the new body decides
+    // a damaged row: the body's collection if it names one, else Physical
+    stored = deck.collectionId && collectionKind(deck.collectionId) !== null ? deck.collectionId : PHYSICAL_COLLECTION;
   }
-  const collectionId = deck.collectionId ? requireCollection(deck.collectionId) : stored;
+  const collectionId = opts.move !== undefined ? requireCollection(opts.move) : stored;
   const saved: Deck = { ...deck, id, collectionId };
   const res = db.prepare('UPDATE decks SET name = ?, json = ?, updated_at = ? WHERE id = ?').run(saved.name, JSON.stringify(saved), updatedAt, id);
   return res.changes > 0 ? { deck: saved, updatedAt } : null;

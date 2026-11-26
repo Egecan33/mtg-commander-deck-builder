@@ -24,7 +24,8 @@ export const PUT = (req: Request, { params }: Ctx) =>
   handle(async () => {
     const { id } = await params;
     const body = await readBody(req);
-    const saved = saveDeck(sanitizeDeck(body.deck), id);
+    if (body.move !== undefined && typeof body.move !== 'string') throw new HttpError(400, 'move must be the id of a collection.');
+    const saved = saveDeck(sanitizeDeck(body.deck), id, { move: body.move as string | undefined });
     if (!saved) throw new HttpError(404, 'No such deck.');
     return respond(saved);
   });

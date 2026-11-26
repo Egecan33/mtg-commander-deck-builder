@@ -81,19 +81,31 @@ describe('decks belong to a collection', () => {
   it('moves a deck between collections without touching its cards', async () => {
     const saved = await ok<DeckResponse>(send(decksRoute.POST, 'POST', '/api/decks', { deck: deckOf('Elves', 'Lathril, Blade of the Elves', ['Sol Ring', 'Llanowar Elves']) }));
     const deckId = saved.deck.id!;
-    const moved = await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...saved.deck, collectionId: 'arena' } }, { id: deckId }));
+    const moved = await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: saved.deck, move: 'arena' }, { id: deckId }));
     expect(moved.deck.collectionId).toBe('arena');
     expect(moved.format).toBe('brawl');
     expect({ c: moved.deck.commanders, m: moved.deck.main, k: moved.deck.companion }).toEqual({ c: saved.deck.commanders, m: saved.deck.main, k: saved.deck.companion });
-    const back = await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...moved.deck, collectionId: 'physical' } }, { id: deckId }));
+    const back = await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: moved.deck, move: 'physical' }, { id: deckId }));
+    expect(back.deck.collectionId).toBe('physical');
     expect(back.deck.main).toEqual(saved.deck.main);
     // A save that does not name a collection keeps the deck where it is.
     const { collectionId: _drop, ...rest } = back.deck;
     void _drop;
     setActiveCollection('arena');
     expect((await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: rest }, { id: deckId }))).deck.collectionId).toBe('physical');
-    const bad = await send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...back.deck, collectionId: 'nope' } }, { id: deckId });
+    const bad = await send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: back.deck, move: 'nope' }, { id: deckId });
     expect(bad.status).toBe(400);
+  });
+
+  it('moves a deck only when asked: an ordinary save that carries another collection does not', async () => {
+    const saved = await ok<DeckResponse>(send(decksRoute.POST, 'POST', '/api/decks', { deck: deckOf('Elves', 'Lathril, Blade of the Elves', []) }));
+    const deckId = saved.deck.id!;
+    await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: saved.deck, move: 'arena' }, { id: deckId }));
+    // An autosave from a page still holding the deck as it was before the move.
+    const late = await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...saved.deck, name: 'Renamed', collectionId: 'physical' } }, { id: deckId }));
+    expect(late.deck.collectionId).toBe('arena');
+    expect(late.deck.name).toBe('Renamed');
+    expect(getDeck(deckId)!.deck.collectionId).toBe('arena');
   });
 
   it('lets only a collection\'s own built decks hold its copies', async () => {
@@ -101,7 +113,7 @@ describe('decks belong to a collection', () => {
     expect(holdersFor('physical').map((h) => h.name)).toEqual(['Built (built)']);
     expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(1);
     const deckId = saved.deck.id!;
-    await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...saved.deck, collectionId: 'arena' } }, { id: deckId }));
+    await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: saved.deck, move: 'arena' }, { id: deckId }));
     expect(holdersFor('physical')).toEqual([]);
     expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(0);
   });

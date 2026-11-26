@@ -8,7 +8,7 @@ import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
-  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
+  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, moveDeck, takeFromBox, updateDeck,
   type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import { setFilters, useFilters } from '../../lib/filters';
@@ -440,7 +440,7 @@ export function Builder({ id }: { id: string }) {
     if (!deck) return;
     setMoving(true);
     try {
-      await updateDeck(id, { ...deck, collectionId: to.id });
+      await moveDeck(id, deck, to.id);
       dirty.current = false;
       switched.current = true;
       await switchTo(to.id, `Moved to your ${to.name} collection: it is now checked as a ${to.kind === 'arena' ? 'Brawl' : 'Commander'} deck.`);
