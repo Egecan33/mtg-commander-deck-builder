@@ -20,8 +20,8 @@ describe('Standard Brawl rating', () => {
   });
 
   it('spreads proportionally and keeps the total', () => {
-    expect(spreadWeights({ a: 50, b: 30, c: 20 }, 'a')).toEqual({ a: 0, b: 60, c: 40 });
-    expect(sum(spreadWeights({ a: 8, b: 16, c: 14, d: 62 }, 'a'))).toBe(100);
+    expect(spreadWeights<'a' | 'b' | 'c'>({ a: 50, b: 30, c: 20 }, 'a')).toEqual({ a: 0, b: 60, c: 40 });
+    expect(sum(spreadWeights<'a' | 'b' | 'c' | 'd'>({ a: 8, b: 16, c: 14, d: 62 }, 'a'))).toBe(100);
   });
 
   it('rates a legal 60-card deck as complete, without a bracket sub-score, and says so', () => {
