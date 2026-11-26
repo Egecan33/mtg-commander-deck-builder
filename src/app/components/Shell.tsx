@@ -11,10 +11,25 @@ import { errText, fmtDate, isAbort } from '../lib/ui';
 
 // ---------------------------------------------------------------------------------------------
 // Messages: API errors and confirmations. Errors stay until dismissed.
+//
+// Nothing in the stack moves while the pointer is over it: a message whose button was used stays
+// in its place as "Undone" (or "<label>: done"), and messages that time out, are dismissed or
+// are trimmed only go once the pointer has left. Otherwise a quick second click lands on the
+// message that slid into the same place and runs its Undo too.
 
-/** A button on a confirmation, e.g. Undo. Clicking it runs `run` and closes the message. */
+/** A button on a confirmation, e.g. Undo. Clicking it runs `run` once and marks the message done. */
 export interface NotifyAction { label: string; run: () => void }
-interface Message { id: number; kind: 'error' | 'info'; text: string; action?: NotifyAction }
+interface Message {
+  id: number; kind: 'error' | 'info'; text: string; action?: NotifyAction;
+  /** Its action ran: shown as done, without buttons, until it goes. */
+  done?: boolean;
+  /** Dismissed while the pointer was over the stack: hidden, keeps its place, leaves when the pointer does. */
+  leaving?: boolean;
+  /** Timed out while the pointer was over the stack: stays usable, leaves when the pointer does. */
+  expired?: boolean;
+}
+const MAX_MESSAGES = 5;
+const doneText = (a: NotifyAction): string => (a.label === 'Undo' ? 'Undone' : `${a.label}: done`);
 interface Notify { error: (e: unknown) => void; info: (text: string, action?: NotifyAction) => void }
 const NotifyContext = createContext<Notify>({ error: () => {}, info: () => {} });
 export const useNotify = (): Notify => useContext(NotifyContext);
@@ -81,13 +96,49 @@ export function Shell({ children }: { children: ReactNode }) {
   const [staleHidden, setStaleHidden] = useState(false);
   const nextId = useRef(1);
 
-  const dismiss = useCallback((id: number) => setMessages((m) => m.filter((x) => x.id !== id)), []);
+  const hovering = useRef(false);
+  // Removes a message now, or, while the pointer is over the stack, marks it to leave with the pointer.
+  const dismiss = useCallback(
+    (id: number) =>
+      setMessages((m) => (hovering.current ? m.map((x) => (x.id === id ? { ...x, leaving: true } : x)) : m.filter((x) => x.id !== id))),
+    [],
+  );
+  // A timeout: the same, except that a message under the pointer stays visible and usable until the pointer leaves.
+  const expire = useCallback(
+    (id: number) =>
+      setMessages((m) => (hovering.current ? m.map((x) => (x.id === id ? { ...x, expired: true } : x)) : m.filter((x) => x.id !== id))),
+    [],
+  );
+  // Ids whose action already ran: a second click can arrive before the "done" state renders.
+  const actioned = useRef(new Set<number>());
+  const runAction = useCallback(
+    (msg: Message) => {
+      if (!msg.action || actioned.current.has(msg.id)) return;
+      actioned.current.add(msg.id);
+      setMessages((m) => m.map((x) => (x.id === msg.id ? { ...x, done: true } : x)));
+      msg.action.run();
+      setTimeout(() => expire(msg.id), 2500);
+    },
+    [expire],
+  );
+  const pointerEnter = useCallback(() => {
+    hovering.current = true;
+  }, []);
+  const pointerLeave = useCallback(() => {
+    hovering.current = false;
+    setMessages((m) => m.filter((x) => !x.leaving && !x.done && !x.expired).slice(-MAX_MESSAGES));
+  }, []);
   const notify = useMemo<Notify>(() => {
     const push = (kind: Message['kind'], text: string, action?: NotifyAction) => {
       const id = nextId.current++;
-      setMessages((m) => (m.some((x) => x.text === text && x.kind === kind) ? m : [...m.slice(-4), { id, kind, text, action }]));
+      setMessages((m) => {
+        if (m.some((x) => !x.done && !x.leaving && !x.expired && x.text === text && x.kind === kind)) return m;
+        const next = [...m, { id, kind, text, action }];
+        if (hovering.current) return next; // trimmed when the pointer leaves, so nothing shifts under it
+        return next.slice(-MAX_MESSAGES);
+      });
       // A message with an Undo stays a little longer, so there is time to use it.
-      if (kind === 'info') setTimeout(() => dismiss(id), action ? 9000 : 4000);
+      if (kind === 'info') setTimeout(() => expire(id), action ? 9000 : 4000);
     };
     return {
       error: (e) => {
@@ -95,7 +146,7 @@ export function Shell({ children }: { children: ReactNode }) {
       },
       info: (text, action) => push('info', text, action),
     };
-  }, [dismiss]);
+  }, [expire]);
 
   const refresh = useCallback(async () => {
     try {
@@ -291,33 +342,44 @@ export function Shell({ children }: { children: ReactNode }) {
           <main key={ownedEpoch} className="min-h-0 flex-1 overflow-auto">{notReady && pathname !== '/data' ? null : children}</main>
         </div>
 
-        <div className="no-print pointer-events-none fixed bottom-4 left-4 z-[80] flex w-[26rem] flex-col gap-2" aria-live="polite">
+        <div
+          className="no-print fixed bottom-4 left-4 z-[80] flex w-[26rem] flex-col gap-2"
+          aria-live="polite"
+          onPointerEnter={pointerEnter}
+          onPointerLeave={pointerLeave}
+          data-testid="message-stack"
+        >
           {messages.map((m) => (
             <div
               key={m.id}
               role={m.kind === 'error' ? 'alert' : 'status'}
               data-testid={m.kind === 'error' ? 'error-message' : 'info-message'}
-              className={`pointer-events-auto flex items-start gap-3 rounded-md border px-3.5 py-2.5 text-[0.875rem] shadow-xl ${
+              data-done={m.done ? 'yes' : undefined}
+              aria-hidden={m.leaving ? true : undefined}
+              className={`flex items-start gap-3 rounded-md border px-3.5 py-2.5 text-[0.875rem] shadow-xl ${
                 m.kind === 'error' ? 'border-band-low bg-[#3a1a16] text-bone' : 'border-slag bg-iron text-bone'
-              }`}
+              } ${m.leaving ? 'invisible' : ''} ${m.done ? 'opacity-70' : ''}`}
             >
               <span className="min-w-0 flex-1 break-words">{m.text}</span>
-              {m.action && (
-                <button
-                  type="button"
-                  className="shrink-0 font-medium text-brass hover:text-bone"
-                  onClick={() => {
-                    dismiss(m.id);
-                    m.action?.run();
-                  }}
-                  data-testid="message-action"
-                >
-                  {m.action.label}
-                </button>
+              {m.done && m.action ? (
+                <span className="shrink-0 text-ash" data-testid="message-done">{doneText(m.action)}</span>
+              ) : (
+                <>
+                  {m.action && (
+                    <button
+                      type="button"
+                      className="shrink-0 font-medium text-brass hover:text-bone"
+                      onClick={() => runAction(m)}
+                      data-testid="message-action"
+                    >
+                      {m.action.label}
+                    </button>
+                  )}
+                  <button type="button" className="shrink-0 text-ash hover:text-bone" onClick={() => dismiss(m.id)} aria-label="Dismiss message">
+                    Dismiss
+                  </button>
+                </>
               )}
-              <button type="button" className="shrink-0 text-ash hover:text-bone" onClick={() => dismiss(m.id)} aria-label="Dismiss message">
-                Dismiss
-              </button>
             </div>
           ))}
         </div>
