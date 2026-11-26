@@ -11,6 +11,7 @@ import { newCardIds, newestSets } from '@/server/sets';
 import { updateSettings } from '@/server/settings';
 import { dropCaches } from '@/server/state';
 import { getCardDb, getDb } from '@/server/store';
+import { sanitizeDeck, saveDeck } from '@/server/decks';
 import { cacheEdhrecPage, callRoute, seedDb, useServerDb } from './server-db';
 
 beforeAll(() => useServerDb(seedDb()), 60_000);
@@ -184,5 +185,30 @@ describe('filters', () => {
     expect((await recs('krenko-mob-boss', '?budget=cheap')).status).toBe(400);
     expect((await recs('krenko-mob-boss', '?bracket=9')).status).toBe(400);
     expect(commanderRecs([KRENKO()], { bracket: 3, budget: 'any', ownedOnly: false, freeOnly: false }).sections.length).toBeGreaterThan(4);
+  });
+});
+
+describe('the memo', () => {
+  const Q = { bracket: 3, budget: 'any', ownedOnly: false, freeOnly: false, color: null } as const;
+
+  it('does not keep the "!" holder marks: a deck built afterwards shows at once', () => {
+    replaceCollection('1 Sol Ring');
+    const sol = card('Sol Ring').oracleId;
+    const before = commanderRecs([KRENKO()], Q);
+    expect(before.heldBy[sol]).toBeUndefined();
+    saveDeck(sanitizeDeck({ name: 'Holds it', commanders: [KRENKO()], built: true, targetBracket: 3, main: [{ oracleId: sol, qty: 1 }] }));
+    const after = commanderRecs([KRENKO()], Q);
+    expect(after.cards[sol]).toBeDefined();
+    expect(after.heldBy[sol]).toBeDefined();
+    expect(commanderRecs([KRENKO()], Q).sections).toBe(after.sections);
+    replaceCollection('');
+  });
+
+  it('is dropped when the MLD or extra-turn overrides change', () => {
+    const a = commanderRecs([KRENKO()], Q);
+    expect(commanderRecs([KRENKO()], Q).sections).toBe(a.sections);
+    updateSettings({ mldOverrides: { [card('Sol Ring').oracleId]: true } });
+    expect(commanderRecs([KRENKO()], Q).sections).not.toBe(a.sections);
+    updateSettings({ mldOverrides: {} });
   });
 });

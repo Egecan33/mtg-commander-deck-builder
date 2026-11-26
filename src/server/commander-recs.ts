@@ -80,7 +80,7 @@ const edhrecId = (data: object | null): number => {
 
 const nameOf = (cards: readonly Card[]): string => cards.map((c) => c.frontName).join(' and ');
 
-/** Card recs for one or two commanders. Memoised per commanders, query and EDHREC data. */
+/** Card recs for one or two commanders. Memoised per commanders, query and EDHREC data; the "!" marks are not part of the memo. */
 export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecsResponse {
   const db = getCardDb();
   const ids = [...commanders].sort();
@@ -94,7 +94,7 @@ export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecs
   if (hit) {
     memo.delete(key);
     memo.set(key, hit);
-    return hit;
+    return { ...hit, heldBy: heldByFor(shell, Object.keys(hit.scores)) };
   }
 
   const pool = analysis.pool();
@@ -172,10 +172,11 @@ export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecs
   const scores: Record<string, CardScore> = {};
   for (const id of listed) scores[id] = scoreOf.get(id) as CardScore;
 
+  // The "!" marks are worked out per request (boxes and built decks change without the commander changing), so the memo holds none.
   const response: CommanderRecsResponse = {
-    commanders, query: q, edhrec: analysis.edhrec, sections: real, scores, cards: cardLookup(listed), heldBy: heldByFor(shell, listed),
+    commanders, query: q, edhrec: analysis.edhrec, sections: real, scores, cards: cardLookup(listed), heldBy: {},
   };
   memo.set(key, response);
   while (memo.size > MAX_MEMO) memo.delete(memo.keys().next().value as string);
-  return response;
+  return { ...response, heldBy: heldByFor(shell, listed) };
 }
