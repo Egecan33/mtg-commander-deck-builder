@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { EmptyState } from '@/app/components/EmptyState';
 import { FilterBar } from '@/app/components/FilterBar';
 import { useFreeOnly } from '@/app/components/held';
-import { useNotify } from '@/app/components/Shell';
+import { useBuildFormat, useNotify } from '@/app/components/Shell';
 import {
   ApiError, buildDeck, createDeck, getCommanderPage, getCommanderRecs, getPartners, loadEdhrec,
   type CommanderCard, type CommanderPageResponse, type CommanderRecsResponse, type RecsQuery,
@@ -36,6 +36,9 @@ export function CommanderPage({ slug }: { slug: string }) {
   const params = useSearchParams();
   const notify = useNotify();
   const filters = useFilters();
+  // MTG Arena: Brawl (100) or Standard Brawl (60), chosen in the top bar. Standard Brawl has no brackets and no EDHREC.
+  const buildFormat = useBuildFormat();
+  const std = buildFormat === 'standardbrawl';
   const [freeOnly] = useFreeOnly();
   const withSlug = params.get('with') ?? undefined;
   const colorParam = params.get('color');
@@ -52,8 +55,11 @@ export function CommanderPage({ slug }: { slug: string }) {
   const ready = filters.ready && freeOnly !== null;
 
   const q: RecsQuery = useMemo(
-    () => ({ bracket: filters.bracket, budget: filters.budget, ownedOnly: filters.ownedOnly, freeOnly: filters.ownedOnly && freeOnly === true, color }),
-    [filters.bracket, filters.budget, filters.ownedOnly, freeOnly, color],
+    () => ({
+      bracket: std ? 3 : filters.bracket, budget: filters.budget, ownedOnly: filters.ownedOnly, freeOnly: filters.ownedOnly && freeOnly === true, color,
+      ...(std ? { arenaFormat: 'standardbrawl' as const } : {}),
+    }),
+    [std, filters.bracket, filters.budget, filters.ownedOnly, freeOnly, color],
   );
 
   // Arriving from Best from collection: tick Only my collection, then take the parameters out of the address.
@@ -84,25 +90,25 @@ export function CommanderPage({ slug }: { slug: string }) {
   useEffect(() => {
     if (!ready) return;
     const ctrl = new AbortController();
-    getCommanderPage(slug, { with: withSlug, bracket: q.bracket, color }, ctrl.signal).then(
+    getCommanderPage(slug, { with: withSlug, bracket: q.bracket, color, arenaFormat: q.arenaFormat }, ctrl.signal).then(
       (p) => { setPage(p); setMissing(null); },
       (e) => { if (!isAbort(e)) { if (e instanceof ApiError && e.status >= 400 && e.status < 500) setMissing(e.message); else notify.error(e); } },
     );
     return () => ctrl.abort();
-  }, [ready, slug, withSlug, q.bracket, color, tick, notify]);
+  }, [ready, slug, withSlug, q.bracket, q.arenaFormat, color, tick, notify]);
 
   // Opening a commander page counts as picking the commander: one EDHREC read per page open (a no-op while EDHREC is off).
   const asked = useRef('');
   const pageKey = page?.commanders.map((c) => c.oracleId).join('+') ?? '';
   useEffect(() => {
-    if (!page || asked.current === pageKey) return;
+    if (!page || std || asked.current === pageKey) return;
     asked.current = pageKey;
     const was = page.edhrec;
     loadEdhrec(page.commanders.map((c) => c.oracleId), page.bracket).then(
       (r) => { if (r.status === 'ready' && was !== 'ready') setTick((n) => n + 1); },
       () => undefined,
     );
-  }, [page, pageKey]);
+  }, [page, pageKey, std]);
 
   // The recs, only while their tab is open.
   useEffect(() => {
@@ -143,7 +149,7 @@ export function CommanderPage({ slug }: { slug: string }) {
       const label = kind === 'best' ? `${name} (from my collection)` : name;
       setBusy(kind);
       try {
-        let deck = shellDeck(ids, q.bracket, label, color);
+        let deck = shellDeck(ids, q.bracket, label, color, q.arenaFormat);
         if (kind !== 'empty') {
           const owned = kind === 'best' ? true : q.ownedOnly;
           const free = kind === 'best' ? freeOnly === true : q.ownedOnly && freeOnly === true;
@@ -183,7 +189,7 @@ export function CommanderPage({ slug }: { slug: string }) {
             ))}
           </div>
           <FilterBar
-            show={tab === 'recs' ? ['bracket', 'budget', 'ownedOnly', 'freeOnly', 'size', 'view', 'groupBy', 'sort'] : ['bracket', 'budget', 'ownedOnly', 'freeOnly']}
+            show={[...(std ? [] : ['bracket' as const]), 'budget', 'ownedOnly', 'freeOnly', ...(tab === 'recs' ? ['size' as const, 'view' as const, 'groupBy' as const, 'sort' as const] : [])]}
             groups={REC_GROUPS}
             sorts={REC_SORTS}
             className="!p-0"

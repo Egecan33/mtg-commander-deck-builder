@@ -46,8 +46,7 @@ export function toCommanderCard(card: Card, db: CardDb, owned: ReadonlySet<strin
 }
 
 /** ClientCards for every known id in `ids`; unknown ids are simply absent. */
-export function cardLookup(ids: Iterable<string | null | undefined>): CardLookup {
-  const db = getCardDb();
+export function cardLookup(ids: Iterable<string | null | undefined>, db: ServerCardDb = getCardDb()): CardLookup {
   const owned = ownedSet();
   const out: CardLookup = {};
   for (const id of ids) {

@@ -3,7 +3,7 @@ import { budgetMax } from '@/app/lib/budget';
 import type { AxisId, Card, Color } from '@/engine/types';
 import { resolveThemeWeights } from '@/engine/summary';
 import { ownedSet } from './collection';
-import { commanderIndex, commanderShell, toCommanderTile } from './commander-index';
+import { commanderFormat, commanderIndex, commanderShell, toCommanderTile } from './commander-index';
 import { allowedIdentity } from '@/engine/rules';
 import { getCardDb } from './store';
 
@@ -62,18 +62,19 @@ export function rankSimilar(
 }
 
 /** The owned and budget filters apply before the cut to `SIMILAR_LIMIT`, so a filtered view is not left empty by the top 24. */
-export function similarCommanders(cards: Card[], q: Pick<RecsQuery, 'ownedOnly' | 'budget'> = { ownedOnly: false, budget: 'any' }): SimilarResponse {
-  const db = getCardDb();
-  const index = commanderIndex();
+export function similarCommanders(cards: Card[], q: Pick<RecsQuery, 'ownedOnly' | 'budget' | 'arenaFormat'> = { ownedOnly: false, budget: 'any' }): SimilarResponse {
+  const format = commanderFormat(q.arenaFormat);
+  const db = getCardDb(format);
+  const index = commanderIndex(format);
   const ids = cards.map((c) => c.oracleId);
   const weights =
     cards.length === 1
       ? (index.byId.get(ids[0])?.weights ?? {})
-      : resolveThemeWeights(commanderShell(ids, 3), { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} });
-  const identity = [...allowedIdentity(commanderShell(ids, 3), db)];
+      : resolveThemeWeights(commanderShell(ids, 3, null, format), { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} });
+  const identity = [...allowedIdentity(commanderShell(ids, 3, null, format), db)];
   const owned = ownedSet();
   const cap = budgetMax(q.budget);
   const keep = (c: Card) => (!q.ownedOnly || owned.has(c.oracleId)) && (cap === null || (typeof c.priceUsd === 'number' && c.priceUsd <= cap));
   const { basis, ranked } = rankSimilar({ ids, identity, weights }, index.entries, SIMILAR_LIMIT, keep);
-  return { basis, commanders: ranked.map((r) => ({ ...toCommanderTile(r.card, owned), similarity: r.similarity, colorsOff: r.colorsOff })) };
+  return { basis, commanders: ranked.map((r) => ({ ...toCommanderTile(r.card, owned, format), similarity: r.similarity, colorsOff: r.colorsOff })) };
 }

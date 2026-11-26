@@ -5,9 +5,9 @@ import { isBasicLand } from '@/engine/rules';
 import { AXIS_MEMBER } from '@/engine/summary';
 import type { Card, CardFeatures, CardScore, Color } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
-import { ownedSet } from './collection';
+import { ownedSet, readArenaFormat } from './collection';
 import { getAnalysis } from './context';
-import { commanderShell } from './commander-index';
+import { commanderFormat, commanderShell } from './commander-index';
 import { freeOwnedSet, heldByFor } from './holders';
 import { HttpError } from './http';
 import { readBracket } from './discover';
@@ -24,7 +24,7 @@ export function readRecsQuery(params: URLSearchParams): RecsQuery {
   const budget = params.get('budget') ?? 'any';
   if (!BUDGETS.includes(budget as Budget)) throw new HttpError(400, 'budget must be any, under-5 or under-1.');
   const ownedOnly = params.get('owned') === '1';
-  return { bracket: readBracket(params.get('bracket') ?? 3), budget: budget as Budget, ownedOnly, freeOnly: ownedOnly && params.get('free') === '1', color: readColor(params) };
+  return { bracket: readBracket(params.get('bracket') ?? 3), budget: budget as Budget, ownedOnly, freeOnly: ownedOnly && params.get('free') === '1', color: readColor(params), ...(readArenaFormat(params.get('arenaFormat')) === 'standardbrawl' ? { arenaFormat: 'standardbrawl' as const } : {}) };
 }
 
 /** `color=W|U|B|R|G`: the colour chosen for a colour-choice commander; absent is null, anything else a 400. */
@@ -82,13 +82,14 @@ const nameOf = (cards: readonly Card[]): string => cards.map((c) => c.frontName)
 
 /** Card recs for one or two commanders. Memoised per commanders, query and EDHREC data; the "!" marks are not part of the memo. */
 export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecsResponse {
-  const db = getCardDb();
+  const format = commanderFormat(q.arenaFormat);
+  const db = getCardDb(format);
   const ids = [...commanders].sort();
-  const shell = commanderShell(commanders, q.bracket, q.color ?? null);
+  const shell = commanderShell(commanders, q.bracket, q.color ?? null, format);
   const analysis = getAnalysis(shell);
   const owned = ownedFor(q);
   const free = q.freeOnly && owned ? createHash('sha1').update([...owned].sort().join(',')).digest('hex') : '';
-  const key = JSON.stringify([ids, q, edhrecId(analysis.ctx.edhrec), free]);
+  const key = JSON.stringify([ids, q, format, edhrecId(analysis.ctx.edhrec), free]);
   const memo = cacheSlot('commander-recs', () => new Map<string, CommanderRecsResponse>());
   const hit = memo.get(key);
   if (hit) {
@@ -155,7 +156,7 @@ export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecs
     section('new', 'New cards', fresh ? P.filter((x) => fresh.has(x.card.oracleId)) : [], sets.length > 0 ? `From ${sets.map((s) => s.name).join(' and ')}` : undefined, true),
     section('synergy', 'High synergy', nonland.filter((x) => share(x.score, 'synergy') >= 0.5).sort((a, b) => share(b.score, 'synergy') - share(a.score, 'synergy') || byDefault(a, b)), undefined, true),
     section('top', 'Top cards', [...nonland].sort((a, b) => share(b.score, 'quality') - share(a.score, 'quality') || byDefault(a, b)), undefined, true),
-    q.bracket >= 3 ? section('game-changers', 'Game Changers', P.filter((x) => x.card.gameChanger), undefined, true) : null,
+    format !== 'standardbrawl' && q.bracket >= 3 ? section('game-changers', 'Game Changers', P.filter((x) => x.card.gameChanger), undefined, true) : null,
     section('owned', 'In your collection', P.filter((x) => (owned ?? ownedAll).has(x.card.oracleId)), undefined, true),
   ];
   const byType = new Map<RecTypeId, typeof P>();
@@ -174,7 +175,7 @@ export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecs
 
   // The "!" marks are worked out per request (boxes and built decks change without the commander changing), so the memo holds none.
   const response: CommanderRecsResponse = {
-    commanders, query: q, edhrec: analysis.edhrec, sections: real, scores, cards: cardLookup(listed), heldBy: {},
+    commanders, query: q, edhrec: analysis.edhrec, sections: real, scores, cards: cardLookup(listed, db), heldBy: {},
   };
   memo.set(key, response);
   while (memo.size > MAX_MEMO) memo.delete(memo.keys().next().value as string);

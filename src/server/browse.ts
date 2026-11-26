@@ -197,9 +197,10 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const axis = params.get('axis') || null;
   const ownedOnly = params.get('owned') === '1';
   const bracket = readBracket(params.get('bracket') ?? 3);
-  const state = discoverState(bracket, 'owned', readFreeOnly(params.get('free')));
+  const state = discoverState(bracket, 'owned', readFreeOnly(params.get('free')), params.get('arenaFormat'));
   const bestReady = state.status === 'done';
-  const leads = commanderIndex().byId;
+  const format = formatOf(db);
+  const leads = commanderIndex(format).byId;
 
   const tiers: Card[][] = [[], [], []];
   for (const card of index.commanders) {
@@ -230,7 +231,7 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   return {
     total: matches.length, page: pageNo, pageSize, bestReady,
     commanders: matches.slice(start, end).map((c) => {
-      const tile = toCommanderTile(c, owned);
+      const tile = toCommanderTile(c, owned, format);
       const rating = best.get(c.oracleId);
       return rating === undefined ? tile : { ...tile, best: rating };
     }),
@@ -250,5 +251,5 @@ export function partnersOf(oracleId: string): PartnersResponse {
   const rank = (c: Card) => ranks[position.get(c.oracleId) as number];
   const brawl = isBrawlFormat(formatOf(db));
   const partners = brawl ? [] : db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned)) };
+  return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned, formatOf(db))) };
 }

@@ -26,7 +26,7 @@
  * GET  /api/themes/:axis?colors&bracket -> ThemeResponse    :axis is the slug ("typal-elf", "tokens"; 404 when not listed). The commanders
  *        that lead the theme (inside `colors` when given, most played first) and up to 60 cards that serve it best, scored
  *        as in a deck of that theme alone at `bracket`. Text only: no EDHREC data.
- * GET  /api/commander/:slug?with&bracket&color -> CommanderPageResponse
+ * GET  /api/commander/:slug?with&bracket&arenaFormat&color -> CommanderPageResponse
  *        The header of a commander page. `slug` is EDHREC's URL form of the front name ("mr-spock-science-officer");
  *        the full-name form and any letter case also resolve, and two names that slug alike get "<slug>-<8 id characters>".
  *        `with` is a partner's slug (the page is then the pair's: identity is the union, `decks` only the decks with
@@ -461,6 +461,8 @@ export interface RecsQuery {
   bracket: Bracket; budget: Budget; ownedOnly: boolean; freeOnly: boolean;
   /** The colour chosen for a colour-choice commander (Clara Oswald and the like). */
   color?: Color | null;
+  /** 'standardbrawl' while an MTG Arena collection is active and Standard Brawl is chosen; else absent (Brawl on Arena, Commander otherwise). */
+  arenaFormat?: ArenaFormat;
 }
 export type RecTypeId = 'creatures' | 'instants' | 'sorceries' | 'utility-artifacts' | 'mana-artifacts' | 'enchantments' | 'planeswalkers' | 'utility-lands' | 'lands' | 'other';
 export type RecSectionId = 'new' | 'synergy' | 'top' | 'game-changers' | 'owned' | RecTypeId;
@@ -900,21 +902,21 @@ export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal
     undefined,
     signal,
   );
-export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket; color?: Color | null }, signal?: AbortSignal) =>
-  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query({ with: o.with, bracket: o.bracket, color: o.color ?? undefined })}`, undefined, signal);
+export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket; color?: Color | null; arenaFormat?: ArenaFormat }, signal?: AbortSignal) =>
+  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query({ with: o.with, bracket: o.bracket, color: o.color ?? undefined, arenaFormat: o.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
   call<CommanderRecsResponse>(
     'GET',
-    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined })}`,
+    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
     undefined,
     signal,
   );
-export const getSimilarCommanders = (slug: string, withSlug: string | undefined, q: Pick<RecsQuery, 'budget' | 'ownedOnly'>, signal?: AbortSignal) =>
-  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug, budget: q.budget, owned: q.ownedOnly ? 1 : undefined })}`, undefined, signal);
+export const getSimilarCommanders = (slug: string, withSlug: string | undefined, q: Pick<RecsQuery, 'budget' | 'ownedOnly' | 'arenaFormat'>, signal?: AbortSignal) =>
+  call<SimilarResponse>('GET', `/api/commander/${encodeURIComponent(slug)}/similar${query({ with: withSlug, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
   call<CommanderCombosResponse>(
     'GET',
-    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined })}`,
+    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined, arenaFormat: q.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
     undefined,
     signal,
   );

@@ -3,7 +3,7 @@ import { budgetMax } from '@/app/lib/budget';
 import { COMBO_TAG, identityCombos } from '@/engine/brackets';
 import type { Card, FoundCombo } from '@/engine/types';
 import { cardLookup } from './cards';
-import { commanderShell } from './commander-index';
+import { commanderFormat, commanderShell } from './commander-index';
 import { ownedFor } from './commander-recs';
 import { heldByFor } from './holders';
 import { cacheSlot } from './state';
@@ -13,13 +13,14 @@ export const MAX_COMBOS = 100;
 
 /** Combos a commander can field, narrowed by the query. The identity pass is cached per commanders. */
 export function commanderCombos(cards: Card[], q: RecsQuery): CommanderCombosResponse {
-  const db = getCardDb();
+  const format = commanderFormat(q.arenaFormat);
+  const db = getCardDb(format);
   const ids = cards.map((c) => c.oracleId);
-  const key = `${[...ids].sort().join('+')}|${q.color ?? ''}`;
+  const key = `${[...ids].sort().join('+')}|${q.color ?? ''}|${format}`;
   const memo = cacheSlot('commander-combos', () => new Map<string, FoundCombo[]>());
   let all = memo.get(key);
   if (!all) {
-    all = identityCombos(commanderShell(ids, 3, q.color ?? null), db);
+    all = identityCombos(commanderShell(ids, 3, q.color ?? null, format), db);
     memo.set(key, all);
     while (memo.size > 24) memo.delete(memo.keys().next().value as string);
   }
@@ -27,7 +28,8 @@ export function commanderCombos(cards: Card[], q: RecsQuery): CommanderCombosRes
   const owned = ownedFor(q);
   const cap = budgetMax(q.budget);
   const kept = all.filter((f) => {
-    if (COMBO_TAG[f.combo.bracketTag].bracket > q.bracket) return false;
+    // Standard Brawl has no brackets: no combo is kept out for its bracket.
+    if (format !== 'standardbrawl' && COMBO_TAG[f.combo.bracketTag].bracket > q.bracket) return false;
     for (const p of f.combo.cards) {
       if (commanders.has(p.oracleId)) continue;
       if (owned && !owned.has(p.oracleId)) return false;
@@ -44,7 +46,7 @@ export function commanderCombos(cards: Card[], q: RecsQuery): CommanderCombosRes
     total: kept.length,
     withCommander: kept.filter((f) => f.combo.cards.some((p) => commanders.has(p.oracleId))).length,
     combos: listed,
-    cards: cardLookup(pieceIds),
-    heldBy: heldByFor(commanderShell(ids, q.bracket, q.color ?? null), pieceIds),
+    cards: cardLookup(pieceIds, db),
+    heldBy: heldByFor(commanderShell(ids, q.bracket, q.color ?? null, format), pieceIds),
   };
 }

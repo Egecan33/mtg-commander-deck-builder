@@ -61,7 +61,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
         <span data-testid="average-legal" className={rating.legal ? 'text-bone' : 'text-band-low'}>
           {rating.legal ? 'Legal' : `Not legal: ${rating.violations[0]?.message ?? 'this deck breaks a rule'}`}
         </span>
-        <span className="text-ash" title="Forge: the lowest bracket the deck's cards fit">Plays like Bracket {analysis.bracket.playsLike}</span>
+        {analysis.format !== 'standardbrawl' && <span className="text-ash" title="Forge: the lowest bracket the deck's cards fit">Plays like Bracket {analysis.bracket.playsLike}</span>}
         <button type="button" className="btn ml-auto" onClick={() => void open()} disabled={busy} data-testid="average-open">Open as a deck</button>
       </div>
       <div className="seg mb-3" role="group" aria-label="Show the deck as">

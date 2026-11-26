@@ -6,7 +6,7 @@ import { ColorChips } from '../components/ColorChips';
 import { CommanderTileView } from '../components/CommanderTileView';
 import { EmptyState } from '../components/EmptyState';
 import { useFreeOnly } from '../components/held';
-import { useNotify } from '../components/Shell';
+import { useBuildFormat, useNotify } from '../components/Shell';
 import { VirtualGrid, usePaged } from '../components/VirtualGrid';
 import { getCommanders, getThemes, type ColorLetter, type ColorMode, type CommanderSort, type CommanderTile, type ThemeInfo } from '../lib/api';
 import { setFilters, useFilters } from '../lib/filters';
@@ -20,6 +20,7 @@ const SORTS: { id: CommanderSort; label: string }[] = [
 export default function CommandersPage() {
   const notify = useNotify();
   const { bracket, ownedOnly } = useFilters();
+  const buildFormat = useBuildFormat();
   const [freeOnly] = useFreeOnly();
   const [q, setQ] = useState('');
   const [query, setQuery] = useState('');
@@ -56,13 +57,13 @@ export default function CommandersPage() {
   }, [bestReady]);
 
   const free = freeOnly === true;
-  const key = JSON.stringify([query, colors, mode, axis, ownedOnly, sort, bracket, free]);
+  const key = JSON.stringify([query, colors, mode, axis, ownedOnly, sort, bracket, free, buildFormat]);
   const paged = usePaged<CommanderTile>(
     key,
     PAGE,
     async (page, signal) => {
       const res = await getCommanders(
-        { q: query || undefined, colors: colors.length ? colors : undefined, mode, page, pageSize: PAGE, axis: axis || undefined, ownedOnly, sort, bracket, freeOnly: free },
+        { q: query || undefined, colors: colors.length ? colors : undefined, mode, page, pageSize: PAGE, axis: axis || undefined, ownedOnly, sort, bracket, freeOnly: free, arenaFormat: buildFormat ?? undefined },
         signal,
       );
       setBestReady(res.bestReady);

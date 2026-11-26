@@ -14,7 +14,7 @@ export function SimilarTab({ slug, withSlug, q, name }: { slug: string; withSlug
   const [data, setData] = useState<SimilarResponse | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
-    getSimilarCommanders(slug, withSlug, { budget: q.budget, ownedOnly: q.ownedOnly }, ctrl.signal).then(setData, (e) => { if (!isAbort(e) && !(e instanceof ApiError && e.status === 404)) notify.error(e); });
+    getSimilarCommanders(slug, withSlug, { budget: q.budget, ownedOnly: q.ownedOnly, arenaFormat: q.arenaFormat }, ctrl.signal).then(setData, (e) => { if (!isAbort(e) && !(e instanceof ApiError && e.status === 404)) notify.error(e); });
     return () => ctrl.abort();
   }, [slug, withSlug, q.budget, q.ownedOnly, notify]);
   if (!data) return <p className="text-ash">Loading similar commanders…</p>;
