@@ -590,6 +590,54 @@ function ensureWinConditions(start: Deck, ctx: EngineContext, pool: Pool, keep: 
   return deck;
 }
 
+/** Rounds `settleLands` may spend, and how far from its own land target a finished deck may end. */
+const SETTLE_ROUNDS = 3;
+const SETTLE_WITHIN = 1;
+
+/** The free card of the deck the scorer likes least among those `pick` accepts, or null. */
+function weakestFree(deck: Deck, ctx: EngineContext, keep: Set<string>, pick: (card: Card, f: CardFeatures) => boolean): string | null {
+  const scorer = createScorer(deck, ctx);
+  let worst: string | null = null;
+  let worstScore = Infinity;
+  for (const e of deck.main) {
+    if (e.locked || keep.has(e.oracleId) || qtyOf(e) < 1) continue;
+    const card = ctx.db.get(e.oracleId);
+    const f = card ? ctx.db.features(e.oracleId) : undefined;
+    if (!card || !f || !pick(card, f)) continue;
+    const s = scorer.score(card).score;
+    if (s < worstScore || (s === worstScore && worst !== null && e.oracleId < worst)) { worstScore = s; worst = e.oracleId; }
+  }
+  return worst;
+}
+
+/**
+ * The land target follows the spells' curve, and the spells changed after the lands were chosen
+ * (repairs, the power pass, the climb, the finishers). The finished deck is held against its own
+ * target again: more than a land short, its weakest free spells give way to lands; more than a land
+ * over, its weakest free lands give way to spells. Kept only when the rating does not fall.
+ */
+function settleLands(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>): Deck {
+  let deck = start;
+  for (let round = 0; round < SETTLE_ROUNDS; round++) {
+    const s = summarizeDeck(deck, ctx.db);
+    const gap = targetsFor(deck, ctx, s).lands - s.landsEffective;
+    if (Math.abs(gap) <= SETTLE_WITHIN) break;
+    const n = Math.ceil(Math.abs(gap) - SETTLE_WITHIN - 1e-9);
+    let next = deck;
+    for (let k = 0; k < n; k++) {
+      const out = weakestFree(next, ctx, keep, (_card, f) => (gap > 0 ? !isLandCard(f) && !f.roles.includes('win-condition') : isLandCard(f)));
+      if (!out) break;
+      next = removeCard(next, out);
+    }
+    const open = DECK_SIZE - deckCount(next);
+    if (open <= 0) break;
+    next = gap > 0 ? fillLands(next, ctx, pool, open) : fillNonland(next, ctx, pool, open);
+    if (deckCount(next) !== deckCount(deck) || nextOffender(next, ctx, keep)) break;
+    deck = next;
+  }
+  return deck === start || fineRating(rateDeck(deck, ctx)) >= fineRating(rateDeck(start, ctx)) ? deck : start;
+}
+
 function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: BuildOptions): Deck {
   const pool = buildPool(start, ctx, opts);
   let deck = fillOpen(start, ctx, pool);
@@ -606,7 +654,8 @@ function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: Bui
   deck = rebalanceBasics(deck, ctx, pool, keep);
   const climbed = climb(deck, ctx, pool, keep, { maxSwaps: CLIMB_SWAPS, evalBudget: CLIMB_EVALS });
   if (climbed.swaps.length > 0) deck = repair(climbed.deck, ctx, pool, keep);
-  return ensureWinConditions(deck, ctx, pool, keep);
+  deck = ensureWinConditions(deck, ctx, pool, keep);
+  return settleLands(deck, ctx, pool, keep);
 }
 
 /**

@@ -7,7 +7,7 @@ import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
-import { roleNeeds, scaleTargets, targetsFor } from '../targets';
+import { LAND_PLAN_SLACK, roleNeeds, scaleTargets, targetPlan } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
   AxisId, Bracket, BracketReport, Color, Deck, DeckNetwork, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
@@ -148,6 +148,7 @@ interface Facts {
   summary: DeckSummary;
   targets: Targets;       // scaled to the deck's size
   fullTargets: Targets;   // what the finished deck should hold
+  landSlack: number;      // lands either way of the target that cost nothing
   needs: Map<Role, RoleNeed>; // role counts against the scaled bands (`roleNeeds`, shared with the scorer)
   castable: number;       // how much of the deck its mana can cast (0..1): the lower of colour sources and land count
   filled: number;         // cardCount / 100, at most 1
@@ -210,10 +211,11 @@ function manaPart(f: Facts): Part {
   const { summary: s, targets: t, cards } = f;
   const issues: Issue[] = [];
 
-  // Land count against the target for this deck's curve and bracket: full marks within one land.
+  // Land count against the target for this deck's curve and bracket: full marks within two lands of
+  // the plan's target, within one of a count the user set (`LAND_PLAN_SLACK`).
   const tol = Math.max(1.5, 4 * f.filled);
   // No lands at all is never "on target", however small the deck.
-  const landScore = s.landsEffective <= 0 && f.fullTargets.lands > 0 ? 0 : band(s.landsEffective, t.lands - 1, t.lands + 1, tol);
+  const landScore = s.landsEffective <= 0 && f.fullTargets.lands > 0 ? 0 : band(s.landsEffective, t.lands - f.landSlack, t.lands + f.landSlack, tol);
   const landGap = Math.round(t.lands - s.landsEffective);
   if (landScore < 1 && landGap > 0) {
     issues.push({
@@ -758,14 +760,16 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const summary = summarizeDeck(deck, db);
   const { cards } = deckCards(deck, db);
   const bracket = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3))) as Bracket;
-  const fullTargets = targetsFor(deck, ctx, summary);
+  const plan = targetPlan(deck, ctx, summary);
+  const fullTargets = plan.targets;
+  const landSlack = plan.lands.source === 'plan' ? LAND_PLAN_SLACK : 1;
   const filled = Math.min(1, Math.max(0, summary.cardCount) / 100);
   const commanderIds = new Set(deck.commanders);
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   let scorer: Scorer | null = null;
   let network: DeckNetwork | null = null;
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity,
+    deck, ctx, cards, summary, bracket, fullTargets, landSlack, filled, commanderIds, offIdentity,
     bi: bracket - 1,
     targets: scaleTargets(fullTargets, summary.cardCount),
     needs: new Map(roleNeeds(deck, ctx, { summary, targets: fullTargets, scaled: true }).map((n) => [n.role, n])),

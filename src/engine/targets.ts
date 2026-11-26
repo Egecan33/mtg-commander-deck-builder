@@ -103,13 +103,28 @@ export function targetsFor(deck: Deck, ctx: EngineContext, summary: DeckSummary)
 export const PACKAGE_MIN = 8;
 /** A package size the user sets is held to 8..40. */
 export const PACKAGE_PIN_MAX = 40;
-/** The land target from the deck's curve stays in this range. */
+/** The land target from the deck's curve stays in this range (owner's rule: 28-40). */
 export const LAND_PLAN_MIN = 28;
 export const LAND_PLAN_MAX = 40;
-const LAND_PLAN_BASE = 33;
-const LAND_PLAN_PER_MV = 1.0;
+/**
+ * The land target from the plan: 30 + 2.4 × average mana value, −1 per 4 cheap ramp pieces past 6,
+ * −1 per 4 cheap cantrips, +4 for a landfall plan, +1 for a commander of mana value 6 or more, and a
+ * bracket term. Calibrated on the 19 saved decks of the owner's scratch data (most of them built by
+ * this app to the old §2.3 bands) and the three reference lists: the median target moves 0 lands,
+ * and no deck gains or loses more than 2.4 rating points from the land count alone (fix-wave report,
+ * C1). The bracket term carries what the old bands did: casual decks run less fast mana and more
+ * lands, and a Bracket 5 deck sits where the old 26-30 band put it, so the formula lifts no cEDH deck.
+ */
+const LAND_PLAN_BASE = 30;
+const LAND_PLAN_PER_MV = 2.4;
+const LAND_PLAN_RAMP_FREE = 6;
+const LAND_PLAN_RAMP_PER = 4;
+const LAND_PLAN_CANTRIP_PER = 4;
+const LAND_PLAN_LANDFALL = 4;
 /** Lands added per bracket (negative: fewer): low brackets run the most lands, cEDH the fewest. */
-const LAND_PLAN_BRACKET = [2, 2, 0, -1, -2] as const;
+const LAND_PLAN_BRACKET = [1, 1, 0, -1, -7] as const;
+/** On the plan's target the land count is free within this many lands either way (one for a count the user set). */
+export const LAND_PLAN_SLACK = 2;
 /** Band roles a core package counts for, and the role a pin of its size is written to. */
 export const CORE_BAND_ROLES: Record<CorePackageId, readonly Role[]> = {
   ramp: ['ramp'], draw: ['draw'], removal: ['spot-removal', 'counterspell', 'wipe'], protection: ['protection'],
@@ -269,19 +284,19 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
       if (isCantrip(card, features)) cantrips += qty;
     }
     if (filled > 0 && filled < 1) { ramp2 = Math.min(ramp2 / filled, 30); cantrips = Math.min(cantrips / filled, 30); }
-    const rampTerm = Math.max(0, ramp2 - 6) / 3;
-    const cantripTerm = cantrips / 4;
-    const landfall = (weights.landfall ?? 0) >= 0.6 ? 3 : 0;
+    const rampTerm = Math.max(0, ramp2 - LAND_PLAN_RAMP_FREE) / LAND_PLAN_RAMP_PER;
+    const cantripTerm = cantrips / LAND_PLAN_CANTRIP_PER;
+    // Landfall counts as it did in the §3 table: when it is one of the deck's two archetypes.
+    const landfall = archetypes.includes('landfall') ? LAND_PLAN_LANDFALL : 0;
     const big = topMv >= 6 ? 1 : 0;
     const shift = LAND_PLAN_BRACKET[i];
-    // Calibrated on the fixture lists so the precon (39 at Bracket 2) keeps the reference rating range (packages plan, R3).
     const raw = LAND_PLAN_BASE + LAND_PLAN_PER_MV * mv - rampTerm - cantripTerm + landfall + big + shift;
     lands = clamp(Math.round(raw), LAND_PLAN_MIN, LAND_PLAN_MAX);
     source = 'plan';
     reason = `${lands} lands for an average mana value of ${r1(mv)}`
       + (rampTerm > 0 ? `, ${Math.round(ramp2)} cheap ramp pieces (−${r1(rampTerm)})` : '')
       + (cantripTerm >= 0.05 ? `, ${Math.round(cantrips)} cheap cantrips (−${r1(cantripTerm)})` : '')
-      + (landfall ? ', a landfall plan (+3)' : '')
+      + (landfall ? `, a landfall plan (+${LAND_PLAN_LANDFALL})` : '')
       + (big ? `, a ${topMv}-mana commander (+1)` : '')
       + (shift ? `, Bracket ${bracket} (${shift > 0 ? '+' : '−'}${Math.abs(shift)})` : '')
       + (Math.round(raw) !== lands ? `, held to ${LAND_PLAN_MIN}–${LAND_PLAN_MAX}` : '') + '.';

@@ -19,17 +19,28 @@ const tp = (d: Deck) => targetPlan(d, ctx, summarizeDeck(d, db));
 
 describe('the land target', () => {
   it("follows the plan's curve and ramp", () => {
-    // Calibrated (see the report): the precon is 39 so its mana part keeps the reference range; 37 would rate it 84 against the 82 cap.
-    expect(lands(precon)).toBe(39);
-    expect(lands(upgraded)).toBe(35);
+    // Calibrated on the 19 saved decks of the scratch data and the fixtures (fix-wave report, C1):
+    // 30 + 2.4 × average mana value, −1 per 4 cheap ramp pieces past 6, −1 per 4 cheap cantrips,
+    // +4 for a landfall plan, +1 for a 6-mana commander, Brackets 1-2 +1, 4 −1, 5 −7, held to 28-40.
+    expect(lands(precon)).toBe(40);
+    expect(lands(upgraded)).toBe(36);
     expect(lands(cedh)).toBe(28);
-    expect(lands(fixtureDeck('precon', 5))).toBe(35);
+    expect(lands(fixtureDeck('precon', 5))).toBe(33);
     expect(tp(cedh).lands.source).toBe('plan');
     expect(tp(cedh).lands.reason).toMatch(/28 cheap ramp pieces/);
+    expect(tp(cedh).lands.reason).toMatch(/Bracket 5 \(−7\)/);
     expect(tp(cedh).lands.reason).toMatch(/held to 28–40/);
+    expect(tp(precon).lands.reason).toMatch(/Bracket 2 \(\+1\)/);
   });
-  it('landfall adds three lands', () => {
-    expect(lands({ ...upgraded, themeWeights: { ...resolveThemeWeights(upgraded, ctx), landfall: 1 } })).toBe(38);
+  it('landfall adds four lands when it is one of the two archetypes', () => {
+    expect(lands({ ...upgraded, themeWeights: { ...resolveThemeWeights(upgraded, ctx), landfall: 1 } })).toBe(40);
+    // a fourth archetype does not stack its lands on the two strongest (deck-theory.md §3)
+    expect(lands({ ...upgraded, themeWeights: { 'typal:elf': 1, tokens: 1, landfall: 0.9 } })).toBe(36);
+  });
+  it('a Bracket 5 deck is not lifted above its old bracket band by the formula', () => {
+    // Review C1: Bre at Bracket 5 (average mana value 2.8, 34 lands) gained 7 points when 33 replaced the 26-30 band.
+    for (const d of [precon, upgraded, cedh]) expect(lands({ ...d, targetBracket: 5 }), d.name).toBeLessThanOrEqual(33);
+    expect(lands({ ...upgraded, targetBracket: 5 })).toBeLessThanOrEqual(30);
   });
   it('an empty or commander-only deck keeps the bracket default', () => {
     expect(tp({ ...EMPTY, targetBracket: 3 }).lands.source).toBe('bracket');

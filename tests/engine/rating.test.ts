@@ -3,7 +3,8 @@ import { autoBuild, mulberry32 } from '@/engine/builder';
 import { deckNetwork } from '@/engine/network';
 import { QUALITY_EXPECTED, rateDeck, ratingCapped } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
-import { roleNeeds } from '@/engine/targets';
+import { summarizeDeck } from '@/engine/summary';
+import { roleNeeds, targetsFor } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, Card, Deck, DeckRating, EngineContext, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -463,6 +464,26 @@ describe('rateDeck: quality pass 2', () => {
     expect(light.rating).toBeGreaterThan(good.rating - 12);
     const starved = rateDeck({ ...full, main: [...spells, { oracleId: card('Forest').oracleId, qty: 14, locked: false }, { oracleId: card('Sol Ring').oracleId, qty: 99 - n - 14, locked: false }] }, ctx);
     expect(sub(starved, 'mana').value).toBeLessThan(0.45);
+  });
+
+  it("the land count is free within two of the plan's target, and one of a target the user set", () => {
+    const full = fixtureDeck('upgraded', 3);
+    const spells = full.main.filter((e) => !isLand(e.oracleId)).sort((a, b) => db.get(a.oracleId)!.oracleId.localeCompare(db.get(b.oracleId)!.oracleId));
+    const n = spells.reduce((a, e) => a + e.qty, 0);
+    const landFix = (d: Deck) => sub(rateDeck(d, ctx), 'mana').fixes.some((f) => /^(Add|Cut) \d+ lands?/.test(f.text));
+    let checked = 0;
+    for (let lands = 31; lands <= 46; lands++) {
+      const d: Deck = { ...full, main: [...spells.slice(0, Math.min(n, 99 - lands)), { oracleId: card('Forest').oracleId, qty: lands, locked: false }] };
+      const s = summarizeDeck(d, db);
+      if (s.cardCount !== 100) continue;
+      const gap = Math.abs(s.landsEffective - targetsFor(d, ctx, s).lands);
+      if (gap <= 2) expect(landFix(d), `${lands} lands, gap ${gap}`).toBe(false);
+      if (gap >= 3) expect(landFix(d), `${lands} lands, gap ${gap}`).toBe(true);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(8);
+    const pinned: Deck = { ...full, roleTargets: { land: Math.round(summarizeDeck(full, db).landsEffective) + 2 } };
+    expect(landFix(pinned)).toBe(true);
   });
 
   describe('role numbers are the shared ones (targets.roleNeeds)', () => {
