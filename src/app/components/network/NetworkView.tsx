@@ -39,6 +39,7 @@ export function NetworkView({
   const [settled, setSettled] = useState(false);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState(0);
+  const [flights, setFlights] = useState(0);
   const lastFocus = useRef<number | null>(null);
   const empty = !!network && network.nodes.every((n) => n.commander);
 
@@ -100,6 +101,7 @@ export function NetworkView({
     lastFocus.current = focusCluster;
     const ids = focusCluster === null ? network.nodes.map((n) => n.oracleId) : network.clusters.find((c) => c.id === focusCluster)?.cards ?? [];
     sceneRef.current?.flyTo(ids);
+    setFlights((n) => n + 1);
   }, [focusCluster, network]);
 
   const toggle = (kind: NetworkEdgeKind) => {
@@ -143,6 +145,7 @@ export function NetworkView({
       data-renderer={renderer ?? 'webgl'}
       data-settled={renderer === 'svg' ? 'true' : settled ? 'true' : 'false'}
       data-visible-edges={visible}
+      data-flights={flights}
     >
       <div ref={host} className={renderer === 'svg' ? 'hidden' : 'absolute inset-0'} />
       {renderer === 'svg' && positions && (

@@ -7,6 +7,7 @@ import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { Menu } from '../../components/Menu';
+import { NetworkSummary } from '../../components/network/NetworkSummary';
 import { NetworkView } from '../../components/network/NetworkView';
 import { useNetwork } from '../../components/network/useNetwork';
 import { ResultPanel, type Change } from '../../components/ResultPanel';
@@ -101,6 +102,9 @@ export function Builder({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelId>('rating');
   const net = useNetwork(deck, panel === 'network');
+  const [networkFocus, setNetworkFocus] = useState<number | null>(null);
+  const networkNow = net.network;
+  useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
@@ -1025,7 +1029,7 @@ export function Builder({ id }: { id: string }) {
             <NetworkView
               network={net.network}
               error={net.error}
-              focusCluster={null}
+              focusCluster={networkFocus}
               onOpen={openCard}
               onRetry={net.reload}
               onEmpty={() => setPanel('rating')}
@@ -1108,9 +1112,16 @@ export function Builder({ id }: { id: string }) {
             ) : panel === 'bracket' ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
             ) : panel === 'network' ? (
-              <div className="p-4" data-testid="panel-network">
-                <p className="text-ash">{net.network ? <>Cohesion <span className="tabular-nums" data-testid="network-cohesion">{net.network.cohesion}</span></> : 'Reading how the cards connect'}</p>
-              </div>
+              net.network ? (
+                <NetworkSummary
+                  network={net.network}
+                  focus={networkFocus}
+                  onFocus={setNetworkFocus}
+                  onOpen={openCard}
+                  onSwap={() => void runFix('synergy')}
+                  busy={busy !== null}
+                />
+              ) : <p className="p-4 text-ash" data-testid="panel-network">Reading how the cards connect</p>
             ) : panel === 'themes' ? (
               <ThemesPanel
                 analysis={analysis}
