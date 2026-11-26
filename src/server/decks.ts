@@ -7,7 +7,7 @@ import { packageDef } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { deckSize } from '@/engine/rules';
 import { ROLE_LABEL } from '@/engine/targets';
-import type { Bracket, Color, Deck, DeckEntry, Role } from '@/engine/types';
+import type { Bracket, Color, Deck, DeckEntry, DeckNetwork, Role } from '@/engine/types';
 import { cardLookup } from './cards';
 import { activeCollectionId, collectionKind, deckCollection, deckFormat } from './collection';
 import { deckKey, engineContext } from './context';
@@ -188,9 +188,12 @@ export function listDecks(collectionId: string = activeCollectionId()): DeckTile
     live.add(key);
     let n = numbers.get(key);
     if (!n) {
-      const rating = rateDeck(deck, ctx);
+      // One network serves the rating and the cohesion number.
+      let network: DeckNetwork | null = null;
+      const getNetwork = () => (network ??= deckNetwork(deck, ctx));
+      const rating = rateDeck(deck, ctx, { network: getNetwork });
       const bracket = analyzeBracket(deck, ctx);
-      n = { cardCount: deckSize(deck), rating: rating.rating, cohesion: deckNetwork(deck, ctx).cohesion, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
+      n = { cardCount: deckSize(deck), rating: rating.rating, cohesion: getNetwork().cohesion, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
       numbers.set(key, n);
     }
     const lookup = cardLookup(deck.commanders);

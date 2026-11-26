@@ -107,7 +107,7 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
       }
       const targets = targetsFor(deck, ctx, summary);
       return (report = {
-        rating: rateDeck(deck, ctx),
+        rating: rateDeck(deck, ctx, { scorer, network: getNetwork }),
         bracket: analyzeBracket(deck, ctx),
         summary,
         targets,

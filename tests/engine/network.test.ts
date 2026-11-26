@@ -4,6 +4,7 @@ import { autoBuild } from '@/engine/builder';
 import { axisLabel } from '@/engine/features';
 import { CLUSTER_MIN_EDGE, clusterNetwork, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
 import { packageCohesion } from '@/engine/packages';
+import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { deckCards, resolveThemeWeights } from '@/engine/summary';
 import type { Deck, DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
@@ -21,6 +22,20 @@ const nets = {
 };
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 const THEME = new Set(['combo', 'feeds', 'typal']);
+
+describe('rateDeck reusing a network', () => {
+  it('gives the same rating and builds no network of its own', () => {
+    for (const name of ['precon', 'upgraded', 'cedh'] as const) {
+      const deck = decks[name];
+      const scorer = createScorer(deck, ctx);
+      let built = 0;
+      const net = nets[name];
+      const reused = rateDeck(deck, ctx, { scorer, network: () => { built++; return net; } });
+      expect(reused).toEqual(rateDeck(deck, ctx));
+      expect(built).toBeLessThanOrEqual(1);
+    }
+  });
+});
 
 describe('deckNetwork', () => {
   it('nodes are the nonland cards and the commanders', () => {

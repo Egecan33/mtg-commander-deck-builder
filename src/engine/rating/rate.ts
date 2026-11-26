@@ -814,9 +814,10 @@ export function ratingCapped(deck: Deck, violations: readonly Violation[], size 
  * share of the deck that is built. A commander alone therefore rates near 0 and a sensible deck
  * rises steadily to its full rating as it is filled in; an empty category never counts as met.
  * Being short of cards is not capped. Any other violation (over 100 cards included) caps the
- * rating at 40. Never throws.
+ * rating at 40. Never throws. `reuse` lets a caller that already holds this deck's scorer or network
+ * (built with the same deck and context) share it; the numbers do not change.
  */
-export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
+export function rateDeck(deck: Deck, ctx: EngineContext, reuse: { scorer?: Scorer; network?: () => DeckNetwork } = {}): DeckRating {
   const { db } = ctx;
   const violations = validateDeck(deck, db);
   const summary = summarizeDeck(deck, db);
@@ -834,7 +835,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const commanderIds = new Set(deck.commanders);
   const colours = allowedIdentity(deck, db).size;
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
-  let scorer: Scorer | null = null;
+  let scorer: Scorer | null = reuse.scorer ?? null;
   let network: DeckNetwork | null = null;
   const covered = new Map<string, Role[]>();
   const facts: Facts = {
@@ -857,7 +858,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
       return hit;
     },
     scorer: () => (scorer ??= createScorer(deck, ctx)),
-    network: () => (network ??= deckNetwork(deck, ctx, { scorer: facts.scorer() })),
+    network: () => (network ??= reuse.network ? reuse.network() : deckNetwork(deck, ctx, { scorer: facts.scorer() })),
   };
   const uncastable = 1 - UNCASTABLE_COST * (1 - clamp01(facts.castable)) ** 2;
 
