@@ -127,6 +127,14 @@ describe('packagePlan', () => {
     const band = tp({ ...upgraded, themeWeights: { stax: 1 } }).targets.roles.wipe!;
     expect({ lo: stax.lo, hi: stax.hi }).toEqual(band);
   });
+  // Review M1: the odds were drawn against the 99 with Kinnan counted in his own Ramp package.
+  it("a package's library count leaves the commanders out", () => {
+    const ramp = plan(cedh).packages.find((x) => x.id === 'ramp')!;
+    expect(ramp.cards).toContain(cedh.commanders[0]);
+    expect(ramp.library).toBe(ramp.count - 1);
+    const draw = plan(upgraded).packages.find((x) => x.id === 'draw')!;
+    expect(draw.library).toBe(draw.count - draw.cards.filter((id) => upgraded.commanders.includes(id)).length);
+  });
   it('overlap counts in every package', () => {
     const base = plan(upgraded);
     const inCore = new Set(base.packages.slice(0, 4).flatMap((x) => x.cards));

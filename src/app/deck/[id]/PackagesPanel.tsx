@@ -131,7 +131,8 @@ function PackageRow({
         <span className={`ml-auto tabular-nums ${done ? 'text-band-good' : 'text-bone'}`} data-testid="package-count">{p.count} of {p.target}</span>
       </div>
       <p className="mb-2.5 text-[0.86rem] text-ash">{p.reason}</p>
-      <OddsBar hits={p.count} deckSize={librarySize} label={p.name} testId="package-odds" />
+      {/* odds are drawn from the 99: the commanders in the package are not in the library */}
+      <OddsBar hits={p.library ?? p.count} deckSize={librarySize} label={p.name} testId="package-odds" />
       {p.wipes && (
         <p className="mt-2.5 text-[0.86rem]" data-testid="package-wipes">
           <span className="text-bone">Board wipes · {p.wipes.lo}&ndash;{p.wipes.hi}: {p.wipes.count}</span>

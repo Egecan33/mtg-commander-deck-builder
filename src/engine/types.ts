@@ -246,6 +246,8 @@ export interface PlannedPackage {
   id: PackageId; name: string; kind: PackageKind;
   target: number;              // >= 8, no maximum
   count: number;               // the deck's cards in it, overlaps counted in every package
+  /** `count` without the commanders: the copies in the 99, what the draw odds are against. */
+  library?: number;
   cards: string[];             // those cards' oracle ids
   reason: string; moves: PlanMove[]; pinned: boolean;
   wipes: { lo: number; hi: number; count: number; reason: string } | null;   // Removal only

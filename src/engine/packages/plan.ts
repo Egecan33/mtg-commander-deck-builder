@@ -65,7 +65,8 @@ export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary
   const planned: PlannedPackage[] = [];
   const make = (def: PackageDef, target: number, reason: string, moves: PlannedPackage['moves'], pinned: boolean): PlannedPackage => {
     const m = packageMembers(deck, db, def);
-    return { id: def.id, name: def.name, kind: def.kind, target, count: m.count, cards: m.ids, reason, moves, pinned, wipes: null, cohesion: null };
+    const inCommandZone = m.ids.filter((id) => deck.commanders.includes(id)).reduce((n, id) => n + deck.commanders.filter((c) => c === id).length, 0);
+    return { id: def.id, name: def.name, kind: def.kind, target, count: m.count, library: m.count - inCommandZone, cards: m.ids, reason, moves, pinned, wipes: null, cohesion: null };
   };
 
   // core: always there, never under 8; the targets are the rating's (`Targets.packages`)
