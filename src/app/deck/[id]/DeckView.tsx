@@ -27,12 +27,14 @@ const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result,
 }: {
   /** Extra actions for the whole deck, shown under the header. */
   tools?: ReactNode;
   /** Shown above the cards (what the deck takes from boxes and built decks, the box offer). */
   notice?: ReactNode;
+  /** What the last action changed (the Fix deck panel), at the top of the scrolling deck. */
+  result?: ReactNode;
   deck: Deck;
   lookup: CardLookup;
   scoreOf: (id: string) => CardScore | undefined;
@@ -181,11 +183,12 @@ export function DeckView({
         <div className="flex min-h-0 flex-1">
           <JumpRail label="Deck sections" className="w-[8.5rem] shrink-0 overflow-y-auto overscroll-contain pb-4 pl-2 pr-1 pt-2" />
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pb-4 pl-2 pr-3" data-testid="deck-scroll">
+            {result}
             {empty && (
               <EmptyState
                 className="mb-4 mt-2"
                 title="The 99 are empty"
-                message="Add cards from the browser on the left with the + on each card, or use Auto-build above for a full deck."
+                message="Add cards from the card search on the left with the + on each card, or use Build, Auto-build above for a full deck."
                 testId="deck-empty"
               />
             )}
