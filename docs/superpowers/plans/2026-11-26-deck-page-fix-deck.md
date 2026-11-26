@@ -109,3 +109,24 @@
 - [ ] Step 1: failing test — with EDHREC enabled and data cached for one commander (seed the `edhrec_cache` table the way tests/server tests do, or stub through the store), the Discover tier rating for that commander equals `analyzeResponse(tier.deck).rating.rating`, and its `basis` is `'edhrec'`; a commander without cached data has `basis: 'text'` and also equals the deck page's rating.
 - [ ] Step 2: run → FAIL. Step 3: implement (no network on any path). Step 4: `pnpm vitest run tests/server && pnpm typecheck` → PASS.
 - [ ] Step 5: commit `fix(discover): rate with the same cached EDHREC data the deck page uses`.
+
+### Task 4a: The shared kit (runs before Task 4; Tasks 4–5 use it)
+
+**Spec:** `docs/superpowers/specs/2026-11-26-app-map-and-shared-design.md` ("Shared components", "Shared filters", "Page skeleton", "Visual system", "Words").
+
+**Files:** Create in `src/app/components/`: `CardTile.tsx`, `CardGrid.tsx`, `Section.tsx`, `JumpRail.tsx`, `FilterBar.tsx`, `ResultPanel.tsx`, `Menu.tsx`, `OddsBar.tsx`, `EmptyState.tsx`; create `src/app/lib/filters.ts` (the shared filter store); create `src/engine/odds.ts` (pure hypergeometric) with `tests/engine/odds.test.ts`. Modify `src/app/deck/[id]/DeckView.tsx` and `src/app/deck/[id]/Browser.tsx` to render through CardTile / CardGrid / Section / JumpRail.
+
+**Interfaces:**
+- `odds(deckSize: number, hits: number, seen: number): number` — P(at least one of `hits` in the first `seen` cards); tests: (99, 8, 7) ≈ 0.456, (99, 8, 14) ≈ 0.719 (±0.001), (99, 0, 7) = 0, (99, 99, 1) = 1.
+- `CardTile` props: `{ card: ClientCard; size?: 'S' | 'M' | 'L'; score?: number | null; stats?: { label: string; value: string; title?: string }[]; heldBy?: string[]; marks?: ('weakest' | 'locked' | 'illegal')[]; onOpen?: () => void; actions?: ReactNode }` — caption row under the image (score chip in band colour, owned dot, "!" with holders in its title, stats); nothing over the card name or mana cost; keyboard focusable.
+- `Section` props: `{ id: string; title: string; count?: number; actions?: ReactNode; cap?: number; children }` — display-serif heading, muted count, "Show all N" when capped; registers itself with the nearest `JumpRail`.
+- `JumpRail`: sticky list of the page's sections (label + count), highlights the section in view (IntersectionObserver), back-to-top.
+- `filters.ts`: `useFilters(): { bracket, budget, ownedOnly, freeOnly, size, view, groupBy, sort, set(patch) }` persisted in localStorage (`cf-bracket`, `cf-budget`, existing `cf-owned-only`, `cf-free-only`, `cf-view-*`); `FilterBar` renders any subset of them.
+- `ResultPanel` props: `{ title: string; before?: number; after?: number; changes: { out: string; in: string; reason: string }[]; lookup: CardLookup; heldBy?: HeldBy; note?: string | null; onUndo?: () => void; onDismiss: () => void }` — groups changes by reason ("Added 22 cards to reach 100"), shows out → in thumbs.
+- `Menu` props: `{ label: string; items: { label: string; description?: string; onSelect: () => void; testId?: string; disabled?: boolean }[]; testId?: string }` — `aria-haspopup="menu"`, `role="menuitem"`, Escape / outside click close.
+
+- [ ] Step 1: odds tests (fail) → `src/engine/odds.ts` → pass.
+- [ ] Step 2: build the components; move the deck view's sections and the browser's results onto them, keeping every existing `data-testid` working and removing the old overlay badges (the "!" and score move into the caption row).
+- [ ] Step 3: verify on the scratch copy (Global Constraints rules): the deck page of "Mr. Spock, Science Officer" with the JumpRail, sections with counts, caption rows; the browser grid; screenshots at 1440×900; check keyboard focus on a tile.
+- [ ] Step 4: `pnpm typecheck && pnpm test`.
+- [ ] Step 5: commit `feat(ui): shared card tile, sections, jump rail, filter bar, result panel`.
