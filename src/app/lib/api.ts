@@ -16,6 +16,13 @@
  *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
  *        'within' (identity inside the chosen colours). page is 1-based, pageSize 1..200 (60).
+ * GET  /api/commander/:slug?with&bracket -> CommanderPageResponse
+ *        The header of a commander page. `slug` is EDHREC's URL form of the front name ("mr-spock-science-officer");
+ *        the full-name form and any letter case also resolve, and two names that slug alike get "<slug>-<8 id characters>".
+ *        `with` is a partner's slug (the page is then the pair's: identity is the union, `decks` only the decks with
+ *        exactly these two). Unknown commander or partner: 404; the same commander twice or a pair that cannot be one:
+ *        400. `bracket` 1-5 (default 3). Cached EDHREC data only (`peekEdhrec`): never a request, and the EDHREC fields
+ *        (`edhrecDecks`, `edhrecThemes`) are absent when nothing is cached.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
  * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
  * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
@@ -286,6 +293,31 @@ export interface CommanderCard extends ClientCard {
 }
 export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number }
 export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderCard[] }
+/** A commander in a list: its page slug, Scryfall's popularity rank and the themes it leads. */
+export interface CommanderTile extends CommanderCard {
+  slug: string;
+  /** Scryfall's EDHREC rank. */
+  rank: number | null;
+  /** leadAxes of its text-only weights. */
+  lead: AxisId[];
+  /** Tier-0 rating from Best from collection (sort 'best' only). */
+  best?: number;
+}
+export interface CommanderPageResponse {
+  commanders: CommanderTile[]; identity: Color[]; bracket: Bracket;
+  /** resolveThemeWeights of the shell at this bracket (with cached EDHREC themes when there are any): weight >= 0.1, `typal` left out, strongest first, at most 8, two decimals. */
+  themes: { axis: AxisId; label: string; weight: number }[];
+  edhrec: EdhrecStatus; edhrecDecks?: number;
+  /** Top 8 by count. */
+  edhrecThemes?: { slug: string; count: number }[];
+  /** Sum of the commanders' prices; null when one has none. */
+  price: number | null;
+  heldBy: HeldBy;
+  /** Owned, legal, non-basic cards inside the identity (0 disables Best from my collection). */
+  ownedCards: number;
+  /** Saved decks with this commander among theirs; for a pair, exactly these two. */
+  decks: DeckTile[];
+}
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
 // ---------------------------------------------------------------------------------------------
@@ -618,6 +650,8 @@ export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal
     undefined,
     signal,
   );
+export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket }, signal?: AbortSignal) =>
+  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query(o)}`, undefined, signal);
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 

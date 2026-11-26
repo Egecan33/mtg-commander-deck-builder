@@ -5,6 +5,7 @@ import { syncFeatures } from '@/ingest/features';
 import { invalidateCardDb } from '@/server/carddb';
 import { openDb, writeSyncState, type Db } from '@/server/db';
 import { resetServerState } from '@/server/state';
+import { getDb } from '@/server/store';
 
 const FIXTURES = fileURLToPath(new URL('../fixtures/', import.meta.url));
 
@@ -40,4 +41,20 @@ export function seedDb(dbPath = ':memory:'): Db {
 export function useServerDb(db: Db | null): void {
   invalidateCardDb();
   resetServerState(db);
+}
+
+/** Writes a cached EDHREC base page the way the cache stores it, so no request is needed. */
+export function cacheEdhrecPage(
+  slug: string,
+  page: { numDecks: number; cards: { name: string; numDecks: number; potentialDecks: number; lift: number | null }[]; themes: Record<string, number> },
+): void {
+  getDb()
+    .prepare('INSERT OR REPLACE INTO edhrec_cache(key, fetched_at, etag, json) VALUES (?, ?, NULL, ?)')
+    .run(`commanders/${slug}`, new Date().toISOString(), JSON.stringify(page));
+}
+
+/** Calls a route module's handler for `url`; `params` fill the dynamic segments. */
+export function callRoute(mod: Record<string, unknown>, url: string, params: Record<string, string> = {}, method = 'GET'): Promise<Response> {
+  const handler = mod[method] as (req: Request, ctx: { params: Promise<Record<string, string>> }) => Response | Promise<Response>;
+  return Promise.resolve(handler(new Request(`http://localhost${url}`, { method }), { params: Promise.resolve(params) }));
 }

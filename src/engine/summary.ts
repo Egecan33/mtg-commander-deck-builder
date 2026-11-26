@@ -206,3 +206,16 @@ export function resolveTheme(deck: Deck, ctx: EngineContext): ResolvedTheme {
 export function resolveThemeWeights(deck: Deck, ctx: EngineContext): Record<AxisId, number> {
   return resolveTheme(deck, ctx).weights;
 }
+
+/**
+ * The themes a commander leads: axes other than `typal` with a named weight, down to the
+ * second-strongest (ties at the cut kept), strongest first.
+ */
+export function leadAxes(weights: Record<AxisId, number>): AxisId[] {
+  const named = Object.entries(weights)
+    .filter(([axis, w]) => axis !== 'typal' && finite(w) >= NAMED_THEME_WEIGHT)
+    .sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0));
+  if (named.length === 0) return [];
+  const cut = (named[1] ?? named[0])[1];
+  return named.filter(([, w]) => w >= cut).map(([a]) => a);
+}
