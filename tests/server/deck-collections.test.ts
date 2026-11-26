@@ -9,7 +9,8 @@ import * as commandersRoute from '@/app/api/commanders/route';
 import * as deckRoute from '@/app/api/decks/[id]/route';
 import * as decksRoute from '@/app/api/decks/route';
 import type { Deck } from '@/engine/types';
-import { setActiveCollection } from '@/server/collection';
+import { listCollections, setActiveCollection } from '@/server/collection';
+import { holdersFor } from '@/server/holders';
 import type { Db } from '@/server/db';
 import { deckFormat, getDeck, listDecks } from '@/server/decks';
 import { getCardDb } from '@/server/store';
@@ -92,6 +93,16 @@ describe('decks belong to a collection', () => {
     expect((await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: rest }, { id: deckId }))).deck.collectionId).toBe('physical');
     const bad = await send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...back.deck, collectionId: 'nope' } }, { id: deckId });
     expect(bad.status).toBe(400);
+  });
+
+  it('lets only a collection\'s own built decks hold its copies', async () => {
+    const saved = await ok<DeckResponse>(send(decksRoute.POST, 'POST', '/api/decks', { deck: { ...deckOf('Built', 'Krenko, Mob Boss', ['Sol Ring']), built: true } }));
+    expect(holdersFor('physical').map((h) => h.name)).toEqual(['Built (built)']);
+    expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(1);
+    const deckId = saved.deck.id!;
+    await ok<DeckResponse>(send(deckRoute.PUT, 'PUT', `/api/decks/${deckId}`, { deck: { ...saved.deck, collectionId: 'arena' } }, { id: deckId }));
+    expect(holdersFor('physical')).toEqual([]);
+    expect(listCollections().find((c) => c.id === 'physical')!.holders).toBe(0);
   });
 
   it('checks an Arena deck under Brawl rules and a Physical deck under Commander rules', async () => {
