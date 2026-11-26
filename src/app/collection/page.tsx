@@ -8,6 +8,7 @@ import { adjustCollection, collectionExportUrl, getCollection, lookupPrinting, r
 import { fmtDate, fmtInt } from '../lib/ui';
 import { AddBox, YourBoxes } from './Boxes';
 import { OwnedTile, type Owned } from './OwnedTile';
+import { ArenaWildcards } from './Wildcards';
 
 /**
  * One line of the quick-entry history. `qty` is negative for a removal; `fromBoxes` are the boxes a
@@ -264,6 +265,7 @@ export default function CollectionPage() {
             {arena?.last?.ok && (
               <p className="mt-1.5 text-[0.88rem] text-ash" data-testid="arena-result">{arena.last.message}</p>
             )}
+            <ArenaWildcards version={arena?.wildcards.readAt ?? null} />
             <div className="mt-3 border-t border-slag pt-3">
               <button type="button" className="btn btn-primary w-full" disabled={arenaBusy} onClick={() => void readArenaFull()} data-testid="arena-read-full">
                 {arenaBusy ? 'Reading Arena' : 'Read my whole Arena collection'}
