@@ -61,3 +61,11 @@ Theme weights come from the commander's text (payoff 1.0, enabler 0.6, keyword h
 ## Testing
 - Engine: edges with reasons for combo / feeds / typal on fixture decks; clusters stable for a fixed seed; cohesion ordering; unconnected excludes staples; theme focus; scorer connection term; rating reference ranges.
 - UI on the scratch copy: the Network tab for Mr. Spock, Science Officer and a typal deck; hover, click, cluster focus, Swap the unconnected cards then Undo (deck JSON identical); screenshots.
+
+## Corrections after planning (2026-11-26, rulings D19)
+- No "plays together" edges: EDHREC data has no pairwise numbers in the app.
+- "Unconnected" reads the scorer's static commander link (synergy share plus EDHREC lift) before the new connection penalty, so the definition is not circular.
+- Saved decks whose theme weights are derived (null) are re-rated with the focused weights; their cards and stored weights never change.
+- Synergy = 70% today's whole synergy value (density and balance) + 30% cohesion.
+- Colours follow the app map: combo edges brass, feeds bone, typal ash, commander spokes smoke; unconnected nodes get a dashed outline (ember stays reserved for "!"); the staple ring stays still.
+- Commanders that name several creature types keep every type tied for the top weight.
