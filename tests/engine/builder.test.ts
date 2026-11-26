@@ -320,7 +320,10 @@ describe('autoBuild: commanders with special deck rules', () => {
     expect(size(deck)).toBe(100);
     const qty = (name: string) => deck.main.find((e) => e.oracleId === card(name).oracleId)?.qty ?? 0;
     expect(qty('Mountain')).toBeGreaterThanOrEqual(2);
-    expect(qty('Island')).toBeGreaterThan(qty('Mountain'));
+    // The commander's colour stays the main one. Counted in sources, not basics: the split of the
+    // basics follows the red pips the build picked, and moves by one with them (15/14 → 14/15).
+    const sources = summarizeDeck(deck, db).sources;
+    expect(sources.U).toBeGreaterThan(sources.R);
     // No red card, no Mountain.
     const plain = autoBuild({ ...shell(['Tolabow, Loch Rascal'], 3), chosenColor: null }, ctx, opts());
     expect(plain.main.some((e) => e.oracleId === card('Mountain').oracleId)).toBe(false);

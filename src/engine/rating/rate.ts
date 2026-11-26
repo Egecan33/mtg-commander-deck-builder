@@ -1,8 +1,8 @@
 import { analyzeBracket } from '../brackets';
 import { axisLabel } from '../features';
 import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
-import { karstenSources, pAtLeast } from '../mana';
-import { commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
+import { cardSourceNeeds, pAtLeast } from '../mana';
+import { allowedIdentity, commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
 import { deckNetwork } from '../network';
 import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
@@ -176,6 +176,8 @@ interface Facts {
   bracket: Bracket;
   report: BracketReport;
   commanderIds: Set<string>;
+  /** Colours in the commander's identity: how many colours the lands share out (`cardSourceNeeds`). */
+  colours: number;
   /** Cards outside the commander's colours: the rule violation names them, the mana base is not asked to cast them. */
   offIdentity: Set<string>;
   count(pred: (c: DeckCard) => boolean): number;
@@ -191,33 +193,35 @@ const has = (c: DeckCard, role: Role): boolean => c.features.roles.includes(role
 const nonland = (c: DeckCard): boolean => !isLandCard(c.features);
 
 /**
- * Coloured sources (§4.2): the share of coloured cards the mana can cast on curve, commander ×5,
- * mana value ≤ 2 ×2, with the worst shortfall per colour.
+ * Coloured sources (§4.2): the share of coloured cards the mana can cast when they are usually cast
+ * (`cardSourceNeeds`, shared with the scorer and the builder), commander ×5, mana value ≤ 2 ×2,
+ * with the worst shortfall per colour. `need` there is scaled to the cards so far, like `have`.
+ * `colours` is the commander identity's colour count; the deck's lands, scaled as a full deck, cap
+ * what one colour is asked for.
  */
 function colourSources(
-  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>, offIdentity?: Set<string>, size = 100,
+  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>, offIdentity: Set<string> | undefined, size: number, colours: number,
 ): { share: number; weightSum: number; worst: Map<Color, { name: string; have: number; need: number; lost: number }> } {
   let weightSum = 0;
   let credit = 0;
   const worst = new Map<Color, { name: string; have: number; need: number; lost: number }>();
+  const lands = filled > 0 ? finite(s.landsEffective) / filled : 0;
   for (const c of cards) {
     if (!nonland(c) || offIdentity?.has(c.card.oracleId)) continue;
-    const w = (commanderIds.has(c.card.oracleId) ? 5 : c.card.cmc <= 2 ? 2 : 1) * c.qty;
+    const commander = commanderIds.has(c.card.oracleId);
+    const w = (commander ? 5 : c.card.cmc <= 2 ? 2 : 1) * c.qty;
     let cardCredit = 1;
     let coloured = false;
-    for (const color of COLORS) {
-      const pips = finite(c.features.pips[color]);
-      if (pips <= 0) continue;
+    for (const [color, need] of cardSourceNeeds(c.card, c.features, { commander, lands, colours, deckSize: size })) {
       coloured = true;
-      const need = karstenSources(pips, c.card.cmc, size);
       const have = filled > 0 ? s.sources[color] / filled : 0; // a partial deck's sources, as a full deck would have them
       const got = need > 0 ? sourceCredit(have / need) : 1;
       cardCredit = Math.min(cardCredit, got);
       if (have < need) {
         const prev = worst.get(color);
-        const entry = prev ?? { name: c.card.name, have: s.sources[color], need: Math.ceil(need * filled), lost: 0 };
+        const entry = prev ?? { name: c.card.name, have: s.sources[color], need: need * filled, lost: 0 };
         // The fix names the most demanding card of the colour.
-        if (!prev || need * filled > entry.need) { entry.name = c.card.name; entry.need = Math.ceil(need * filled); }
+        if (!prev || need * filled > entry.need) { entry.name = c.card.name; entry.need = need * filled; }
         entry.lost += w * (1 - got);
         worst.set(color, entry);
       }
@@ -279,15 +283,17 @@ function manaPart(f: Facts): Part {
   const structure = 0.6 * landScore + 0.25 * tapScore + 0.15 * utility;
 
   // Coloured sources multiply the rest: lands that cannot cast the deck's spells are not a mana base.
-  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds, f.offIdentity, f.size);
+  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds, f.offIdentity, f.size, f.colours);
   const colourFactor = share ** CASTABLE_POWER;
   for (const [color, e] of worst) {
-    const short = Math.ceil(e.need - e.have);
-    if (short < 1) continue;
     const lost = weightSum > 0 ? e.lost / weightSum : 0;
     if (lost <= 0) continue; // within the slack every colour is allowed
+    // The count at which the credit is full and this fix goes away, not Karsten's whole number.
+    const want = Math.ceil(e.need * SOURCE_FULL - 1e-9);
+    const short = Math.ceil(want - e.have);
+    if (short < 1) continue;
     issues.push({
-      text: `${short} short on ${COLOR_NAME[color]} sources for ${e.name}: have ${r1(e.have)}, need ${e.need}.`,
+      text: `${short} short on ${COLOR_NAME[color]} sources for ${e.name}: have ${r1(e.have)}, want ${want}.`,
       filter: { color }, actionable: true, loss: structure * lost * CASTABLE_POWER + 0.001,
     });
   }
@@ -826,12 +832,13 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const landSlack = plan.lands.source === 'plan' && !std ? LAND_PLAN_SLACK : 1;
   const filled = Math.min(1, Math.max(0, summary.cardCount) / size);
   const commanderIds = new Set(deck.commanders);
+  const colours = allowedIdentity(deck, db).size;
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   let scorer: Scorer | null = null;
   let network: DeckNetwork | null = null;
   const covered = new Map<string, Role[]>();
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, landSlack, filled, commanderIds, offIdentity, size, std,
+    deck, ctx, cards, summary, bracket, fullTargets, landSlack, filled, commanderIds, colours, offIdentity, size, std,
     countScale: filled * (std ? (size - 1) / 99 : 1),
     tag: std ? 'Standard Brawl' : `Bracket ${bracket}`,
     at: std ? 'in Standard Brawl' : `at Bracket ${bracket}`,
@@ -839,7 +846,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
     targets: scaleTargets(fullTargets, summary.cardCount, size),
     needs: new Map(roleNeeds(deck, ctx, { summary, targets: fullTargets, scaled: true }).map((n) => [n.role, n])),
     castable: Math.min(
-      colourSources(cards, summary, filled, commanderIds, offIdentity, size).share,
+      colourSources(cards, summary, filled, commanderIds, offIdentity, size, colours).share,
       band(summary.landsEffective, Math.round(fullTargets.lands * filled) - LAND_SLACK, Math.round(fullTargets.lands * filled) + LAND_SLACK, Math.max(4, LAND_BREAK * filled)),
     ),
     report: analyzeBracket(deck, ctx),

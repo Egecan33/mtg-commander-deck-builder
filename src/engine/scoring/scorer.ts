@@ -4,7 +4,7 @@ import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
 import { isLegalIn } from '../format';
-import { karstenSources } from '../mana';
+import { cardSourceNeeds } from '../mana';
 import { BASIC_LAND_QUALITY, rankQuality, rawQuality } from './quality';
 import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
@@ -216,7 +216,6 @@ interface Stat {
   fitBase: number;            // bracket-fit points before any penalty
   fitSpeed: boolean;          // the penalty in fitPts is for being too slow or expensive
   roles: Role[];              // roles with a need value
-  pipReq: [Color, number][];  // sources needed per colour to cast it on curve
   bucket: number;             // mana-value bucket 0..7
   atCommanderMv: boolean;
   tapland: number;
@@ -466,13 +465,6 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   // Standard Brawl has no bracket: nothing here is a fit, a penalty or a reason.
   if (weights.bracket === 0) { fitPts = 0; fitText = ''; fitSpeed = false; }
 
-  const pipReq: [Color, number][] = [];
-  if (f && !land) {
-    for (const c of COLORS) {
-      const pips = finite(f.pips[c]);
-      if (pips > 0) pipReq.push([c, karstenSources(pips, mv, deckSizeFor(ctx.db))]);
-    }
-  }
   const coreRoles = bracket >= 4 ? CORE_ROLES_HIGH : CORE_ROLES;
   const core = !noMana && (land || roles.some((r) => coreRoles.includes(r)));
 
@@ -482,7 +474,7 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
     coplay, coplayText,
     quality, qualityPts: r1(weights.quality * quality), qualityText,
     fitPts: r1(fitPts), fitText, fitBase: r1(fitBase), fitSpeed,
-    roles: needRoles, pipReq,
+    roles: needRoles,
     bucket: Math.min(7, Math.floor(mv)),
     atCommanderMv: !land && s.commanderMvs.has(mv),
     tapland, noMana,
@@ -503,6 +495,8 @@ interface State {
   themeNeed: number;                         // 0..1, already scaled by THEME_NEED_VALUE
   themeText: string;
   sources: Record<Color, number>;            // projected to the finished deck
+  lands: number;                             // the finished deck's lands, projected the same way
+  colours: number;                           // colours in the commander's identity
   curveFit: number[];
   scarce: Map<AxisId, 'e' | 'p'>;
   taplandsOver: boolean;
@@ -548,6 +542,8 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
   const prior = targets.lands * SOURCE_SHARE[Math.min(5, nColors)] * landsLeft;
   const sources = {} as Record<Color, number>;
   for (const c of COLORS) sources[c] = finite(summary.sources[c]) + (s.hasCommander && !s.identity.has(c) ? 0 : prior);
+  // The lands those sources assume: the deck's own, or its target while it has fewer.
+  const lands = Math.max(finite(summary.landsEffective), targets.lands);
 
   const slots = Math.max(1, size - targets.lands);
   const curveFit = CURVE_SHAPE[bracket - 1].map((share, i) => {
@@ -564,7 +560,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
 
   return {
     counts: deckCounts(deck),
-    roleNeed, roleText, roleBand, landNeed, landText, themeNeed, themeText, sources, curveFit, scarce,
+    roleNeed, roleText, roleBand, landNeed, landText, themeNeed, themeText, sources, lands, colours: s.identity.size, curveFit, scarce,
     taplandsOver: finite(summary.taplands) >= targets.taplandCap,
     landLight: summary.cardCount >= 60 * (size / 100) && finite(summary.landsEffective) < targets.lands * (summary.cardCount / size) - 3,
   };
@@ -632,6 +628,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const bracket = (Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3)))) as Bracket;
   const theme = resolveThemeWeights(deck, ctx) ?? {};
   const commanders = commanderCards(deck, db);
+  const size = deckSizeFor(db);
   const noBracket = formatOf(db) === 'standardbrawl';
   const weights: Weights = noBracket ? spreadWeights<PartKey>(ctx.edhrec ? WEIGHTS_EDHREC : WEIGHTS_PLAIN, 'bracket') : ctx.edhrec ? { ...WEIGHTS_EDHREC } : { ...WEIGHTS_PLAIN };
   // Theme weights are resolved once and pinned, so every leave-one-out deck reads the same ones.
@@ -931,9 +928,12 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
     if (rolePts >= 0.5 && needText) reasons.push(`+${Math.round(rolePts)} role: ${needText}`);
 
     // Castability and curve
+    // Sources each colour needs for the card when it is usually cast: the rating's own numbers.
+    const needs = stat.land || !stat.f ? []
+      : cardSourceNeeds(card, stat.f, { commander: commanderSlots.has(card.oracleId), lands: st.lands, colours: st.colours, deckSize: size });
     let castable = 1;
     let shortColor: Color | null = null;
-    for (const [color, req] of stat.pipReq) {
+    for (const [color, req] of needs) {
       const c = req > 0 ? st.sources[color] / req : 1;
       if (c < castable) { castable = c; shortColor = color; }
     }

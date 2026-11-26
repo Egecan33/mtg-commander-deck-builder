@@ -1,8 +1,8 @@
 import { analyzeBracket } from '../brackets';
 import { deckSizeFor, formatOf } from '../format';
-import { karstenSources } from '../mana';
+import { cardSourceNeeds } from '../mana';
 import { rateDeck } from '../rating';
-import { companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
+import { allowedIdentity, companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { deckCards, isLandCard, summarizeDeck } from '../summary';
 import { coverageRoles, roleNeeds, targetsFor } from '../targets';
@@ -197,18 +197,20 @@ function seedPacks(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   return deck;
 }
 
-/** Sources of each colour the deck's most demanding spell needs (Karsten, deck-theory.md §4.2). */
-function colourDemand(deck: Deck, ctx: EngineContext): { demand: Record<Color, number>; pips: Record<Color, number> } {
+/**
+ * Sources of each colour the deck's most demanding spell needs (deck-theory.md §4.2), by the
+ * rating's own requirement (`cardSourceNeeds`) with `lands` (the land target) as the deck's lands.
+ */
+export function colourDemand(deck: Deck, ctx: EngineContext, lands: number): { demand: Record<Color, number>; pips: Record<Color, number> } {
   const demand = { W: 0, U: 0, B: 0, R: 0, G: 0 };
   const pips = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+  const colours = allowedIdentity(deck, ctx.db).size;
+  const deckSize = deckSizeFor(ctx.db);
   for (const { card, features, qty } of deckCards(deck, ctx.db).cards) {
     if (isLandCard(features)) continue;
-    for (const c of COLORS) {
-      const p = finite(features.pips[c]);
-      if (p <= 0) continue;
-      pips[c] += p * qty;
-      demand[c] = Math.max(demand[c], karstenSources(p, card.cmc, deckSizeFor(ctx.db)));
-    }
+    for (const c of COLORS) pips[c] += Math.max(0, finite(features.pips[c])) * qty;
+    const commander = deck.commanders.includes(card.oracleId);
+    for (const [c, need] of cardSourceNeeds(card, features, { commander, lands, colours, deckSize })) demand[c] = Math.max(demand[c], need);
   }
   return { demand, pips };
 }
@@ -330,7 +332,7 @@ function addBasics(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   const nColors = pool.identity.length;
   const basicCards: Card[] = nColors === 0 ? (pool.basics.C ? [pool.basics.C] : []) : colors.map((c) => pool.basics[c] as Card);
 
-  const { demand, pips } = colourDemand(deck, ctx);
+  const { demand, pips } = colourDemand(deck, ctx, finalTargets(deck, ctx, pool).lands);
   const have = summarizeDeck(deck, ctx.db).sources;
   // Off-colour cards a Rulebreaker commander lets in (Tolabow's red spells, Seluma's Angels) can
   // only be paid for by basics of their colour: each such colour gets a share of the basics that

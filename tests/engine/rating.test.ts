@@ -420,7 +420,8 @@ describe('rateDeck: quality pass 2', () => {
       const fixes = sub(r, 'mana').fixes.filter((f) => f.filter?.color);
       expect(fixes.length).toBeGreaterThanOrEqual(2);
       for (const f of fixes) {
-        const m = /^(\d+) short on (blue|black|red|green) sources for .+: have ([\d.]+), need (\d+)\.$/.exec(f.text);
+        // "want" is the count at which the fix goes away (90% of the requirement), no longer Karsten's whole number.
+        const m = /^(\d+) short on (blue|black|red|green) sources for .+: have ([\d.]+), want (\d+)\.$/.exec(f.text);
         expect(m, f.text).not.toBeNull();
         expect(Number(m![1])).toBeGreaterThanOrEqual(10);
         expect(Number(m![1])).toBe(Math.ceil(Number(m![4]) - Number(m![3])));

@@ -34,6 +34,9 @@ describe('sourcesNeeded: what a Commander deck needs to cast a card when it is u
     // No land count known: the table alone.
     expect(sourcesNeeded({ pips: 3, mv: 3, early: true, lands: Number.NaN, colours: 3 })).toBe(36);
     expect(sourcesNeeded({ pips: 0, mv: 3, lands: 37, colours: 3 })).toBe(0);
+    // A card of a colour needs a source of it, however few lands the deck has.
+    expect(sourcesNeeded({ pips: 1, mv: 1, lands: 0, colours: 1 })).toBe(1);
+    expect(sourcesNeeded({ pips: 2, mv: 2, lands: 1, colours: 5 })).toBe(1);
   });
 
   it('a mono-colour deck is never short while its lands make the colour', () => {

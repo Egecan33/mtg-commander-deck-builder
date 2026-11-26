@@ -75,7 +75,8 @@ export interface SourceNeed {
  * usually cast: on curve for an early play, `CAST_DELAY` turns later for anything else, an {X} as
  * `X_GENERIC` more generic. Standard Brawl scales that by its 0.73. Never more than the deck's lands
  * can give one colour: `lands` × `COLOUR_LAND_SHARE` for its colour count, so a mono-colour deck is
- * never short while its lands make the colour. 0 pips → 0.
+ * never short while its lands make the colour; but never less than one source, however few lands
+ * the deck has (a deck with none cannot cast its coloured cards). 0 pips → 0.
  */
 export function sourcesNeeded(n: SourceNeed): number {
   if (!(n.pips > 0)) return 0;
@@ -84,7 +85,7 @@ export function sourcesNeeded(n: SourceNeed): number {
   const table = (n.deckSize ?? 100) >= 100 ? n0 : Math.max(1, Math.round(n0 * SMALL_DECK_SOURCES));
   if (!Number.isFinite(n.lands)) return table;
   const colours = Number.isFinite(n.colours) ? Math.min(5, Math.max(1, Math.round(n.colours))) : 1;
-  return Math.min(table, Math.max(0, n.lands) * COLOUR_LAND_SHARE[colours - 1]);
+  return Math.min(table, Math.max(1, n.lands * COLOUR_LAND_SHARE[colours - 1]));
 }
 
 /** True when the card has to be cast on curve: the commander, or ramp, removal or a counterspell of mana value ≤ 2. */

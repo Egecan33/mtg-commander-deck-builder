@@ -1,8 +1,8 @@
 import { analyzeBracket, findCombos } from '../brackets';
 import { deckSizeFor, gateBracketOf } from '../format';
-import { karstenSources } from '../mana';
+import { cardSourceNeeds } from '../mana';
 import { rateDeck } from '../rating';
-import { copyLimit, isBasicLand, validateDeck } from '../rules';
+import { allowedIdentity, copyLimit, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, summarizeDeck } from '../summary';
 import { scaleTargets, targetsFor } from '../targets';
@@ -307,17 +307,23 @@ interface ClimbOptions {
 export interface Out { id: string; name: string; score: number; land: boolean; basic: boolean; cmc: number; qty: number; themed: boolean }
 interface Trial { into: Candidate; out: string; reason: string; minGain: number; generic?: true }
 
-/** Sources of each colour the deck's most demanding spell needs (Karsten), and what it holds. */
+/**
+ * Sources of each colour the deck's most demanding spell needs, and what it holds. The need is the
+ * rating's (`cardSourceNeeds`), with the deck's own lands scaled as a full deck.
+ */
 export function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { need: number; have: number }> {
   const out = Object.fromEntries(COLORS.map((c) => [c, { need: 0, have: 0 }])) as Record<Color, { need: number; have: number }>;
   const { cards } = deckCards(deck, ctx.db);
+  const deckSize = deckSizeFor(ctx.db);
+  const summary = summarizeDeck(deck, ctx.db);
+  const filled = Math.min(1, Math.max(0, summary.cardCount) / deckSize);
+  const lands = filled > 0 ? summary.landsEffective / filled : 0;
+  const colours = allowedIdentity(deck, ctx.db).size;
   for (const { card, features, qty } of cards) {
-    for (const c of COLORS) {
-      out[c].have += (features.sources[c] ?? 0) * qty;
-      if (isLandCard(features)) continue;
-      const p = features.pips[c] ?? 0;
-      if (p > 0) out[c].need = Math.max(out[c].need, karstenSources(p, card.cmc, deckSizeFor(ctx.db)));
-    }
+    for (const c of COLORS) out[c].have += (features.sources[c] ?? 0) * qty;
+    if (isLandCard(features)) continue;
+    const commander = deck.commanders.includes(card.oracleId);
+    for (const [c, need] of cardSourceNeeds(card, features, { commander, lands, colours, deckSize })) out[c].need = Math.max(out[c].need, need);
   }
   return out;
 }
