@@ -80,3 +80,32 @@ Same UI direction as the deck page design (`2026-11-26-deck-page-fix-deck-design
 
 ## Left to the builder
 Exact fan animation, bar styling, page layout within the project's look, wording within AGENTS.md conventions.
+
+## Owner's notes from the 8×8 video and the owner's package rules (2026-11-26) — these override earlier sections where they differ
+
+## What the owner passed on
+- Board wipes are contentious: resetting just because you are behind is poor play; they are right when an opponent runs away with the game, or to clear blockers for your own win. Run 1–2.
+- The first four packages (ramp, card draw, removal, protection) are the skeleton; the other four are the "spice" that makes the deck its own. Example for Kwain: Win the game, Pillow fort, Max hand size. Filling all eight is not required; the method is flexible; each package must be coherent within itself.
+- Filling a package uses Scryfall's advanced search; for Kwain, ramp cards that also draw come first.
+
+## Design changes (designer's calls)
+1. **Board wipes are their own small slot**, not an 8-card package: target 1–2 (from the bracket's wipe band, clamped to 1–2 unless the plan is control), shown as "Board wipes · 1–2" under Removal, with the reason text "for when someone runs away with the game, or to clear blockers for your win". One-sided wipes (Scryfall tag `sweeper-one-sided`) rank first.
+2. **Spice packages can be functional, not only theme axes.** The package catalogue = the four core packages + the app's theme axes + functional packages read from Scryfall tagger tags already in the database:
+   - Win the game: role `win-condition` + tag `alternate-win-condition` (64 cards).
+   - Pillow fort: tags `pillowfort` (63), `tax-attack` (41), `fog` (94), `pseudo-fog` (76).
+   - Max hand size: tags `hand-size-increase` (49), `hand-size-matters` (275).
+   - (more functional packages can be added from tags later; each is a name + a set of roles/tags).
+   "Add a package" offers the ones this commander's text or theme points at first (e.g. Kwain's draw → Max hand size), then the rest.
+3. **Fewer than eight is normal.** The plan never pads to eight packages; an empty slot is shown as room for the owner's own spice, not as a problem, and the rating never penalises it.
+4. **Dual-purpose cards first.** Within any package, cards are ranked by the deck's card score plus an overlap bonus when the card also belongs to another package in the deck's plan (ramp that draws for Kwain, removal that protects). The tile says why: "also Card draw".
+5. **Coherent packages.** Each package shows its internal cohesion from the deck network (edges among its own cards); a package whose cards do not connect gets a hint to tighten it.
+6. **"Scryfall advanced search" in the app**: the deck browser gets package filters (any catalogue package, including tag-based ones) so hand-picking a package is one click, without leaving the app.
+
+## Owner's rules (2026-11-26, later message) — these override D14 and the notes above where they differ
+- "Packages do not have to be exactly 8; one card can be in many packages; a package must have at least 8 cards; the 4 packages I named must be in every deck."
+1. **Overlap counts**: a card counts in every package it belongs to (Kwain's ramp-that-draws counts in Ramp and in Card draw).
+2. **Minimum 8, no maximum**: every package in the plan has a target of at least 8 cards (counting overlaps); the commander/plan modifiers may raise a target above 8 but never lower it below 8.
+3. **The four core packages are in every deck**: Ramp, Card draw, Removal, Protection are never dropped (D14's "below 4 → dropped" is withdrawn for them). Board wipes (1–2) count inside Removal.
+4. **Theme / functional packages are optional**; when present, each needs at least 8 cards; fewer than eight packages in total is normal.
+5. **Lands stay deck-specific** (owner's earlier message): the land target from the plan's curve, ramp, cantrips, landfall and MDFCs, 28–40.
+6. The Packages tab and Complete package aim for "at least 8"; the rating's role coverage keeps using the same numbers (one source of truth).

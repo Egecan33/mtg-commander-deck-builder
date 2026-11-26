@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState, type RefObject } from 'react';
 import type { Deck } from '@/engine/types';
-import { CardImage, ColorPip, ScoreBadge } from '../../components/card';
-import { HeldMark, heldText } from '../../components/held';
+import { VirtualCardGrid } from '../../components/CardGrid';
+import { CardTile } from '../../components/CardTile';
+import { EmptyState } from '../../components/EmptyState';
+import { ColorPip } from '../../components/card';
 import { useNotify } from '../../components/Shell';
-import { VirtualGrid, usePaged } from '../../components/VirtualGrid';
+import { usePaged } from '../../components/VirtualGrid';
 import { browseCards, type CardSort, type HeldBy, type ScoredCard } from '../../lib/api';
 import {
   AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, entryOf, fmtInt, toFilters, type BrowserQuery,
@@ -72,6 +74,7 @@ export function Browser({
   const set = <K extends keyof BrowserQuery>(k: K, v: BrowserQuery[K]) => setQuery((q) => ({ ...q, [k]: v, fromFix: k === 'q' ? q.fromFix : null }));
   const axes = useMemo(() => [...new Set([...extraAxes, ...AXIS_IDS])], [extraAxes]);
   const active = activeFilterCount(query);
+  const clearFilters = () => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort });
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Card browser" data-testid="browser">
@@ -145,7 +148,7 @@ export function Browser({
               <input type="checkbox" checked={query.hideInDeck} onChange={(e) => set('hideInDeck', e.target.checked)} /> Not in deck
             </label>
             {(active > 0 || query.q) && (
-              <button type="button" className="btn btn-sm btn-quiet" onClick={() => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort })} data-testid="clear-filters">
+              <button type="button" className="btn btn-sm btn-quiet" onClick={clearFilters} data-testid="clear-filters">
                 Clear
               </button>
             )}
@@ -166,16 +169,29 @@ export function Browser({
       </div>
 
       <div className="min-h-0 flex-1">
-        <VirtualGrid
+        <VirtualCardGrid<BrowserCard>
+          size="M"
           count={paged.total ?? 40}
           itemAt={paged.itemAt}
           ensure={paged.ensure}
           keyOf={(c) => c.oracleId}
-          minTile={116}
-          gap={9}
           resetKey={queryKey}
           testId="browser-grid"
-          empty={<p className="px-2 py-6 text-ash">No card matches. Loosen a filter, or untick “Legal at this bracket” to see what is being held back.</p>}
+          empty={
+            active > 0 || query.q ? (
+              <EmptyState
+                className="mx-1 mt-2"
+                message="No card matches this search and these filters."
+                action={<button type="button" className="btn btn-sm" onClick={clearFilters} data-testid="empty-clear">Clear the search and filters</button>}
+              />
+            ) : (
+              <EmptyState
+                className="mx-1 mt-2"
+                message="No card here is legal for this deck at its bracket."
+                action={<button type="button" className="btn btn-sm" onClick={() => set('legalOnly', false)}>Show cards that are not legal here</button>}
+              />
+            )
+          }
           render={(c) => {
             const entry = entryOf(deck, c.oracleId);
             const commander = deck.commanders.includes(c.oracleId);
@@ -184,50 +200,44 @@ export function Browser({
             // In the deck: does the deck take a held copy. Not in it: would adding it take one.
             const holders = isIn || deck.companion === c.oracleId ? held[c.oracleId] : c.held;
             return (
-              <div
-                className={`card group ${gate ? 'gated' : ''} ${isIn ? 'outline outline-2 outline-brass' : ''}`}
-                data-testid="browser-card"
-                data-name={c.name}
-                data-id={c.oracleId}
-                data-score={c.score.score}
-                data-gated={gate ? gate.code : undefined}
-                data-in-deck={isIn || undefined}
-                data-held={holders ? true : undefined}
-                title={gate ? `${c.name}: ${gate.message}` : holders ? `${c.name}: ${heldText(holders)}` : c.name}
-              >
-                <button type="button" className="block h-full w-full cursor-zoom-in" onClick={() => onOpen(c)} aria-label={`Details for ${c.name}`}>
-                  <CardImage id={c.oracleId} name={c.name} />
-                  {!gate && <HeldMark names={holders} className="absolute right-[5%] top-[3.5%]" />}
-                </button>
-                <div className="pointer-events-none absolute bottom-[3.5%] left-[5%] flex items-center gap-1">
-                  <ScoreBadge score={c.score} />
-                  {isIn && (
-                    <span className="rounded bg-brass px-1 text-[0.7rem] font-semibold leading-[1.35rem] text-[#1a1407]">
-                      {commander ? 'Commander' : entry && entry.qty > 1 ? `In deck \u00d7${entry.qty}` : 'In deck'}
-                    </span>
-                  )}
-                </div>
-                {c.owned && <span className="pointer-events-none absolute left-[3%] top-[2%] h-2.5 w-2.5 rounded-full bg-band-top ring-2 ring-soot" title="In your collection" data-testid="owned-dot" />}
-                {gate && (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 hidden bg-[rgb(19_16_12/0.94)] p-2 text-[0.75rem] leading-snug text-bone group-hover:block" style={{ paddingBottom: '22%' }} data-testid="gate-reason">
-                    {gate.message}
-                  </div>
-                )}
-                {!gate && !commander && (
-                  <div className="absolute bottom-[4%] right-[5%] flex gap-1 opacity-70 group-hover:opacity-100">
-                    {entry && (
-                      <button type="button" className="tile-btn" onClick={() => onRemove(c.oracleId)} aria-label={`Remove ${c.name} from the deck`} data-testid="browser-remove">
-                        &minus;
-                      </button>
-                    )}
-                    {(!entry || c.roles.includes('land')) && (
-                      <button type="button" className="tile-btn tile-btn-add" onClick={() => onAdd(c)} aria-label={`Add ${c.name} to the deck`} data-testid="browser-add">
-                        +
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+              <CardTile
+                card={c}
+                size="M"
+                score={c.score.gate ? null : c.score.score}
+                gate={c.score.gate?.message ?? null}
+                heldBy={gate ? undefined : holders}
+                marks={isIn ? ['in-deck'] : []}
+                status={commander ? 'Commander' : undefined}
+                qty={entry?.qty}
+                dim={!!gate}
+                stats={query.sort === 'price' && c.priceUsd !== null ? [{ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' }] : undefined}
+                onOpen={() => onOpen(c)}
+                testId="browser-card"
+                data={{
+                  'data-name': c.name,
+                  'data-id': c.oracleId,
+                  'data-score': c.score.score,
+                  'data-gated': gate ? gate.code : undefined,
+                  'data-in-deck': isIn || undefined,
+                  'data-held': holders ? true : undefined,
+                }}
+                actions={
+                  !gate && !commander ? (
+                    <div className="flex gap-1 opacity-70 group-focus-within:opacity-100 group-hover:opacity-100">
+                      {entry && (
+                        <button type="button" className="tile-btn" onClick={() => onRemove(c.oracleId)} aria-label={`Remove ${c.name} from the deck`} title="Remove one copy from the deck" data-testid="browser-remove">
+                          &minus;
+                        </button>
+                      )}
+                      {(!entry || c.roles.includes('land')) && (
+                        <button type="button" className="tile-btn tile-btn-add" onClick={() => onAdd(c)} aria-label={`Add ${c.name} to the deck`} title="Add to the deck" data-testid="browser-add">
+                          +
+                        </button>
+                      )}
+                    </div>
+                  ) : undefined
+                }
+              />
             );
           }}
         />

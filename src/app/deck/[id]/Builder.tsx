@@ -11,12 +11,13 @@ import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
   type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type ConflictReport, type HeldBy, type ScoredCard,
 } from '../../lib/api';
+import { setFilters, useFilters } from '../../lib/filters';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
   type BrowserQuery,
 } from '../../lib/ui';
 import { Browser, type BrowserCard } from './Browser';
-import { DeckView, type Grouping, type Layout } from './DeckView';
+import { DeckView } from './DeckView';
 import {
   ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, RatingPanel, ThemesPanel, type ImproveOptions, type PanelId, type ProposalSet,
 } from './Panels';
@@ -74,8 +75,6 @@ export function Builder({ id }: { id: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelId>('rating');
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
-  const [grouping, setGrouping] = useState<Grouping>('role');
-  const [layout, setLayout] = useState<Layout>('grid');
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
@@ -409,22 +408,12 @@ export function Builder({ id }: { id: string }) {
     setProposals({ ...proposals, asked: true, items: proposals.kind === 'add' ? [] : proposals.items.filter((p) => !list.includes(p)) });
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
-  // "Only my collection" is a choice about the player, not about one deck: it is remembered.
+  // "Only my collection" is a choice about the player, not about one deck: it is one of the shared filters.
+  const { ready: filtersReady, ownedOnly: storedOwnedOnly } = useFilters();
   useEffect(() => {
-    try {
-      if (localStorage.getItem('cf-owned-only') === '1') setOptions((o) => ({ ...o, ownedOnly: true }));
-    } catch {
-      // storage is off: the box just starts unticked
-    }
-  }, []);
-  const setOwnedOnly = (ownedOnly: boolean) => {
-    setOptions((o) => ({ ...o, ownedOnly }));
-    try {
-      localStorage.setItem('cf-owned-only', ownedOnly ? '1' : '0');
-    } catch {
-      // not remembered
-    }
-  };
+    if (filtersReady) setOptions((o) => (o.ownedOnly === storedOwnedOnly ? o : { ...o, ownedOnly: storedOwnedOnly }));
+  }, [filtersReady, storedOwnedOnly]);
+  const setOwnedOnly = (ownedOnly: boolean) => setFilters({ ownedOnly });
 
   // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
   const toggleBuilt = () => {
@@ -723,10 +712,6 @@ export function Builder({ id }: { id: string }) {
           weakest={weakest}
           held={held}
           notice={notice}
-          grouping={grouping}
-          layout={layout}
-          setGrouping={setGrouping}
-          setLayout={setLayout}
           onRemove={remove}
           onAdd={add}
           onLock={lock}

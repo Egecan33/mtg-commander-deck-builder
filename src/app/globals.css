@@ -60,6 +60,26 @@ h3,
   outline-offset: 2px;
 }
 
+/* A card tile's focus ring goes round the whole card: the image button inside is clipped by the card's corners. Unlayered, so it wins over a mark's outline. */
+.tile-open:focus-visible {
+  outline: none;
+}
+.tile-frame:has(> .tile-open:focus-visible) {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
+}
+
+/* A result panel opening after an action. */
+.result-in {
+  animation: result-in 0.18s ease-out;
+}
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 ::selection {
   background: var(--color-brass-deep);
   color: var(--color-bone);
@@ -264,6 +284,7 @@ h3,
     opacity: 0;
   }
   .group:hover .tile-hover,
+  .group:focus-within .tile-hover,
   .tile-hover:focus-visible {
     opacity: 1;
   }
@@ -287,7 +308,8 @@ input[type='radio'] {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
+  .skeleton,
+  .result-in {
     animation: none;
   }
   * {

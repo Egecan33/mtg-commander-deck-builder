@@ -130,3 +130,16 @@
 - [ ] Step 3: verify on the scratch copy (Global Constraints rules): the deck page of "Mr. Spock, Science Officer" with the JumpRail, sections with counts, caption rows; the browser grid; screenshots at 1440×900; check keyboard focus on a tile.
 - [ ] Step 4: `pnpm typecheck && pnpm test`.
 - [ ] Step 5: commit `feat(ui): shared card tile, sections, jump rail, filter bar, result panel`.
+
+### Task 5b: Combos on the deck page (owner, 2026-11-26: "show the combos in the deck too")
+
+**Files:** Modify `src/app/deck/[id]/DeckView.tsx` (a "Combos" Section in the main column, registered with the JumpRail), `src/app/deck/[id]/Panels.tsx` (move `ComboRow`/`ComboList` onto the shared kit or replace them), `src/app/page.tsx` (combo count on deck tiles), `src/server/decks.ts` + `src/app/lib/api.ts` (`DeckTile.combos: number` = complete combos), `src/app/lib/combo-text.ts` (plain-English labels for Spellbook `produces`, e.g. "Infinite mana", "Win the game").
+
+**Interfaces:**
+- Consumes: `AnalyzeResponse.bracket.combos.included / oneAway` (`FoundCombo { combo, missing, twoCard, early, relevant }`), `heldBy`, `buildDeck(deck, 'swapin', { in })` (Task 2), the shared `Section`, `CardTile`, `CardDetail`.
+- Produces (UI): a "Combos · N" Section after the commander: each complete combo is a row of its cards as small CardTiles joined by "+", then "→ <what it produces>" (first three results, plain English), "needs N mana", "two cards" / "can come down early" chips, the bracket it implies, and a "View on Commander Spellbook" link (`https://commanderspellbook.com/combo/<id>/`, plain link, no request by the app). A second group "One card away · M": the same row with the missing card's tile outlined, its owned dot / "!" holders, and **Put it in** (opens the card detail with the swapIn suggestions). Empty: "No combo in this deck yet" + "One card away" still shown if any. Deck tiles show "2 combos" when > 0.
+- The Bracket tab keeps a one-line summary with a link to the Combos section instead of the full list.
+
+- [ ] Step 1: implement; unit-test `combo-text.ts` mapping (known `produces` strings → labels, unknown → itself).
+- [ ] Step 2: verify on the scratch copy: a deck with a complete combo and one with a one-card-away combo (build one in the scratch copy if none exists: add a known two-card combo from the fixture, e.g. Thassa's Oracle + Demonic Consultation, to a copy of a blue-black deck, then delete that copy afterwards — net zero); Put it in from the one-away row; screenshots.
+- [ ] Step 3: `pnpm typecheck && pnpm test`. Step 4: commit `feat(deck): show the deck's combos and the ones a card away`.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { setFilters, useFilters } from '../lib/filters';
 import { useCollections } from './Shell';
 
 /*
@@ -19,8 +20,9 @@ export function HeldMark({ names, small = false, className = '' }: { names: read
     <span
       data-testid="held-mark"
       title={text}
+      role="img"
       aria-label={`Held: ${text}`}
-      className={`display inline-flex shrink-0 items-center justify-center rounded-full bg-ember font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-ember font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
         small ? 'h-4 w-4 text-[0.72rem]' : 'h-[1.35rem] w-[1.35rem] text-[0.95rem]'
       } ${className}`}
     >
@@ -29,40 +31,24 @@ export function HeldMark({ names, small = false, className = '' }: { names: read
   );
 }
 
-const FREE_ONLY_KEY = 'cf-free-only';
-
 /**
- * "Use free copies only": the user's last choice (localStorage `cf-free-only`), otherwise on when
- * the active collection has boxes or built decks. `null` while that is not known yet, so a page can
- * wait instead of asking the server twice.
+ * "Use free copies only": the user's last choice (the shared filters, localStorage `cf-free-only`),
+ * otherwise on when the active collection has boxes or built decks. `null` while that is not known
+ * yet, so a page can wait instead of asking the server twice.
  */
 export function useFreeOnly(): [boolean | null, (on: boolean) => void] {
   const { active } = useCollections();
+  const filters = useFilters();
   // undefined: storage not read yet; null: nothing stored.
-  const [stored, setStored] = useState<boolean | null | undefined>(undefined);
+  const stored = filters.ready ? filters.freeOnly : undefined;
   const [gaveUp, setGaveUp] = useState(false);
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(FREE_ONLY_KEY);
-      setStored(v === '1' ? true : v === '0' ? false : null);
-    } catch {
-      setStored(null);
-    }
-  }, []);
   // The collections could not be read: fall back to off rather than wait for ever.
   useEffect(() => {
     if (active) return;
     const t = setTimeout(() => setGaveUp(true), 2500);
     return () => clearTimeout(t);
   }, [active]);
-  const set = useCallback((on: boolean) => {
-    setStored(on);
-    try {
-      localStorage.setItem(FREE_ONLY_KEY, on ? '1' : '0');
-    } catch {
-      // not remembered
-    }
-  }, []);
+  const set = useCallback((on: boolean) => setFilters({ freeOnly: on }), []);
   // Wait for the active collection too: a page that sends the option only for some collections must not start twice.
   const value = stored === undefined || (!active && !gaveUp) ? null : stored !== null ? stored : !!active && active.holders > 0;
   return [value, set];
