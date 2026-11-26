@@ -1,3 +1,4 @@
+import { isLegalIn, legalityViolation } from '../format';
 import type { Card, CardDb, Color, Deck, Violation } from '../types';
 import { hasCreatureType, hasSubtype, hasType } from './commander';
 import { commanderCards, isBasicLand } from './copies';
@@ -95,12 +96,11 @@ const showColors = (colors: Iterable<Color>) => {
  * commander there is no identity to break, so only legality is checked.
  */
 export function cardFitsDeck(card: Card, deck: Deck, db: CardDb): Violation | null {
-  if (card.legality !== 'legal') {
-    return { code: 'banned', message: `${card.name} is banned in Commander.`, oracleIds: [card.oracleId] };
-  }
   if (card.isMeldResult) {
     return { code: 'banned', message: `${card.name} is a meld result and cannot be put in a deck.`, oracleIds: [card.oracleId] };
   }
+  // In Brawl: on Arena and legal in Brawl (`not-on-arena` / `banned`); else the Commander banned list.
+  if (!isLegalIn(card, db)) return legalityViolation(card, db);
   if (commanderCards(deck, db).length === 0) return null;
 
   const allowed = allowedIdentity(deck, db);

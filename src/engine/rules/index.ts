@@ -1,5 +1,5 @@
 export {
-  canPair, frontTypes, hasCreatureType, hasSubtype, hasType, isCommanderEligible, isEveryCreatureType, partnerKind,
+  canLead, canPair, frontTypes, hasCreatureType, hasSubtype, hasType, isCommanderEligible, isEveryCreatureType, partnerKind,
 } from './commander';
 export type { PartnerKind } from './commander';
 export { commanderCards, copyLimit, deckCounts, deckSize, isBasicLand } from './copies';

@@ -1,5 +1,6 @@
 import { rateDeck } from '../rating';
-import { isBasicLand, isCommanderEligible } from '../rules';
+import { formatOf, isLegalIn } from '../format';
+import { canLead, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
 import type { Bracket, BuildOptions, Card, CardDb, Color, Deck, EngineContext } from '../types';
@@ -20,9 +21,9 @@ const shell = (commander: string, bracket: Bracket): Deck => ({
 });
 const opts = (owned: Set<string>, ownedOnly: boolean, extra: Partial<BuildOptions> = {}): BuildOptions => ({ ownedOnly, owned, maxPriceUsd: null, seed: 1, ...extra });
 
-/** Commanders worth looking at: legal cards that can lead a deck alone. */
+/** Commanders worth looking at: legal cards that can lead a deck alone in the database's format (Brawl adds planeswalkers). */
 export function discoverCandidates(db: CardDb, owned: ReadonlySet<string>, ownedCommandersOnly: boolean): Card[] {
-  return db.all().filter((c) => isCommanderEligible(c) && (!ownedCommandersOnly || owned.has(c.oracleId)));
+  return db.all().filter((c) => canLead(c, formatOf(db)) && (!ownedCommandersOnly || owned.has(c.oracleId)));
 }
 
 /**
@@ -64,7 +65,7 @@ export function quickFit(commander: Card, ownedCards: readonly Card[], db: CardD
   const themes = Object.entries(db.features(commander.oracleId)?.axes ?? {}).map(([axis, w]) => [axis, Math.min(1, w.e + w.p)] as const);
   const fits: number[] = [];
   for (const card of ownedCards) {
-    if (card.oracleId === commander.oracleId || isBasicLand(card) || card.legality !== 'legal') continue;
+    if (card.oracleId === commander.oracleId || isBasicLand(card) || !isLegalIn(card, db)) continue;
     if (card.colorIdentity.some((c) => !identity.has(c))) continue;
     const axes = db.features(card.oracleId)?.axes as Record<string, { e: number; p: number }> | undefined;
     let fit = 1;

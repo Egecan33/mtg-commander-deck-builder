@@ -1,3 +1,4 @@
+import { isLegalIn, legalityViolation } from '../format';
 import type { Card, CardDb, Deck, Violation } from '../types';
 import { frontTypes, hasCreatureType, hasType } from './commander';
 import { deckCounts, deckSize, startingDeck } from './copies';
@@ -94,7 +95,7 @@ export function companionViolation(deck: Deck, db: CardDb): Violation | null {
   if (!card) return { code: 'unknown-card', message: 'The companion is not in the card database.', oracleIds: [id] };
   const fail = (message: string, extra: string[] = []): Violation => ({ code: 'companion', message, oracleIds: [id, ...extra] });
 
-  if (card.legality !== 'legal') return { code: 'banned', message: `${card.name} is banned in Commander.`, oracleIds: [id] };
+  if (!card.isMeldResult && !isLegalIn(card, db)) return legalityViolation(card, db);
   const rule = RULES[card.frontName];
   if (!card.keywords.includes('Companion') || !rule) return fail(`${card.name} does not have the companion ability.`);
   if (id === LUTRI_ORACLE_ID) return fail(`${card.name} is banned as a companion (it is legal in the deck itself).`);

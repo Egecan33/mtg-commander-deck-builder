@@ -2,6 +2,7 @@ import { bracketGate } from '../brackets';
 import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
+import { isLegalIn } from '../format';
 import { karstenSources } from '../mana';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
@@ -313,7 +314,7 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   // Gate: legality and colour identity. The common case is decided here; anything else goes
   // through cardFitsDeck, which knows the Rulebreaker commanders.
   let gate: Gate | null = null;
-  let fits = card.legality === 'legal' && !card.isMeldResult;
+  let fits = isLegalIn(card, db);
   if (fits && s.hasCommander) for (const c of card.colorIdentity) if (!s.identity.has(c)) { fits = false; break; }
   if (!fits) {
     const v = cardFitsDeck(card, deck, db);
@@ -776,7 +777,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const allowedCombo = (info: ComboInfo): boolean => !(info.twoCard && (bracket <= 2 || (bracket === 3 && info.early)));
   const couldJoin = (oracleId: string): boolean => {
     const c = db.get(oracleId);
-    if (!c || c.legality !== 'legal' || c.isMeldResult) return false;
+    if (!c || !isLegalIn(c, db)) return false;
     return !(setup.hasCommander && c.colorIdentity.some((col) => !setup.identity.has(col)));
   };
   const completeStrength = (info: ComboInfo) => COMBO_COMPLETE[bracket - 1] * (COMBO_OBSCURE_SHARE + (1 - COMBO_OBSCURE_SHARE) * info.weight);

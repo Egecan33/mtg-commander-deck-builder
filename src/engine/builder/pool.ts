@@ -1,3 +1,4 @@
+import { isLegalIn } from '../format';
 import { allowedIdentity, cardFitsDeck, commanderCards, companionViolation, copyLimit, hasType, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights } from '../summary';
@@ -235,13 +236,13 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
   const allowed = (card: Card): boolean => {
     if (isBasicLand(card)) {
       let ok = fitCache.get(card.oracleId);
-      if (ok === undefined) fitCache.set(card.oracleId, (ok = card.legality === 'legal' && fits(card)));
+      if (ok === undefined) fitCache.set(card.oracleId, (ok = isLegalIn(card, db) && fits(card)));
       return ok;
     }
     if (owned && !owned.has(card.oracleId)) return false;
     if (maxPrice !== null && !(typeof card.priceUsd === 'number' && card.priceUsd <= maxPrice)) return false;
     let ok = fitCache.get(card.oracleId);
-    if (ok === undefined) fitCache.set(card.oracleId, (ok = card.legality === 'legal' && !card.isMeldResult && fits(card)));
+    if (ok === undefined) fitCache.set(card.oracleId, (ok = isLegalIn(card, db) && fits(card)));
     return ok;
   };
 
