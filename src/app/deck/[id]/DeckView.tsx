@@ -2,26 +2,32 @@
 
 import { useMemo, type ReactNode } from 'react';
 import type { CardScore, Deck, DeckEntry } from '@/engine/types';
-import { CardImage, Mana, ScoreBadge } from '../../components/card';
-import { HeldMark, heldText } from '../../components/held';
+import { CardGrid } from '../../components/CardGrid';
+import { CardTile, LockIcon, unknownCard, type TileMark } from '../../components/CardTile';
+import { EmptyState } from '../../components/EmptyState';
+import { FilterBar, pickOption, type FilterOption } from '../../components/FilterBar';
+import { JumpRail, JumpScope } from '../../components/JumpRail';
+import { Section } from '../../components/Section';
+import { Mana, ScoreBadge } from '../../components/card';
+import { HeldMark } from '../../components/held';
 import type { CardLookup, ClientCard, HeldBy } from '../../lib/api';
+import { useFilters } from '../../lib/filters';
 import { ROLE_GROUPS, TYPE_GROUPS, roleGroup, typeGroup } from '../../lib/ui';
 
 export type Grouping = 'role' | 'type';
-export type Layout = 'grid' | 'list';
+
+const GROUPS: FilterOption[] = [
+  { id: 'role', label: 'By role', title: 'Group the cards by what they do: ramp, card draw, removal' },
+  { id: 'type', label: 'By type', title: 'Group the cards by card type: creatures, instants, lands' },
+];
 
 interface Row { entry: DeckEntry; card: ClientCard | undefined; zone: 'commander' | 'companion' | 'main' }
 
-const LockIcon = ({ open = false }: { open?: boolean }) => (
-  <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden fill="currentColor">
-    <rect x="3" y="7" width="10" height="7" rx="1.5" />
-    <path d={open ? 'M5 7V5a3 3 0 0 1 5.6-1.5' : 'M5 7V5a3 3 0 0 1 6 0v2'} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
+const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
-/** The deck as card images, grouped by what the cards do or by card type; or as a compact list. */
+/** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, grouping, layout, setGrouping, setLayout, onRemove, onAdd, onLock, onOpen, tools, notice,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice,
 }: {
   /** Extra actions for the whole deck, shown under the header. */
   tools?: ReactNode;
@@ -33,15 +39,15 @@ export function DeckView({
   weakest: Set<string>;
   /** Deck cards whose free copies do not cover the deck, with the boxes and built decks holding them. */
   held: HeldBy;
-  grouping: Grouping;
-  layout: Layout;
-  setGrouping: (g: Grouping) => void;
-  setLayout: (l: Layout) => void;
   onRemove: (id: string) => void;
   onAdd: (id: string) => void;
   onLock: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
+  const filters = useFilters();
+  const grouping = pickOption(filters.groupBy, GROUPS) as Grouping;
+  const layout = filters.view;
+
   const groups = useMemo(() => {
     const by = new Map<string, Row[]>();
     const put = (label: string, row: Row) => by.set(label, [...(by.get(label) ?? []), row]);
@@ -67,144 +73,144 @@ export function DeckView({
 
   const empty = deck.main.length === 0;
 
+  const tile = ({ entry, card, zone }: Row) => {
+    const id = entry.oracleId;
+    const score = scoreOf(id);
+    const c = card ?? unknownCard(id);
+    const name = c.name;
+    const weak = weakest.has(id);
+    const illegal = zone === 'main' && !!score?.gate;
+    const holders = held[id];
+    const locked = zone === 'main' && entry.locked;
+    const marks: TileMark[] = [];
+    if (illegal) marks.push('illegal');
+    else if (weak) marks.push('weakest');
+    if (locked) marks.push('locked');
+    return (
+      <CardTile
+        key={id}
+        card={c}
+        known={!!card}
+        size="S"
+        score={score && !score.gate ? score.score : null}
+        gate={score?.gate?.message ?? null}
+        heldBy={holders}
+        marks={marks}
+        qty={entry.qty}
+        onOpen={() => onOpen(id)}
+        testId="deck-card"
+        data={{
+          'data-name': name,
+          'data-id': id,
+          'data-zone': zone,
+          'data-weak': weak || undefined,
+          'data-locked': locked || undefined,
+          'data-held': holders ? true : undefined,
+        }}
+        actions={
+          zone === 'main' ? (
+            <>
+              <button
+                type="button"
+                className={`tile-btn tile-hover ${entry.locked ? 'tile-btn-on' : ''}`}
+                onClick={() => onLock(id)}
+                aria-pressed={entry.locked}
+                aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name} so it is never cut`}
+                title={entry.locked ? 'Locked: auto-build and improve keep this card. Click to unlock.' : 'Lock: keep this card through auto-build and improve'}
+                data-testid="deck-lock"
+              >
+                <LockIcon open={!entry.locked} />
+              </button>
+              <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} title="Remove one copy from the deck" data-testid="deck-remove">
+                &minus;
+              </button>
+            </>
+          ) : zone === 'companion' ? (
+            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} as companion`} title="Remove the companion">
+              &minus;
+            </button>
+          ) : undefined
+        }
+      />
+    );
+  };
+
+  const row = ({ entry, card, zone }: Row) => {
+    const id = entry.oracleId;
+    const score = scoreOf(id);
+    const name = card?.name ?? `Unknown card (${id.slice(0, 8)})`;
+    return (
+      <li key={id} className="group flex h-8 items-center gap-2 px-2 hover:bg-anvil" data-testid="deck-row" data-name={name} data-held={held[id] ? true : undefined}>
+        <span className="w-5 text-right text-smoke">{entry.qty}</span>
+        <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-brass" onClick={() => onOpen(id)}>
+          {name}
+          {weakest.has(id) && <span className="ml-2 text-[0.75rem] text-band-mid">weakest</span>}
+          {zone === 'main' && score?.gate && <span className="ml-2 text-[0.75rem] text-band-low">{score.gate.message}</span>}
+        </button>
+        <HeldMark names={held[id]} small />
+        {card?.manaCost && <Mana cost={card.manaCost} size="0.95rem" />}
+        <ScoreBadge score={score} />
+        {zone === 'main' ? (
+          <>
+            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
+              <LockIcon open={!entry.locked} />
+            </button>
+            {card?.roles.includes('land') && (
+              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd(id)} aria-label={`Add another ${name}`}>+</button>
+            )}
+            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
+          </>
+        ) : (
+          <span className="w-[4.6rem] shrink-0 text-right text-[0.75rem] text-smoke">{zone}</span>
+        )}
+      </li>
+    );
+  };
+
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col border-l border-slag" aria-label="Deck" data-testid="deck-view">
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
-        <h2 className="mr-auto text-[1.15rem] leading-none">Deck</h2>
-        <div className="seg" role="group" aria-label="Group cards by">
-          <button type="button" aria-pressed={grouping === 'role'} onClick={() => setGrouping('role')} data-testid="group-role">By role</button>
-          <button type="button" aria-pressed={grouping === 'type'} onClick={() => setGrouping('type')} data-testid="group-type">By type</button>
-        </div>
-        <div className="seg" role="group" aria-label="Show the deck as">
-          <button type="button" aria-pressed={layout === 'grid'} onClick={() => setLayout('grid')} data-testid="layout-grid">Images</button>
-          <button type="button" aria-pressed={layout === 'list'} onClick={() => setLayout('list')} data-testid="layout-list">List</button>
-        </div>
+        <h2 className="mr-auto text-[18px] leading-none">Deck</h2>
+        <FilterBar show={['groupBy', 'view']} groups={GROUPS} testId="deck-view-controls" />
       </div>
 
       {tools && <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">{tools}</div>}
       {notice && <div className="grid gap-1.5 px-3 pb-2">{notice}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4" data-testid="deck-scroll">
-        {empty && (
-          <div className="mb-4 rounded-md border border-dashed border-slag p-4 text-ash" data-testid="deck-empty">
-            <p className="display text-[1.05rem] text-bone">The 99 are empty</p>
-            <p className="mt-1">
-              Add cards from the browser on the left with the + on each card, or use “Auto-build” above for a full deck and “Fill the rest” to complete a
-              start you made by hand.
-            </p>
+      <JumpScope>
+        <div className="flex min-h-0 flex-1">
+          <JumpRail label="Deck sections" className="w-[8.5rem] shrink-0 overflow-y-auto overscroll-contain pb-4 pl-2 pr-1 pt-2" />
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pb-4 pl-2 pr-3" data-testid="deck-scroll">
+            {empty && (
+              <EmptyState
+                className="mb-4 mt-2"
+                title="The 99 are empty"
+                message="Add cards from the browser on the left with the + on each card, or use Auto-build above for a full deck."
+                testId="deck-empty"
+              />
+            )}
+
+            {groups.map((g) => (
+              <Section
+                key={g.label}
+                id={sectionId(g.label)}
+                title={g.label}
+                count={g.rows.reduce((s, r) => s + r.entry.qty, 0)}
+                testId="deck-group"
+                data={{ 'data-group': g.label }}
+              >
+                {layout === 'grid' ? (
+                  <CardGrid size="S">{g.rows.map(tile)}</CardGrid>
+                ) : (
+                  <ul className="divide-y divide-iron rounded-md border border-iron" data-testid="deck-list">
+                    {g.rows.map(row)}
+                  </ul>
+                )}
+              </Section>
+            ))}
           </div>
-        )}
-
-        {groups.map((g) => {
-          const n = g.rows.reduce((s, r) => s + r.entry.qty, 0);
-          return (
-            <div key={g.label} className="mb-4" data-testid="deck-group" data-group={g.label}>
-              <h3 className="sticky top-0 z-10 flex items-baseline gap-2 bg-soot/95 py-1.5 text-[0.95rem]">
-                <span>{g.label}</span>
-                <span className="font-sans text-[0.8rem] font-normal text-smoke">{n}</span>
-              </h3>
-
-              {layout === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(98px,1fr))] gap-2">
-                  {g.rows.map(({ entry, card, zone }) => {
-                    const id = entry.oracleId;
-                    const score = scoreOf(id);
-                    const name = card?.name ?? 'Unknown card';
-                    const weak = weakest.has(id);
-                    const illegal = zone === 'main' && !!score?.gate;
-                    const holders = held[id];
-                    return (
-                      <div
-                        key={id}
-                        className={`card group ${illegal ? 'outline outline-2 outline-band-low' : weak ? 'outline outline-2 outline-band-mid' : ''}`}
-                        data-testid="deck-card"
-                        data-name={name}
-                        data-id={id}
-                        data-zone={zone}
-                        data-weak={weak || undefined}
-                        data-locked={(zone === 'main' && entry.locked) || undefined}
-                        data-held={holders ? true : undefined}
-                        title={illegal ? `${name}: ${score?.gate?.message}` : weak ? `${name}: one of the weakest cards in the deck` : holders ? `${name}: ${heldText(holders)}` : name}
-                      >
-                        <button type="button" className="block h-full w-full cursor-zoom-in" onClick={() => onOpen(id)} aria-label={`Details for ${name}`}>
-                          <CardImage id={id} name={name} known={!!card} />
-                          <HeldMark names={holders} className={`absolute right-[5%] ${entry.qty > 1 ? 'top-[19%]' : 'top-[3.5%]'}`} />
-                        </button>
-                        <div className="pointer-events-none absolute bottom-[3.5%] left-[5%] flex items-center gap-1">
-                          <ScoreBadge score={score} />
-                          {weak && !illegal && (
-                            <span className="rounded bg-band-mid px-1 text-[0.68rem] font-semibold leading-[1.35rem] text-[#1a1407] group-hover:hidden">weakest</span>
-                          )}
-                        </div>
-                        {entry.qty > 1 && (
-                          <span className="pointer-events-none absolute right-[5%] top-[3.5%] rounded bg-soot/90 px-1 text-[0.78rem] font-semibold leading-[1.3rem]">&times;{entry.qty}</span>
-                        )}
-                        {zone === 'main' && (
-                          <div className="absolute bottom-[4%] right-[5%] flex gap-1">
-                            <button
-                              type="button"
-                              className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'tile-hover'}`}
-                              onClick={() => onLock(id)}
-                              aria-pressed={entry.locked}
-                              aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name} so it is never cut`}
-                              title={entry.locked ? 'Locked: auto-build and improve keep this card. Click to unlock.' : 'Lock: keep this card through auto-build and improve'}
-                              data-testid="deck-lock"
-                            >
-                              <LockIcon open={!entry.locked} />
-                            </button>
-                            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">
-                              &minus;
-                            </button>
-                          </div>
-                        )}
-                        {zone === 'companion' && (
-                          <div className="absolute bottom-[4%] right-[5%]">
-                            <button type="button" className="tile-btn tile-hover" onClick={() => onRemove(id)} aria-label={`Remove ${name} as companion`}>&minus;</button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <ul className="divide-y divide-iron rounded-md border border-iron" data-testid="deck-list">
-                  {g.rows.map(({ entry, card, zone }) => {
-                    const id = entry.oracleId;
-                    const score = scoreOf(id);
-                    const name = card?.name ?? `Unknown card (${id.slice(0, 8)})`;
-                    return (
-                      <li key={id} className="group flex h-8 items-center gap-2 px-2 hover:bg-anvil" data-testid="deck-row" data-name={name} data-held={held[id] ? true : undefined}>
-                        <span className="w-5 text-right text-smoke">{entry.qty}</span>
-                        <button type="button" className="min-w-0 flex-1 truncate text-left hover:text-brass" onClick={() => onOpen(id)}>
-                          {name}
-                          {weakest.has(id) && <span className="ml-2 text-[0.75rem] text-band-mid">weakest</span>}
-                          {zone === 'main' && score?.gate && <span className="ml-2 text-[0.75rem] text-band-low">{score.gate.message}</span>}
-                        </button>
-                        <HeldMark names={held[id]} small />
-                        {card?.manaCost && <Mana cost={card.manaCost} size="0.95rem" />}
-                        <ScoreBadge score={score} />
-                        {zone === 'main' ? (
-                          <>
-                            <button type="button" className={`tile-btn ${entry.locked ? 'tile-btn-on' : 'opacity-40 group-hover:opacity-100'}`} onClick={() => onLock(id)} aria-pressed={entry.locked} aria-label={entry.locked ? `Unlock ${name}` : `Lock ${name}`}>
-                              <LockIcon open={!entry.locked} />
-                            </button>
-                            {card?.roles.includes('land') && (
-                              <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onAdd(id)} aria-label={`Add another ${name}`}>+</button>
-                            )}
-                            <button type="button" className="tile-btn opacity-40 group-hover:opacity-100" onClick={() => onRemove(id)} aria-label={`Remove ${name} from the deck`} data-testid="deck-remove">&minus;</button>
-                          </>
-                        ) : (
-                          <span className="w-[4.6rem] shrink-0 text-right text-[0.75rem] text-smoke">{zone}</span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </div>
+        </div>
+      </JumpScope>
     </section>
   );
 }
