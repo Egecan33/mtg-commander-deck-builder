@@ -165,8 +165,9 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
 }
 
 /**
- * A Brawl deck's wildcard line: what its cards not owned (in the active collection) need per rarity,
- * what its collection has, and the printing to craft each one. Null for a Commander deck.
+ * A Brawl deck's wildcard line: what its cards not owned (in the deck's own collection, whichever is
+ * active) need per rarity, what that collection has, and the printing to craft each one. Null for a
+ * Commander deck.
  */
 export function arenaReport(deck: Deck, ctx: EngineContext): ArenaReport | null {
   if (deckFormat(deck) !== 'brawl') return null;
