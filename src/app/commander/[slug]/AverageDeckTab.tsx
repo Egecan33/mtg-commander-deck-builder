@@ -47,15 +47,14 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
   return (
     <div data-testid="average-deck">
       <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="display flex h-11 min-w-11 items-center justify-center rounded-md px-2 text-[1.5rem] font-bold text-[#15110a]" style={{ background: BAND_VAR[band] }} title="Forge: deck rating out of 100" data-testid="average-rating">
+        <span className="flex h-11 min-w-11 items-center justify-center rounded-md px-2 text-[1.5rem] font-bold text-[#15110a]" style={{ background: BAND_VAR[band] }} title="Forge: deck rating out of 100" data-testid="average-rating">
           {Math.round(rating.rating)}
         </span>
         <span data-testid="average-legal" className={rating.legal ? 'text-bone' : 'text-band-low'}>
           {rating.legal ? 'Legal' : `Not legal: ${rating.violations[0]?.message ?? 'this deck breaks a rule'}`}
         </span>
         <span className="text-ash" title="Forge: the lowest bracket the deck's cards fit">Plays like Bracket {analysis.bracket.playsLike}</span>
-        <span className="text-ash tabular-nums">{rating.rating} / 100</span>
-        <button type="button" className="btn btn-primary ml-auto" onClick={() => void open()} disabled={busy} data-testid="average-open">Open as a deck</button>
+        <button type="button" className="btn ml-auto" onClick={() => void open()} disabled={busy} data-testid="average-open">Open as a deck</button>
       </div>
       <div className="seg mb-3" role="group" aria-label="Show the deck as">
         <button type="button" aria-pressed={view === 'cards'} onClick={() => setView('cards')} data-testid="average-view-cards">Cards</button>

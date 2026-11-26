@@ -10,7 +10,7 @@ export function DecksTab({ page, name, onBuild }: { page: CommanderPageResponse;
       <EmptyState
         testId="decks-empty"
         message={`You have no deck with ${name} yet.`}
-        action={<button type="button" className="btn btn-sm btn-primary" onClick={onBuild}>Build a deck</button>}
+        action={<button type="button" className="btn btn-sm" onClick={onBuild}>Build a deck</button>}
       />
     );
   }

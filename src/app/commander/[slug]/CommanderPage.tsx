@@ -81,28 +81,28 @@ export function CommanderPage({ slug }: { slug: string }) {
   };
 
   // The header (cached data only).
-  const commanderKey = `${slug}|${withSlug ?? ''}`;
   useEffect(() => {
     if (!ready) return;
     const ctrl = new AbortController();
     getCommanderPage(slug, { with: withSlug, bracket: q.bracket, color }, ctrl.signal).then(
       (p) => { setPage(p); setMissing(null); },
-      (e) => { if (!isAbort(e)) { if (e instanceof ApiError && e.status === 404) setMissing(e.message); else notify.error(e); } },
+      (e) => { if (!isAbort(e)) { if (e instanceof ApiError && e.status >= 400 && e.status < 500) setMissing(e.message); else notify.error(e); } },
     );
     return () => ctrl.abort();
   }, [ready, slug, withSlug, q.bracket, color, tick, notify]);
 
   // Opening a commander page counts as picking the commander: one EDHREC read per page open (a no-op while EDHREC is off).
   const asked = useRef('');
+  const pageKey = page?.commanders.map((c) => c.oracleId).join('+') ?? '';
   useEffect(() => {
-    if (!page || asked.current === commanderKey) return;
-    asked.current = commanderKey;
+    if (!page || asked.current === pageKey) return;
+    asked.current = pageKey;
     const was = page.edhrec;
     loadEdhrec(page.commanders.map((c) => c.oracleId), page.bracket).then(
       (r) => { if (r.status === 'ready' && was !== 'ready') setTick((n) => n + 1); },
       () => undefined,
     );
-  }, [page, commanderKey]);
+  }, [page, pageKey]);
 
   // The recs, only while their tab is open.
   useEffect(() => {
