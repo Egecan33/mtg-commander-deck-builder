@@ -39,8 +39,16 @@ export default function DiscoverPage() {
     if (!ready || freeOnly === null) return;
     const mine = ++run.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let restarted = false;
     const take = (s: DiscoverState) => {
       if (mine !== run.current) return;
+      // The job finished on EDHREC data that has changed since (GET answers 'idle' for a stale
+      // result): start it again, once, instead of showing an empty page.
+      if (s.status === 'idle' && !restarted) {
+        restarted = true;
+        startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
+        return;
+      }
       setState(s);
       setLookup((cur) => ({ ...cur, ...s.cards }));
       if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e)), 700);
