@@ -292,8 +292,8 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
 
 const r1 = (n: number): string => String(Math.round(n * 10) / 10);
 
-/** Land candidates for `addOne`: fixers, the pool's other lands and the deck's basics, each once. */
-function landCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
+/** Land candidates for `addOne` and Fix deck's mana stage: fixers, the pool's other lands and the deck's basics, each once. */
+export function landCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const c of [...pool.fixers, ...pool.lands, ...basicCandidates(pool, ctx)]) {

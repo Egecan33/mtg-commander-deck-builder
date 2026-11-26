@@ -2,14 +2,14 @@ import { analyzeBracket } from '../brackets';
 import { deckNetwork } from '../network';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
-import { isBasicLand, validateDeck } from '../rules';
+import { allowedIdentity, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard, summarizeDeck } from '../summary';
 import { ROLE_LABEL, roleNeeds, targetsFor } from '../targets';
 import type { AxisId, BuildOptions, Color, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, Violation } from '../types';
 import { fillRestReport } from './auto';
-import { improveDeck, replaceCardFrom } from './goals';
-import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from './improve';
+import { improveDeck, landCandidates, replaceCardFrom } from './goals';
+import { applySwaps, bestOf, comboPieces, cuttable, fineRating, matches, shownRating, swapOne } from './improve';
 import { buildPool, deckCount, qtyOf, removeCard } from './pool';
 import type { Pool } from './pool';
 
@@ -74,7 +74,10 @@ function swapSummary(before: Deck, after: Deck, c: { out: string; in: string }, 
   const outF = c.out !== '' ? ctx.db.features(c.out) : undefined;
   if (inF && outF && isLandCard(inF) && isLandCard(outF)) {
     if (Math.round(sa.taplands) < Math.round(sb.taplands)) return `Tapped lands ${Math.round(sb.taplands)} → ${Math.round(sa.taplands)}`;
+    // Only the deck's own colours: a land that makes any colour is not "white sources" for a Temur deck.
+    const identity = allowedIdentity(after, ctx.db);
     const colour = (Object.keys(COLOUR_WORD) as Color[])
+      .filter((k) => identity.size === 0 || identity.has(k))
       .map((k) => ({ k, gain: Math.round(sa.sources[k]) - Math.round(sb.sources[k]) }))
       .sort((x, y) => y.gain - x.gain)[0];
     if (colour && colour.gain > 0) return `${COLOUR_WORD[colour.k]} sources ${Math.round(sb.sources[colour.k])} → ${Math.round(sa.sources[colour.k])}`;
@@ -284,6 +287,61 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
   return none(`Improve proposed ${plural(proposals.length, 'swap')}${searched(opts)}${tail}`);
 }
 
+/** Cards Fix deck's mana stage tries to cut each round, and lands it rates for each. */
+const LAND_OUTS = 3;
+const LAND_INS = 6;
+
+/**
+ * Step 3b of `fixDeck` for `only = 'mana'`: land swaps tried directly, not picked out of Improve's
+ * proposals. While the rating asks for more lands, the deck's weakest cuttable spells give way to
+ * the best lands for it; otherwise (taplands, colour sources) its weakest lands give way to better
+ * ones. Each round keeps the swap that rates highest, when the rating does not fall and the mana
+ * base rises. Locked cards, commanders and combo pieces stay; the options hold for every land.
+ */
+function landStage(start: Deck, startRating: DeckRating, ctx: EngineContext, poolOf: () => Pool): Stage {
+  const manaOf = (r: DeckRating): number => r.subscores.find((s) => s.key === 'mana')?.value ?? 0;
+  let deck = start;
+  let rating = startRating;
+  const changes: FixChange[] = [];
+  const keep = new Set(start.main.filter((e) => e.locked).map((e) => e.oracleId));
+  for (let round = 0; round < FIX_SWAPS; round++) {
+    const fixes = rating.subscores.find((s) => s.key === 'mana')?.fixes ?? [];
+    if (fixes.length === 0) break;
+    const short = fixes.some((f) => /^Add \d+ lands?/.test(f.text));
+    const pool = poolOf();
+    const scorer = createScorer(deck, ctx);
+    const outs = cuttable(deck, ctx, pool, keep, comboPieces(deck, ctx), scorer)
+      .filter((o) => (short ? !o.land : o.land))
+      .sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : 1))
+      .slice(0, LAND_OUTS);
+    const have = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+    const ins = bestOf(landCandidates(pool, ctx), scorer, have, LAND_INS, () => true);
+    let best: { out: string; in: string; deck: Deck; rating: DeckRating } | null = null;
+    for (const o of outs) {
+      for (const { c } of ins) {
+        if (c.card.oracleId === o.id) continue;
+        const next = swapOne(deck, o.id, c.card.oracleId);
+        const after = rateDeck(next, ctx);
+        if (shownRating(after) < shownRating(rating) || !(manaOf(after) > manaOf(rating))) continue;
+        if (!best || fineRating(after) > fineRating(best.rating)) best = { out: o.id, in: c.card.oracleId, deck: next, rating: after };
+      }
+    }
+    if (!best) break;
+    const name = (id: string) => ctx.db.get(id)?.name ?? id;
+    const s = summarizeDeck(deck, ctx.db);
+    changes.push({
+      out: best.out, in: best.in,
+      reason: short
+        ? `The deck has ${Math.round(s.landsEffective * 10) / 10} lands and its curve wants about ${targetsFor(deck, ctx, s).lands}: ${name(best.out)} makes way for ${name(best.in)}.`
+        : `${name(best.in)} serves this mana base better than ${name(best.out)}.`,
+      summary: swapSummary(deck, best.deck, best, ctx),
+    });
+    deck = best.deck;
+    rating = best.rating;
+  }
+  return { deck, rating, changes, why: changes.length === 0 ? 'no land swap raises the mana base without lowering the rating' : '' };
+}
+
 /**
  * Step 3b of `fixDeck` for `only = 'synergy'`: every card the network says connects to nothing is
  * swapped, one at a time, for the best replacement the engine agrees with that does connect, as
@@ -398,6 +456,12 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   // (A deck whose theme the rating itself calls unconfirmed is left to its theme weights first: no swap settles that.)
   if (only === 'synergy' && part && part.fixes.every((f) => f.actionable)) {
     const more = connectStage(stage.deck, stage.rating, ctx, poolOf);
+    if (more.changes.length > 0) stage = { deck: more.deck, rating: more.rating, changes: [...stage.changes, ...more.changes], why: stage.why };
+    else if (stage.changes.length === 0) stage = { ...stage, why: `${stage.why}; ${more.why}` };
+  }
+  // The mana base: land swaps tried directly (review I1), after whatever Improve's run found.
+  if (only === 'mana' && part && !ratingCapped(stage.deck, stage.rating.violations)) {
+    const more = landStage(stage.deck, stage.rating, ctx, poolOf);
     if (more.changes.length > 0) stage = { deck: more.deck, rating: more.rating, changes: [...stage.changes, ...more.changes], why: stage.why };
     else if (stage.changes.length === 0) stage = { ...stage, why: `${stage.why}; ${more.why}` };
   }
