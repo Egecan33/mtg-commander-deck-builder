@@ -2,11 +2,16 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
+import { packageMinimum } from '@/engine/format';
+import { isPackageId, packageDef, pinPackage } from '@/engine/packages';
+import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, PackageId, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
 import { Menu } from '../../components/Menu';
+import { NetworkSummary } from '../../components/network/NetworkSummary';
+import { NetworkView } from '../../components/network/NetworkView';
+import { useNetwork } from '../../components/network/useNetwork';
 import { ResultPanel, type Change } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
@@ -22,15 +27,18 @@ import {
 import { CraftSection, FormatChip, WildcardLine } from './ArenaParts';
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
+import { PackagesPanel } from './PackagesPanel';
 import {
   ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, PutItIn, RatingPanel, ThemesPanel, whyNotIn, type ImproveOptions, type PanelId, type ProposalSet,
 } from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'rating', label: 'Rating' },
+  { id: 'packages', label: 'Packages' },
   { id: 'bracket', label: 'Bracket' },
   { id: 'themes', label: 'Themes' },
   { id: 'improve', label: 'Improve' },
+  { id: 'network', label: 'Network' },
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
@@ -42,7 +50,7 @@ const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(ca
  */
 interface DeckResult {
   seq: number;
-  kind: 'fix' | 'swap';
+  kind: 'fix' | 'swap' | 'package';
   title: string;
   changes: Change[];
   ratingBefore: number;
@@ -98,7 +106,23 @@ export function Builder({ id }: { id: string }) {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>('saved');
   const [busy, setBusy] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelId>('rating');
+  const net = useNetwork(deck, panel === 'network');
+  const [networkFocus, setNetworkFocus] = useState<number | null>(null);
+  const networkNow = net.network;
+  useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
+  /** The package the Packages page pointed at (`?panel=packages&package=<id>`). */
+  const [highlight, setHighlight] = useState<PackageId | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('panel') === 'packages') setPanel('packages');
+    const wanted = params.get('package');
+    if (wanted && isPackageId(wanted)) setHighlight(wanted);
+  }, []);
+  const themePackages = useMemo(
+    () => (analysis?.packages.packages ?? []).filter((p) => p.kind === 'theme').map((p) => ({ id: p.id, name: p.name })),
+    [analysis],
+  );
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
@@ -155,6 +179,8 @@ export function Builder({ id }: { id: string }) {
       return next;
     });
   }, []);
+  const networkCards = net.network?.cards;
+  useEffect(() => { if (networkCards) learn(networkCards); }, [networkCards, learn]);
 
   // ---- load
   useEffect(() => {
@@ -538,6 +564,52 @@ export function Builder({ id }: { id: string }) {
     if (el && el !== document.body && el !== target) return;
     target?.focus({ preventScroll: true });
   }, [busy]);
+  /**
+   * Complete package (and Add a package, which first pins the package at its minimum, 8 or 5 in Standard Brawl): the same panel and Undo as
+   * Fix deck. The deck before is what Undo restores, so an added package's pin goes with it.
+   */
+  const runPackage = async (id: PackageId, add: boolean) => {
+    if (!deck || !analysis) return;
+    const before = deck;
+    const name = analysis.packages.packages.find((p) => p.id === id)?.name ?? analysis.packages.offers.find((o) => o.id === id)?.name ?? packageDef(id)?.name ?? 'the package';
+    const start = add ? pinPackage(before, analysis.packages, analysis.targets, id, packageMinimum(format)) : before;
+    setBusy(`package:${id}`);
+    try {
+      const res = await buildDeck(start, 'package', { ...buildOpts(), package: id });
+      learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info('The deck changed while the package was being completed, so nothing was applied. Try again.');
+        return;
+      }
+      const n = res.changes.filter((c) => c.in !== '').length;
+      let after: Deck | null = null;
+      if (res.changes.length > 0 || add) {
+        const next: Deck = { ...res.deck, id: before.id, name: before.name };
+        if (before.built) next.built = true;
+        else delete next.built;
+        after = next;
+        mutate(() => next);
+        setProposals(null);
+      }
+      setFixed({
+        seq: ++fixSeq.current,
+        kind: 'package',
+        title: n > 0 ? `Completed ${name}: added ${n}` : `${name}: nothing added`,
+        changes: res.changes,
+        ratingBefore: res.ratingBefore,
+        ratingAfter: res.ratingAfter,
+        note: res.note,
+        heldBy: res.heldBy,
+        before,
+        after,
+        undone: 'Undone. The deck is back as it was before Complete package.',
+      });
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setBusy(null);
+    }
+  };
   /** Puts back the deck exactly as it was before the fix or swap; offered only while the deck it made is unchanged. */
   const undoResult = () => {
     if (!fixed?.after || deck !== fixed.after) return;
@@ -865,7 +937,7 @@ export function Builder({ id }: { id: string }) {
         lookup={lookup}
         heldBy={fixed.heldBy}
         note={
-          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after the ${fixed.kind}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
+          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after ${fixed.kind === 'package' ? 'Complete package' : `the ${fixed.kind}`}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
         }
         onUndo={fixed.after && deck === fixed.after ? undoResult : undefined}
         onDismiss={() => {
@@ -1091,10 +1163,10 @@ export function Builder({ id }: { id: string }) {
       </header>
 
       <div
-        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown && panel !== 'network' ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
         data-browser={browserShown ? 'shown' : 'hidden'}
       >
-        {browserShown && (
+        {browserShown && panel !== 'network' && (
           <Browser
             deck={deck}
             settled={settled}
@@ -1102,6 +1174,7 @@ export function Builder({ id }: { id: string }) {
             query={query}
             setQuery={setQuery}
             extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+            themePackages={themePackages}
             held={held}
             onAdd={addFromBrowser}
             onRemove={remove}
@@ -1112,7 +1185,20 @@ export function Builder({ id }: { id: string }) {
             size={DECK_SIZE}
           />
         )}
-        <DeckView
+        {panel === 'network' && (
+          <div className="min-h-0 min-w-0 overflow-y-auto p-4" data-testid="network-area">
+            {fixResult}
+            <NetworkView
+              network={net.network}
+              error={net.error}
+              focusCluster={networkFocus}
+              onOpen={openCard}
+              onRetry={net.reload}
+              onEmpty={() => setPanel('rating')}
+            />
+          </div>
+        )}
+        {panel !== 'network' && <DeckView
           lead={
             browserShown ? undefined : (
               <button type="button" className="btn btn-sm" onClick={showBrowser} title="Show the card search beside the deck (or press /)" data-testid="browser-show">
@@ -1146,7 +1232,7 @@ export function Builder({ id }: { id: string }) {
               {noCollection ? 'Proxy whole deck' : 'Proxy cards I don’t own'}
             </button>
           }
-        />
+        />}
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
           <div className="flex shrink-0 border-b border-slag" role="tablist">
             {PANELS.filter((p) => !(std && p.id === 'bracket')).map((p) => (
@@ -1155,7 +1241,7 @@ export function Builder({ id }: { id: string }) {
                 type="button"
                 role="tab"
                 aria-selected={panel === p.id}
-                className={`display flex-1 border-b-2 py-2.5 text-[0.98rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                className={`display flex-1 border-b-2 px-1 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                 onClick={() => setPanel(p.id)}
                 data-testid={`tab-${p.id}`}
               >
@@ -1179,20 +1265,49 @@ export function Builder({ id }: { id: string }) {
                 onOpen={openCard}
                 onAddOne={(role) => void addOne(role)}
                 onWanted={(role, n) => mutate((d) => {
+                  // Ramp, Card draw and Removal are core packages: pinned exactly as the Packages tab pins them.
+                  const core = role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null;
+                  if (core) return pinPackage(d, analysis.packages, analysis.targets, core, n);
                   const next = { ...(d.roleTargets ?? {}) };
                   if (n === null) delete next[role];
                   else next[role] = n;
                   return { ...d, roleTargets: Object.keys(next).length > 0 ? next : null };
                 })}
               />
+            ) : panel === 'packages' ? (
+              <PackagesPanel
+                analysis={analysis}
+                deck={deck}
+                busy={busy}
+                highlight={highlight}
+                onComplete={(id) => void runPackage(id, false)}
+                onAdd={(id) => void runPackage(id, true)}
+                onPin={(id, n) => mutate((d) => pinPackage(d, analysis.packages, analysis.targets, id, n))}
+                onShow={(id) => {
+                  setQuery({ ...DEFAULT_QUERY, package: id, hideInDeck: true, fromFix: null });
+                  showBrowser();
+                }}
+              />
             ) : panel === 'bracket' && !std ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
+            ) : panel === 'network' ? (
+              net.network ? (
+                <NetworkSummary
+                  network={net.network}
+                  focus={networkFocus}
+                  onFocus={setNetworkFocus}
+                  onOpen={openCard}
+                  onSwap={() => void runFix('synergy')}
+                  busy={busy !== null}
+                />
+              ) : <p className="p-4 text-ash" data-testid="panel-network">Reading how the cards connect</p>
             ) : panel === 'themes' ? (
               <ThemesPanel
                 analysis={analysis}
                 deck={deck}
                 onChange={(axis, w) => mutate((d) => ({ ...d, themeWeights: { ...(d.themeWeights ?? analysis.themeWeights), [axis]: w } }))}
                 onReset={() => mutate((d) => ({ ...d, themeWeights: null }))}
+                onFocus={() => mutate((d) => ({ ...d, themeWeights: analysis.themeFocus.weights }))}
                 onShow={(axis) => {
                   setQuery({ ...DEFAULT_QUERY, axis, fromFix: null });
                   showBrowser();

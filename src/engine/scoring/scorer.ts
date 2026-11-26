@@ -5,9 +5,11 @@ import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
 import { isLegalIn } from '../format';
 import { karstenSources } from '../mana';
+import { BASIC_LAND_QUALITY, rankQuality, rawQuality } from './quality';
+import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
-import { ROLE_LABEL, bandRoles, roleNeeds, targetsFor } from '../targets';
+import { ROLE_LABEL, coverageRoles, roleNeeds, targetsFor } from '../targets';
 import type {
   AxisId, Bracket, Card, CardDb, CardFeatures, CardScore, Color, Combo, Deck, DeckSummary, EdhrecData, EngineContext, Role,
   ScorePart, Targets,
@@ -35,38 +37,12 @@ const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R
 const clamp01 = (n: number) => (n > 0 ? (n < 1 ? n : 1) : 0);
 const finite = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
 const r1 = (n: number) => Math.round(n * 10) / 10;
+/** Most synergy points a card loses for connecting to nothing in the deck. */
+export const CONNECTION_LOSS = 15;
 const signed = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 
 // ---- quality -------------------------------------------------------------------------------
 
-/** EDHREC rank → quality, through log10(rank). Anchors follow deck-theory.md §6.4, smoothed. */
-const RANK_CURVE: readonly (readonly [number, number])[] = [
-  [0, 1], [1.7, 1], [2, 0.93], [2.7, 0.8], [3.18, 0.6], [3.6, 0.38], [4, 0.2], [4.5, 0.06],
-];
-const UNRANKED_QUALITY = 0.08;
-const BASIC_LAND_QUALITY = 0.6;
-
-function rankQuality(rank: number | null | undefined): number {
-  if (rank === null || rank === undefined || !(rank >= 1)) return UNRANKED_QUALITY;
-  const x = Math.log10(rank);
-  for (let i = 1; i < RANK_CURVE.length; i++) {
-    const [x1, y1] = RANK_CURVE[i];
-    if (x <= x1) {
-      const [x0, y0] = RANK_CURVE[i - 1];
-      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-    }
-  }
-  return RANK_CURVE[RANK_CURVE.length - 1][1];
-}
-
-/** Mana value a role's cards normally cost; each mana above it costs quality. */
-const ROLE_BASELINE: Partial<Record<Role, number>> = { ramp: 2, 'spot-removal': 2, counterspell: 2, draw: 3, tutor: 3, wipe: 5 };
-/** Commander mana value from which mana rocks that make two or more mana are not held to the two-mana baseline. */
-const BIG_COMMANDER = [6];
-const MULTI_MANA = /\{T\}[^.\n]*: Add (\{[WUBRGC]\}){2,}|: Add (two|three|four|five|X) mana/;
-const OVERCOST_STEP = 0.05;
-const OVERCOST_MAX = 0.15;
-const INSTANT_BONUS = 0.05;
 /**
  * Power, not popularity, at Brackets 4-5: a card's quality there is at least what its power tier
  * earns ([Bracket 4, Bracket 5]). Mana Vault and Demonic Consultation are in few decks overall,
@@ -392,27 +368,11 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
 
   // Quality: global popularity, a little for instant-speed interaction, less for costing too much.
+  const rankQ = isBasicLand(card) ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
   const basic = isBasicLand(card);
-  const rankQ = basic ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
-  let quality = rankQ;
-  let qualityText = basic ? 'basic land' : card.edhrecRank ? `EDHREC rank ${card.edhrecRank}` : 'no popularity data';
-  if (f && !land) {
-    const interaction = roles.includes('spot-removal') || roles.includes('counterspell') || roles.includes('wipe');
-    if (interaction && f.instantSpeed) { quality += INSTANT_BONUS; qualityText += ', instant speed'; }
-    let over = Infinity;
-    for (const role of roles) {
-      const base = ROLE_BASELINE[role];
-      if (base !== undefined) over = Math.min(over, mv - base);
-    }
-    // A creature or planeswalker brings a body with the effect; only plain spells are held to the role's price.
-    // Nor is a rock that makes two or more mana overpriced for a commander that costs six or more
-    // (Thran Dynamo and Gilded Lotus are how Kozilek gets cast).
-    const bigRock = roles.includes('ramp') && BIG_COMMANDER.some((n) => s.commanderMvs.has(n) || [...s.commanderMvs].some((m) => m >= n)) && MULTI_MANA.test(card.oracleText);
-    if (over !== Infinity && over >= 1 && !bigRock && !/\b(Creature|Planeswalker)\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) {
-      quality -= Math.min(OVERCOST_MAX, OVERCOST_STEP * Math.floor(over));
-      qualityText += ', costs more than most cards doing this job';
-    }
-  }
+  const raw = rawQuality(card, f, s.commanderMvs);
+  let quality = raw.quality;
+  let qualityText = raw.text;
   const tierTop = bracket >= 4 ? TIER_QUALITY[f?.powerTier ?? 0]?.[bracket - 4] : undefined;
   const tierQuality = tierTop === undefined ? undefined : tierTop - TIER_RANK_SPREAD * (1 - rankQ);
   if (tierQuality !== undefined && tierQuality > quality) {
@@ -430,7 +390,10 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
   quality = clamp01(quality);
 
-  const needRoles = f ? bandRoles(card, f, bracket).filter((r) => roleValue(r, bracket) !== undefined && !(noMana && r === 'ramp')) : [];
+  // The coverage entries the card counts toward (`roleNeeds`): its core packages by role or tag, the
+  // wipe slot, other band roles. A mana card that makes no mana for this commander fills no slot.
+  const tags = db.tagSlugs?.(card.oracleId) ?? [];
+  const needRoles = f && !noMana ? coverageRoles(card, f, tags, bracket).filter((r) => roleValue(r, bracket) !== undefined) : [];
   let synText = synAxis ? `${axisLabel(synAxis)} ${synSide === 'p' ? 'payoff' : 'piece'}${second ? ', fits a second theme' : ''}` : '';
   const themeMember = !land && syn >= THEME_MEMBER;
   if (land) syn *= LAND_THEME_SHARE;
@@ -663,6 +626,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   score(card: Card): CardScore;
   scoreAll(filter?: (c: Card) => boolean): CardScore[];
   quality(card: Card): number | null;
+  commanderLink(card: Card): number | null;
 } {
   const { db } = ctx;
   const bracket = (Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3)))) as Bracket;
@@ -867,6 +831,9 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const bracketGated = (card: Card, stat: Stat): Gate | null =>
     (bracket <= 3 && (stat.checkBracket || overrides) ? bracketGate(card, deck, ctx) : null);
 
+  let index: ReturnType<typeof linkIndex> | null = null;
+  const connectionIndex = () => (index ??= linkIndex(pinned, db, theme));
+
   function score(card: Card): CardScore {
     const stat = statOf(card);
     if (stat.gate) return gated(card, stat.gate);
@@ -923,8 +890,24 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
       if (combo.strength > syn) { syn = combo.strength; synText = combo.text; }
       else synText = synText ? `${synText}; ${combo.text}` : combo.text;
     }
-    const synPts = r1(weights.synergy * syn);
+    let synPts = r1(weights.synergy * syn);
     if (synPts >= 0.5) reasons.push(`+${Math.round(synPts)} ${stat.land ? 'mana' : 'synergy'}: ${synText}`);
+
+    // A spell with no partner in the deck, no ring role and little synergy with the commander loses
+    // up to CONNECTION_LOSS synergy points (the same test the network uses for "unconnected").
+    if (!stat.land && stat.f && !isRingCard(stat.f, card, bracket, db.tagSlugs?.(card.oracleId) ?? []) && !commanderSlots.has(card.oracleId)) {
+      const link = commanderLink(card) ?? 0;
+      if (link < UNCONNECTED_LINK) {
+        const strongest = connectionIndex().strongest(card)?.weight ?? 0;
+        if (strongest < UNCONNECTED_EDGE) {
+          const loss = Math.min(synPts, r1(CONNECTION_LOSS * Math.min(1 - strongest / UNCONNECTED_EDGE, 1 - link / UNCONNECTED_LINK)));
+          synPts = r1(synPts - loss);
+          reasons.push(Math.round(loss) >= 1
+            ? `${signed(-Math.round(loss))} synergy: connects to nothing in this deck (no combo, theme or typal partner, little synergy with the commander)`
+            : 'connects to nothing in this deck');
+        }
+      }
+    }
 
     if (weights.coplay > 0) reasons.push(`+${Math.round(stat.coplay)} co-play: ${stat.coplayText}`);
     reasons.push(`+${Math.round(stat.qualityPts)} quality: ${stat.qualityText}`);
@@ -1041,5 +1024,19 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
     return stat.qualityPts / weights.quality;
   }
 
-  return { score, scoreAll, quality };
+  /**
+   * How well a card works with the commander and the theme, 0..1: its static synergy share, plus up
+   * to a quarter for its EDHREC lift when cached. Null when the card is gated; 0 for a land.
+   */
+  function commanderLink(card: Card): number | null {
+    const stat = statOf(card);
+    if (stat.gate) return null;
+    if (stat.land) return 0;
+    let link = stat.syn;
+    const entry = ctx.edhrec?.cards?.[card.oracleId];
+    if (entry && typeof entry.lift === 'number' && Number.isFinite(entry.lift) && cache.lifts) link += 0.25 * percentile(cache.lifts, entry.lift);
+    return clamp01(link);
+  }
+
+  return { score, scoreAll, quality, commanderLink };
 }

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, fixDeck, improveDeck } from '@/engine/builder';
 import { shownRating } from '@/engine/builder/improve';
+import { deckNetwork } from '@/engine/network';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { resolveThemeWeights } from '@/engine/summary';
-import { ROLE_LABEL, roleNeeds } from '@/engine/targets';
+import { ROLE_LABEL, coverageRoles, roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
+import { withFiveUnconnected } from '../helpers/network';
 
 const db = fixtureDb();
 const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
@@ -48,6 +50,7 @@ function junkFor(deck: Deck, n: number): string[] {
   const junk = db.all()
     .filter((c) => !have.has(c.oracleId) && !isLand(c.oracleId) && c.colorIdentity.every((k) => identity.has(k))
       && (c.edhrecRank ?? 99999) > 4000 && !c.gameChanger && c.cmc >= 4 && (db.features(c.oracleId)?.roles.length ?? 0) === 0
+      && coverageRoles(c, db.features(c.oracleId)!, db.tagSlugs(c.oracleId), deck.targetBracket).length === 0
       && db.combosFor(c.oracleId).length === 0)
     .slice(0, n).map((c) => c.oracleId);
   expect(junk.length).toBe(n);
@@ -163,12 +166,18 @@ describe('fixDeck', () => {
   });
 
   it('a deck short of ramp gains ramp and the rating does not drop', () => {
-    const deck = swapInto(precon, junkFor(precon, 6), (id) => hasRole(id, 'ramp'));
+    // Seven ramp cards out, then three short of the Ramp package's target by the rating's own count (role
+    // or tag): the precon's Ramp package holds 21 against 9, more than single copies can take it under.
+    const inRamp = (id: string) => coverageRoles(db.get(id)!, db.features(id)!, db.tagSlugs(id), 2).includes('ramp');
+    const cut = swapInto(precon, junkFor(precon, 7), inRamp);
+    const deck: Deck = { ...cut, roleTargets: { ramp: roleNeeds(cut, ctx).find((n) => n.role === 'ramp')!.count + 3 } };
     expect(size(deck)).toBe(100);
     expect(validateDeck(deck, db)).toEqual([]);
     expect(rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes).some((f) => f.filter?.role === 'ramp')).toBe(true);
     const r = fixDeck(deck, ctx, opts());
-    expect(roleCount(r.deck, 'ramp')).toBeGreaterThan(roleCount(deck, 'ramp'));
+    // The Ramp package by the rating's own count (role or tag).
+    const ramp = (d: Deck) => roleNeeds(d, ctx).find((n) => n.role === 'ramp')!.count;
+    expect(ramp(r.deck)).toBeGreaterThan(ramp(deck));
     expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
     expect(rateDeck(r.deck, ctx).rating).toBeGreaterThanOrEqual(rateDeck(deck, ctx).rating);
     expect(validateDeck(r.deck, db)).toEqual([]);
@@ -292,6 +301,8 @@ describe('fixDeck', () => {
     const mana = fixDeck(precon, ctx, opts(), 'mana');
     expect(mana.changes.length).toBeGreaterThan(0);
     for (const c of mana.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(true);
+    // The precon is Temur: a land that makes any colour is never summed up as white or black sources.
+    for (const c of mana.changes) expect(c.summary).not.toMatch(/^(White|Black) sources/);
     const curve = fixDeck(fixtureDeck('cedh', 5), ctx, opts(), 'curve');
     expect(curve.changes.length).toBeGreaterThan(0);
     for (const c of curve.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(false);
@@ -399,6 +410,26 @@ describe('fixDeck', () => {
     for (const id of gcs) expect(qty(r.deck, id), db.get(id)?.name).toBe(0);
     expect(bracketFit(r.deck)).toBeGreaterThan(bracketFit(deck));
     expect(r.note).toBeNull();
+  });
+
+  it('Swap the unconnected cards: a synergy fix cuts cards that connect to nothing', () => {
+    const { deck, added } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const before = deckNetwork(deck, ctx).unconnected.length;
+    const r = fixDeck(deck, ctx, opts(), 'synergy');
+    expect(deckNetwork(r.deck, ctx).unconnected.length).toBeLessThan(before);
+    expect(added.filter((id) => qty(r.deck, id) === 0).length).toBeGreaterThanOrEqual(3);
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+  });
+
+  it('a synergy fix with nothing connected allowed leaves the deck untouched', () => {
+    const { deck } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const own = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+    const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned: own }), 'synergy');
+    expect(r.changes).toEqual([]);
+    expect(r.deck).toEqual(deck);
+    expect(typeof r.note).toBe('string');
+    expect((r.note ?? '').length).toBeGreaterThan(0);
   });
 
   it('an unknown part of the rating changes nothing', () => {

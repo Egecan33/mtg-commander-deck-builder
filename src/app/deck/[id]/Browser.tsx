@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, type RefObject } from 'react';
-import type { Deck } from '@/engine/types';
+import { CORE_PACKAGES, FUNCTIONAL_PACKAGES } from '@/engine/packages';
+import type { Deck, PackageId } from '@/engine/types';
 import { VirtualCardGrid } from '../../components/CardGrid';
 import { CardTile } from '../../components/CardTile';
 import { EmptyState } from '../../components/EmptyState';
@@ -23,6 +24,15 @@ const SORTS: { id: CardSort; label: string }[] = [
   { id: 'price', label: 'Price' },
 ];
 
+/** A tile's stats: the Arena rarity on a Brawl deck (no prices there), else the price when sorting by it; then the deck's other packages. */
+const tileStats = (c: BrowserCard, price: boolean, brawl: boolean) => {
+  const out: { label: string; value: string; title?: string }[] = [];
+  if (brawl) out.push(rarityStat(c.arenaRarity));
+  else if (price && c.priceUsd !== null) out.push({ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' });
+  if (c.also && c.also.length > 0) out.push({ label: 'also', value: c.also.join(', '), title: 'Also in these packages of the deck' });
+  return out.length > 0 ? out : undefined;
+};
+
 /** A browser result. `held`: adding one more copy would take a copy a box or another built deck holds (their names). */
 export type BrowserCard = ScoredCard & { held?: string[] };
 
@@ -32,7 +42,7 @@ export type BrowserCard = ScoredCard & { held?: string[] };
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false, size = 100,
+  deck, settled, rev, query, setQuery, extraAxes, themePackages, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false, size = 100,
 }: {
   /** Hides the card search column (the deck gets its width). */
   onHide: () => void;
@@ -42,6 +52,8 @@ export function Browser({
   query: BrowserQuery;
   setQuery: (next: BrowserQuery | ((q: BrowserQuery) => BrowserQuery)) => void;
   extraAxes: string[];
+  /** The deck's planned theme packages, offered next to the core and functional ones in the role menu. */
+  themePackages: { id: PackageId; name: string }[];
   /** The deck's own conflicts: a card already in the deck shows its "!" from these. */
   held: HeldBy;
   /** "+" on a card. The deck page opens the card with what it could replace when the deck is full. */
@@ -80,6 +92,14 @@ export function Browser({
   );
 
   const set = <K extends keyof BrowserQuery>(k: K, v: BrowserQuery[K]) => setQuery((q) => ({ ...q, [k]: v, fromFix: k === 'q' ? q.fromFix : null }));
+  // The role menu also picks a package: choosing one clears the role and the other way round.
+  const pickRole = (v: string) =>
+    setQuery((q) => ({ ...q, role: v.startsWith('package:') ? '' : (v as BrowserQuery['role']), package: v.startsWith('package:') ? (v.slice(8) as PackageId) : '', fromFix: null }));
+  const packageChoices = useMemo(() => [
+    ...CORE_PACKAGES.map((p) => ({ id: p.id, name: p.name })),
+    ...FUNCTIONAL_PACKAGES.map((p) => ({ id: p.id, name: p.name })),
+    ...themePackages,
+  ], [themePackages]);
   const axes = useMemo(() => [...new Set([...extraAxes, ...AXIS_IDS])], [extraAxes]);
   const active = activeFilterCount(query);
   const clearFilters = () => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort });
@@ -120,9 +140,12 @@ export function Browser({
 
         {showFilters && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-testid="filters">
-            <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.role} onChange={(e) => set('role', e.target.value as BrowserQuery['role'])} aria-label="Role" data-testid="filter-role">
+            <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.role || (query.package ? `package:${query.package}` : '')} onChange={(e) => pickRole(e.target.value)} aria-label="Role" data-testid="filter-role">
               <option value="">Any role</option>
               {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              <optgroup label="Packages">
+                {packageChoices.map((p) => <option key={p.id} value={`package:${p.id}`}>{p.name}</option>)}
+              </optgroup>
             </select>
             <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.axis} onChange={(e) => set('axis', e.target.value)} aria-label="Theme" data-testid="filter-axis">
               <option value="">Any theme</option>
@@ -227,7 +250,7 @@ export function Browser({
                 status={commander ? 'Commander' : undefined}
                 qty={entry?.qty}
                 dim={!!gate}
-                stats={brawl ? [rarityStat(c.arenaRarity)] : query.sort === 'price' && c.priceUsd !== null ? [{ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' }] : undefined}
+                stats={tileStats(c, query.sort === 'price', brawl)}
                 onOpen={() => onOpen(c)}
                 testId="browser-card"
                 data={{

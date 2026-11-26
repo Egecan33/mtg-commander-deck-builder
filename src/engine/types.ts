@@ -90,6 +90,8 @@ export interface CardDb {
   combosFor(oracleId: string): readonly Combo[];
   /** The format whose pool `all()` holds and whose legality `legality` reports; absent means 'commander'. */
   format?: Format;
+  /** Rolled-up Scryfall Tagger slugs; absent on a database built without tags. */
+  tagSlugs?(oracleId: string): string[];
 }
 
 export interface DeckEntry { oracleId: string; qty: number; locked: boolean }
@@ -121,6 +123,8 @@ export interface Deck {
    * means 'brawl'. Ignored for decks of other collections (they are Commander decks).
    */
   arenaFormat?: 'brawl' | 'standardbrawl';
+  /** Sizes the user set for theme and functional packages (`theme:<axis>`, `fn:<id>` -> 8..40); core pins live in roleTargets. */
+  packageTargets?: Record<string, number> | null;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -147,7 +151,19 @@ export interface Targets {
   taplandCap: number;
   /** Why the numbers are what they are, for formats tuned apart from Commander (Standard Brawl); absent otherwise. */
   notes?: string[];
+  /**
+   * The four core packages' targets (at least 8 each) and the board-wipe slot inside Removal: the
+   * one set of numbers the Packages tab, Complete package, the scorer and the rating's role coverage
+   * hold the deck to (packages spec, owner's rule 6). Set by `targetsFor`.
+   */
+  packages?: CorePackageTargets;
 }
+/**
+ * Each core package as a band: `lo` is its target (at least 8), `hi` the top before "over" costs
+ * anything (four over the target, or the bands' own top when that is higher, as for Kinnan's ramp).
+ * `wipes` is the board-wipe slot inside Removal.
+ */
+export interface CorePackageTargets { ramp: RoleBand; draw: RoleBand; removal: RoleBand; protection: RoleBand; wipes: RoleBand }
 
 export interface FoundCombo { combo: Combo; missing: string[]; twoCard: boolean; early: boolean; relevant: boolean }
 export interface BracketReport {
@@ -229,3 +245,69 @@ export interface FixChange { out: string; in: string; reason: string; summary: s
 export interface FixResult { deck: Deck; changes: FixChange[]; ratingBefore: number; ratingAfter: number; note: string | null }
 
 export interface EngineContext { db: CardDb; edhrec: EdhrecData | null; mldOverrides: Record<string, boolean>; extraTurnOverrides: Record<string, boolean> }
+
+// ---- the deck network (src/engine/network) ----------------------------------------------------
+/**
+ * `package`: two cards of the same planned or pinned functional package (Pillow fort, Max hand size,
+ * Win the game). It counts for "connected", never for clusters or cohesion's clustered share.
+ */
+export type NetworkEdgeKind = 'combo' | 'feeds' | 'typal' | 'commander' | 'package';
+export interface NetworkNode {
+  oracleId: string; qty: number; commander: boolean;
+  /** Counts toward the rating's role coverage (a band role, or a core package by tag): drawn on the staple ring, never unconnected. */
+  staple: boolean;
+  roles: Role[];
+  /** Its strongest theme axes in this deck (max(e, p) >= 0.5, ordered by max(e, p) x deck weight), at most three. */
+  axes: AxisId[];
+  /** Sum of its combo, feeds and typal edge weights. */
+  degree: number;
+  /** `scorer.commanderLink` for the card, 0..1, three decimals; 1 for a commander. */
+  link: number;
+  cluster: number | null;
+  unconnected: boolean;
+}
+export interface NetworkEdge {
+  a: string; b: string;                      // a < b
+  kind: NetworkEdgeKind;
+  weight: number;                            // 0..1, three decimals
+  /** The reason as read from a's side and from b's side. */
+  reasons: [string, string];
+  axis?: AxisId; comboId?: string;
+  /** The functional package of a `package` edge. */
+  packageId?: PackageId;
+}
+export interface NetworkCluster { id: number; key: string; name: string; cards: string[]; weight: number }
+export interface DeckNetwork {
+  nodes: NetworkNode[]; edges: NetworkEdge[]; clusters: NetworkCluster[];
+  cohesion: number;                                       // 0..100 integer
+  cohesionParts: { connected: number; clustered: number }; // shares 0..1, three decimals
+  unconnected: string[];
+}
+
+// ---- packages (src/engine/packages) -----------------------------------------------------------
+export type CorePackageId = 'ramp' | 'draw' | 'removal' | 'protection';
+export type PackageId = CorePackageId | `theme:${string}` | `fn:${string}`;
+export type PackageKind = 'core' | 'theme' | 'functional';
+export interface PlanMove { role: Role; delta: number; reason: string }   // delta as applied to the band's bottom
+export interface PackageCohesion { linked: number; of: number }
+export interface PlannedPackage {
+  id: PackageId; name: string; kind: PackageKind;
+  target: number;              // >= 8, no maximum
+  count: number;               // the deck's cards in it, overlaps counted in every package
+  /** `count` without the commanders: the copies in the 99, what the draw odds are against. */
+  library?: number;
+  cards: string[];             // those cards' oracle ids
+  reason: string; moves: PlanMove[]; pinned: boolean;
+  wipes: { lo: number; hi: number; count: number; reason: string } | null;   // Removal only
+  cohesion: PackageCohesion | null;
+}
+export interface PackageOffer { id: PackageId; name: string; kind: PackageKind; why: string | null; count: number }
+export interface PackagePlan {
+  packages: PlannedPackage[];                       // core four first, then theme, then functional
+  lands: { target: number; count: number; reason: string; pinned: boolean };
+  offers: PackageOffer[];
+  /** Focused themes left out: under `packageMin` slots, or (with `legal`) fewer than `packageMin` cards the deck and its legal pool hold. */
+  dropped: { id: PackageId; name: string; slots: number; legal?: number }[];
+  /** The fewest cards a package holds in the deck's format (`packageMinimum`): 8, or 5 in Standard Brawl. */
+  packageMin: number;
+}

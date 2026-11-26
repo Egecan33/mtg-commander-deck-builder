@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createCardDb } from '@/engine/carddb';
 import { commanderThemeWeights, computeFeatures } from '@/engine/features';
+import { packageDef, packageMembers } from '@/engine/packages';
 import { createScorer } from '@/engine/scoring';
 import { INFER_MIN_CARDS, resolveTheme, resolveThemeWeights, summarizeDeck } from '@/engine/summary';
 import { bandRoles, isCantrip, roleNeeds, scaleTargets, targetsFor } from '@/engine/targets';
@@ -176,10 +177,10 @@ describe('resolveTheme: one theme resolution for the scorer and the rating', () 
     expect(resolveTheme(sized, ctx).inferred).toBe('typal:dragon');
 
     const user = { ...precon, themeWeights: { landfall: 1 } };
-    expect(resolveTheme(user, ctx)).toEqual({ weights: { landfall: 1 }, source: 'user', inferred: null });
+    expect(resolveTheme(user, ctx)).toEqual({ weights: { landfall: 1 }, unfocused: { landfall: 1 }, source: 'user', inferred: null });
     const lathril = fixtureDeck('upgraded', 3);
     expect(resolveTheme(lathril, ctx).source).toBe('commander');
-    expect(resolveTheme(deck([], 3), ctx)).toEqual({ weights: {}, source: 'commander', inferred: null });
+    expect(resolveTheme(deck([], 3), ctx)).toEqual({ weights: {}, unfocused: {}, source: 'commander', inferred: null });
   });
 
   it("the deck's own dragons are scored as its theme, not as its weakest cards", () => {
@@ -198,20 +199,29 @@ describe('resolveTheme: one theme resolution for the scorer and the rating', () 
 });
 
 describe('roleNeeds: the role numbers the scorer and the rating share', () => {
-  it("is the deck's role counts against targetsFor's bands", () => {
+  it("is the deck's coverage counts against the plan's bands: core packages by membership, the rest by role", () => {
     const d = fixtureDeck('upgraded', 3);
     const summary = summarizeDeck(d, db);
     const targets = targetsFor(d, ctx, summary);
     const needs = roleNeeds(d, ctx);
-    expect(needs.length).toBe(Object.keys(targets.roles).length);
+    const core = { ramp: 'ramp', draw: 'draw', 'spot-removal': 'removal', protection: 'protection' } as const;
     for (const n of needs) {
-      expect(n.band, n.role).toEqual(targets.roles[n.role]);
-      expect(n.count, n.role).toBe(summary.roleCounts[n.role] ?? 0); // Bracket 3: plain feature roles
+      const id = core[n.role as keyof typeof core];
+      if (id) {
+        expect(n.band, n.role).toEqual(targets.packages![id]);
+        expect(n.count, n.role).toBe(packageMembers(d, db, packageDef(id)!).count);
+      } else if (n.role === 'wipe') {
+        expect(n.band).toEqual(targets.packages!.wipes);
+      } else {
+        expect(n.band, n.role).toEqual(targets.roles[n.role]);
+        expect(n.count, n.role).toBe(summary.roleCounts[n.role] ?? 0); // Bracket 3: plain feature roles
+      }
       expect(n.short, n.role).toBe(Math.max(0, n.band.lo - n.count));
       expect(n.over, n.role).toBe(Math.max(0, n.count - n.band.hi));
     }
+    expect(needs.map((n) => n.role)).not.toContain('counterspell'); // counted inside Removal
     const ramp = needs.find((n) => n.role === 'ramp')!;
-    expect(ramp.over).toBeGreaterThan(0); // 22 mana elves and rocks against 10-13
+    expect(ramp.over).toBeGreaterThan(0); // the mana elves and rocks against 10-14
     expect(roleNeeds(d, ctx, { summary, targets })).toEqual(needs);
   });
 
@@ -222,12 +232,12 @@ describe('roleNeeds: the role numbers the scorer and the rating share', () => {
     const scaled = scaleTargets(full, summary.cardCount);
     const whole = roleNeeds(d, ctx).find((n) => n.role === 'ramp')!;
     const soFar = roleNeeds(d, ctx, { scaled: true }).find((n) => n.role === 'ramp')!;
-    expect(whole.band).toEqual(full.roles.ramp);
-    expect(soFar.band).toEqual(scaled.roles.ramp);
+    expect(whole.band).toEqual(full.packages!.ramp);
+    expect(soFar.band).toEqual(scaled.packages!.ramp);
     expect(whole.count).toBe(2);
     expect(soFar.count).toBe(2);
-    expect(whole.short).toBe(full.roles.ramp!.lo - 2);
-    expect(soFar.short).toBe(Math.max(0, scaled.roles.ramp!.lo - 2));
+    expect(whole.short).toBe(full.packages!.ramp.lo - 2);
+    expect(soFar.short).toBe(Math.max(0, scaled.packages!.ramp.lo - 2));
   });
 
   it('counts fast mana as ramp and cantrips as card draw at Brackets 4-5 only', () => {
@@ -252,10 +262,10 @@ describe('roleNeeds: the role numbers the scorer and the rating share', () => {
     expect(ramp.count).toBeGreaterThanOrEqual(30);
     expect(ramp.over).toBe(0);
     expect(ramp.short).toBe(0);
-    // The commander is the card-draw engine: the 99 owe less of it.
+    // The commander is the card-draw engine: the 99 owe less of it, down to the 8 every package holds.
     const plain = roleNeeds({ ...d, themeWeights: { lifegain: 1 } }, ctx);
     expect(plain.find((n) => n.role === 'ramp')!.over).toBeGreaterThan(10);
-    expect(needs.find((n) => n.role === 'draw')!.band.lo).toBeLessThan(7);
+    expect(needs.find((n) => n.role === 'draw')!.band.lo).toBe(8);
     // A big-mana commander that is not itself ramp gets a little more room, not Kinnan's.
     const kozilek = roleNeeds(deck([KOZILEK], 3), ctx).find((n) => n.role === 'ramp')!;
     expect(kozilek.band).toEqual({ lo: 12, hi: 19 });

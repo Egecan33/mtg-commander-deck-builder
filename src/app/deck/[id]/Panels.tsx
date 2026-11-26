@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { packageMinimum } from '@/engine/format';
 import type { Bracket, CardScore, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
 import { CardTile, unknownCard } from '../../components/CardTile';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,7 +10,7 @@ import { HeldMark, heldText } from '../../components/held';
 import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
-export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve';
+export type PanelId = 'rating' | 'packages' | 'bracket' | 'themes' | 'improve' | 'network';
 
 function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string; held?: string[] }) {
   const card = lookup[id];
@@ -119,7 +120,7 @@ export function BoxMatchOffer({ name, busy, onLink }: { name: string; busy: bool
   );
 }
 
-const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
+export const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
   <section className="border-t border-slag px-4 py-4 first:border-t-0">
     <div className="mb-2.5 flex items-baseline gap-2">
       <h3 className="text-[1.02rem] leading-tight">{title}</h3>
@@ -172,13 +173,24 @@ export function RatingPanel({
   const std = analysis.format === 'standardbrawl';
   const size = std ? 60 : 100;
   const defaults = analysis.defaultTargets ?? targets;
-  const defaultOf = (role: Role): number => (role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0));
+  // Ramp, Card draw and Removal are the core packages: their wanted count is the package's target
+  // (at least 8), the same number the Packages tab shows and pins.
+  const corePackage = (role: Role) => (role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null);
+  const defaultOf = (role: Role): number => {
+    const id = corePackage(role);
+    if (id && defaults.packages) return defaults.packages[id].lo;
+    return role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0);
+  };
+  const wantedOf = (role: Role): number | undefined => {
+    const set = deck.roleTargets?.[role];
+    const id = corePackage(role);
+    return set !== undefined && id && targets.packages ? targets.packages[id].lo : set;
+  };
   const anyWanted = Object.keys(deck.roleTargets ?? {}).length > 0;
   const broken = brokenRules(rating, summary.cardCount, size);
   const curveMax = Math.max(1, ...summary.curve);
   const sources = (['W', 'U', 'B', 'R', 'G', 'C'] as const).filter((c) => (summary.sources[c] ?? 0) > 0);
   const sourceMax = Math.max(1, ...sources.map((c) => summary.sources[c]));
-  const roles = Object.entries(targets.roles) as [keyof typeof ROLE_LABEL, { lo: number; hi: number }][];
 
   return (
     <div data-testid="panel-rating">
@@ -315,32 +327,33 @@ export function RatingPanel({
         <ul className="grid gap-1.5" data-testid="wanted-counts">
           {WANTED.map(({ role, label }) => {
             const base = defaultOf(role);
-            const set = deck.roleTargets?.[role];
+            const set = wantedOf(role);
             const value = set ?? base;
+            // A core package never goes under the format's package minimum (owner's rule: 8, or 5 in Standard Brawl).
+            const least = corePackage(role) ? packageMinimum(analysis.format) : 0;
             return (
               <li key={role} className="flex items-center gap-1.5 text-[0.86rem]" data-testid="wanted-row" data-role={role}>
                 <span className="min-w-0 flex-1 truncate">{label}</span>
-                <button type="button" className="btn btn-sm px-2" disabled={value <= 0} onClick={() => onWanted(role, Math.max(0, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
-                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-brass' : ''}`} data-testid="wanted-value">{value}</span>
+                <button type="button" className="btn btn-sm px-2" disabled={value <= least} onClick={() => onWanted(role, Math.max(least, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
+                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-bone' : ''}`} data-testid="wanted-value">{value}</span>
                 <button type="button" className="btn btn-sm px-2" disabled={value >= 40} onClick={() => onWanted(role, value + 1)} aria-label={`Want one more: ${label}`} data-testid="wanted-more">+</button>
                 <span className="w-[4.6rem] text-right text-[0.75rem] text-smoke">default {base}</span>
-                <button type="button" className={`text-[0.75rem] text-brass hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
+                <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
               </li>
             );
           })}
         </ul>
       </Section>
 
-      <Section title={std ? 'Roles against the plan for Standard Brawl' : 'Roles against the plan for this bracket'}>
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]">
-          {roles.map(([role, band]) => {
-            const have = summary.roleCounts[role] ?? 0;
-            const off = have < band.lo || have > band.hi;
+      <Section title={std ? 'Roles against the plan for Standard Brawl' : 'Roles against the plan for this bracket'} aside="the same counts as the Packages tab">
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]" data-testid="role-coverage">
+          {analysis.roles.map((need) => {
+            const off = need.short > 0 || need.over > 0;
             return (
-              <li key={role} className="flex items-baseline gap-1.5">
-                <span className="min-w-0 flex-1 truncate text-ash">{ROLE_LABEL[role] ?? role}</span>
-                <span className={off ? 'text-band-mid' : ''}>{have}</span>
-                <span className="w-10 text-right text-[0.75rem] text-smoke">{band.lo}&ndash;{band.hi}</span>
+              <li key={need.role} className="flex items-baseline gap-1.5" data-role={need.role}>
+                <span className="min-w-0 flex-1 truncate text-ash">{need.label[0].toUpperCase() + need.label.slice(1)}</span>
+                <span className={off ? 'text-band-mid' : ''}>{need.count}</span>
+                <span className="w-10 text-right text-[0.75rem] text-smoke">{need.band.lo === need.band.hi ? need.band.lo : <>{need.band.lo}&ndash;{need.band.hi}</>}</span>
               </li>
             );
           })}
@@ -639,12 +652,13 @@ export function BracketPanel({ analysis, deck, lookup, onOpen, onShowCombos }: {
 // Themes
 
 export function ThemesPanel({
-  analysis, deck, onChange, onReset, onShow,
+  analysis, deck, onChange, onReset, onFocus, onShow,
 }: {
   analysis: AnalyzeResponse;
   deck: Deck;
   onChange: (axis: string, weight: number) => void;
   onReset: () => void;
+  onFocus: () => void;
   onShow: (axis: string) => void;
 }) {
   const live = deck.themeWeights;
@@ -657,6 +671,10 @@ export function ThemesPanel({
   if (fresh.length) order.current = [...order.current, ...fresh];
   const ids = order.current.filter((a) => present.includes(a));
   const rest = AXIS_IDS.filter((a) => !ids.includes(a));
+  const { focused, axes: focusAxes } = analysis.themeFocus;
+  const focusLabels = focusAxes.filter((a) => a !== 'typal').map(axisLabel);
+  // The button names as many themes as the focus keeps (a strong third theme stays in it).
+  const focusCount = ['', 'this one', 'these two', 'these three', 'these four', 'these five'][focusLabels.length] ?? `these ${focusLabels.length}`;
 
   return (
     <div data-testid="panel-themes">
@@ -665,6 +683,11 @@ export function ThemesPanel({
           Every card is scored on how well it serves these themes. Move a slider and the whole pool is scored again.
         </p>
         {ids.length === 0 && <p className="text-ash">No theme yet. Add one below, or pick a commander.</p>}
+        {focusLabels.length > 0 && (
+          <p className="mb-3 text-[0.86rem]" data-testid="theme-focus-line">
+            Focused on {focusLabels.length > 1 ? `${focusLabels.slice(0, -1).join(', ')} and ${focusLabels[focusLabels.length - 1]}` : focusLabels[0]}
+          </p>
+        )}
         <ul className="grid gap-3">
           {ids.map((axis) => {
             const w = weightOf(axis);
@@ -707,6 +730,16 @@ export function ThemesPanel({
             <option value="">Add a theme</option>
             {rest.map((a) => <option key={a} value={a}>{axisLabel(a)}</option>)}
           </select>
+          <button
+            type="button"
+            className="btn"
+            disabled={focused}
+            onClick={onFocus}
+            title={focused ? 'Already focused' : `Keep ${focusLabels.join(', ')} at full weight and turn every other theme down to a quarter`}
+            data-testid="theme-focus"
+          >
+            Focus on {focusCount || 'these'}
+          </button>
           <button type="button" className="btn" disabled={!deck.themeWeights} onClick={() => { order.current = []; onReset(); }} data-testid="theme-reset">
             Reset to the commander
           </button>

@@ -1,9 +1,10 @@
 import type { BuildMode, BuildResponse, HeldBy } from '@/app/lib/api';
-import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, replaceCard, swapIn, autoBuild, fillRest, fixDeck, improveDeck, isRatingKey, suggestSwaps } from '@/engine/builder';
+import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, completePackage, replaceCard, swapIn, autoBuild, fillRest, fixDeck, improveDeck, isRatingKey, suggestSwaps } from '@/engine/builder';
 import { isBrawlFormat } from '@/engine/format';
+import { isPackageId } from '@/engine/packages';
 import { RATING_WEIGHTS } from '@/engine/rating';
 import { ROLE_LABEL } from '@/engine/targets';
-import type { Bracket, BuildOptions, Deck, ImproveGoals, Role, SwapProposal } from '@/engine/types';
+import type { Bracket, BuildOptions, Deck, EngineContext, FixResult, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { cardLookup } from './cards';
 import { deckCollection, deckFormat, ownedSet, ownedSetOf } from './collection';
 import { engineContext } from './context';
@@ -11,7 +12,7 @@ import { deckConflicts, freeOwnedSet, heldByFor, selfHolders } from './holders';
 import { HttpError, intParam, isObject } from './http';
 import { getWildcards } from './wildcards';
 
-const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace', 'swapin', 'fix'];
+const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace', 'swapin', 'fix', 'package'];
 export const MAX_PROPOSAL_COUNT = 30;
 
 /** `options.goals` of an 'improve' request, checked. Unknown roles are a 400; unknown axes are simply not in the deck. */
@@ -46,6 +47,16 @@ function readGoals(raw: unknown): ImproveGoals | null {
  * POST /api/build. The saved collection is always passed as `owned`; `ownedOnly` decides its use.
  * With `ownedOnly && freeOnly`, `owned` is only the cards with a copy free for this deck.
  */
+/** The response of the fix-shaped modes: the changed deck, every change, the ratings, a note, "!" for the cards brought in. */
+function fixResponse(deck: Deck, _ctx: EngineContext, r: FixResult): BuildResponse {
+  const out: Deck = { ...r.deck, id: deck.id, name: deck.name };
+  // "!" for the cards the fix brought in, counted as in a built deck (the copies the fixed deck has).
+  const ins = new Set(r.changes.map((c) => c.in).filter((id) => id !== ''));
+  const heldBy: HeldBy = Object.fromEntries(Object.entries(deckConflicts(out).cards).filter(([id]) => ins.has(id)));
+  const ids = [...out.commanders, out.companion, ...out.main.map((e) => e.oracleId), ...r.changes.flatMap((c) => [c.out, c.in])].filter((id) => id !== '');
+  return { deck: out, changes: r.changes, ratingBefore: r.ratingBefore, ratingAfter: r.ratingAfter, note: r.note, heldBy, cards: cardLookup(ids) };
+}
+
 export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildResponse {
   if (!MODES.includes(mode as BuildMode)) throw new HttpError(400, `mode must be one of ${MODES.join(', ')}.`);
   if (rawOptions !== undefined && rawOptions !== null && !isObject(rawOptions)) throw new HttpError(400, 'options must be an object.');
@@ -87,13 +98,11 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
   if (mode === 'fix') {
     const only = o.only;
     if (only !== undefined && only !== null && !isRatingKey(only)) throw new HttpError(400, `options.only must be one of: ${Object.keys(RATING_WEIGHTS).join(', ')}.`);
-    const r = fixDeck(deck, ctx, options, only ?? null);
-    const out: Deck = { ...r.deck, id: deck.id, name: deck.name };
-    // "!" for the cards the fix brought in, counted as in a built deck (the copies the fixed deck has).
-    const ins = new Set(r.changes.map((c) => c.in).filter((id) => id !== ''));
-    const heldBy: HeldBy = Object.fromEntries(Object.entries(deckConflicts(out).cards).filter(([id]) => ins.has(id)));
-    const ids = [...out.commanders, out.companion, ...out.main.map((e) => e.oracleId), ...r.changes.flatMap((c) => [c.out, c.in])].filter((id) => id !== '');
-    return { deck: out, changes: r.changes, ratingBefore: r.ratingBefore, ratingAfter: r.ratingAfter, note: r.note, heldBy, cards: cardLookup(ids) };
+    return fixResponse(deck, ctx, fixDeck(deck, ctx, options, only ?? null));
+  }
+  if (mode === 'package') {
+    if (!isPackageId(o.package)) throw new HttpError(400, 'options.package must be ramp, draw, removal, protection, theme:<axis> or fn:<id>.');
+    return fixResponse(deck, ctx, completePackage(deck, ctx, options, o.package));
   }
   if (mode === 'swapin') {
     if (typeof o.in !== 'string' || o.in === '') throw new HttpError(400, 'options.in must be the oracleId of the card to bring in.');

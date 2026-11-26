@@ -117,8 +117,61 @@ export const NAMED_THEME_WEIGHT = 0.5;
 /** Weight of the any-type typal axis next to a named creature type (same share as the commander path). */
 const ANY_TYPE_SHARE = 0.8;
 
+/**
+ * The creature types a commander's own theme names: every `typal:<type>` axis tied for the highest
+ * `typal:*` weight, when that weight is at least NAMED_THEME_WEIGHT; else none.
+ */
+export function namedTypes(weights: Record<AxisId, number>): AxisId[] {
+  let top = 0;
+  for (const [axis, w] of Object.entries(weights)) if (axis.startsWith('typal:') && finite(w) > top) top = finite(w);
+  if (top < NAMED_THEME_WEIGHT) return [];
+  return Object.keys(weights).filter((axis) => axis.startsWith('typal:') && finite(weights[axis]) === top).sort();
+}
+
+/** Weight every theme outside the focus is turned down to. */
+export const FOCUS_OTHER = 0.25;
+/** An axis this close to the second strongest (as a share of it) stays in the focus ... */
+export const FOCUS_NEAR = 0.75;
+/** ... and so does every axis from this weight up (an archetype, `ARCHETYPE_WEIGHT` in targets.ts). */
+export const FOCUS_STRONG = 0.6;
+
+/**
+ * The themes a deck is built around: the two strongest axes other than the any-type `typal`, every
+ * axis at 75% of the second one or at 0.6 and up (a strong third theme is not cut), the creature
+ * type the theme names, and `typal` when a type is named or it passes the same test. `focused` is
+ * true when every other axis is at most a quarter of the second strongest.
+ */
+export function themeFocus(weights: Record<AxisId, number>): { axes: AxisId[]; focused: boolean } {
+  const ranked = Object.entries(weights)
+    .filter(([axis, w]) => axis !== 'typal' && finite(w) > 0)
+    .sort(([, p], [, q]) => q - p);
+  const cut = ranked.length >= 2 ? ranked[1][1] : ranked.length === 1 ? ranked[0][1] : 0;
+  const kept = (w: number) => w > 0 && (w >= FOCUS_NEAR * cut - 1e-12 || w >= FOCUS_STRONG);
+  const axes = new Set<AxisId>(ranked.filter(([, w]) => kept(w)).map(([axis]) => axis));
+  const named = namedTypes(weights);
+  for (const axis of named) axes.add(axis);
+  if (named.length > 0 || kept(finite(weights.typal))) axes.add('typal');
+  const rest = Object.entries(weights).filter(([axis]) => !axes.has(axis));
+  const focused = rest.every(([, w]) => finite(w) <= FOCUS_OTHER * cut + 1e-12);
+  return { axes: [...axes].sort(), focused };
+}
+
+/** The weights with every theme outside the focus turned down to a quarter; unchanged when already focused. */
+export function focusThemeWeights(weights: Record<AxisId, number>): Record<AxisId, number> {
+  const { axes, focused } = themeFocus(weights);
+  if (focused) return weights;
+  const keep = new Set(axes);
+  return Object.fromEntries(Object.entries(weights).map(([axis, w]) => [axis, keep.has(axis) ? w : w * FOCUS_OTHER]));
+}
+
 export interface ResolvedTheme {
   weights: Record<AxisId, number>;
+  /**
+   * The same weights before the focus (`focusThemeWeights`): what archetype deltas, role bands and
+   * the land target read, so focusing a deck's themes never moves its numbers. The deck's own
+   * weights when it has them.
+   */
+  unfocused: Record<AxisId, number>;
   /** 'user' = the deck's own sliders, 'commander' = read off the command zone, 'deck' = inferred from the 99. */
   source: 'user' | 'commander' | 'deck';
   /** The axis inferred from the deck's contents, when `source` is 'deck'. */
@@ -190,19 +243,27 @@ export function inferDeckTheme(deck: Deck, db: CardDb): AxisId | null {
  *    an instant does not count), provided that is at least twice what a random pile of the same
  *    size from the legal pool would show. The axis furthest above that expectation wins and is
  *    added at weight 1; a creature type also brings the any-type typal axis at 0.8.
+ * 4. Weights read from the command zone or inferred are then focused (`focusThemeWeights`): the two
+ *    strongest themes and the creature type they name keep their weight, every other theme drops to
+ *    a quarter. A deck's own weights are never focused.
  */
 export function resolveTheme(deck: Deck, ctx: EngineContext): ResolvedTheme {
-  if (deck.themeWeights) return { weights: deck.themeWeights, source: 'user', inferred: null };
+  if (deck.themeWeights) return { weights: deck.themeWeights, unfocused: deck.themeWeights, source: 'user', inferred: null };
   const weights = commanderThemeWeights(commanderCards(deck, ctx.db), ctx.edhrec?.themes);
-  if (Object.values(weights).some((w) => finite(w) >= NAMED_THEME_WEIGHT)) return { weights, source: 'commander', inferred: null };
+  if (Object.values(weights).some((w) => finite(w) >= NAMED_THEME_WEIGHT)) return { weights: focusThemeWeights(weights), unfocused: weights, source: 'commander', inferred: null };
   const inferred = inferDeckTheme(deck, ctx.db);
-  if (!inferred) return { weights, source: 'commander', inferred: null };
+  if (!inferred) return { weights: focusThemeWeights(weights), unfocused: weights, source: 'commander', inferred: null };
   const out = { ...weights, [inferred]: 1 };
   if (inferred.startsWith('typal:')) out.typal = Math.max(finite(out.typal), ANY_TYPE_SHARE);
-  return { weights: out, source: 'deck', inferred };
+  return { weights: focusThemeWeights(out), unfocused: out, source: 'deck', inferred };
 }
 
 /** The deck's theme weights (see `resolveTheme`). */
 export function resolveThemeWeights(deck: Deck, ctx: EngineContext): Record<AxisId, number> {
   return resolveTheme(deck, ctx).weights;
+}
+
+/** The deck's theme weights before the focus (see `ResolvedTheme.unfocused`). */
+export function unfocusedThemeWeights(deck: Deck, ctx: EngineContext): Record<AxisId, number> {
+  return resolveTheme(deck, ctx).unfocused;
 }

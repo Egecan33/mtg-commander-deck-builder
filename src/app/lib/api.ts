@@ -42,6 +42,56 @@
  *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
  *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
  *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
+ *        `themeFocus`: the axes the deck is focused on (the two strongest themes, every theme at 75% of the
+ *        second or at 0.6 and up, and the creature type they name), whether it already is, and the weights the
+ *        **Focus** button saves (every other theme at a quarter). A commander's or inferred theme is already
+ *        focused; a deck's own weights are never changed. Role bands and the land target read the weights before
+ *        the focus. `roles`: the role coverage of the finished deck (see `AnalyzeResponse.roles`), the same numbers
+ *        the rating's fixes and the Packages tab show.
+ *        `packages`: the deck's own plan. The four core packages (Ramp, Card draw, Removal, Protection) always come
+ *        first; their targets are the role bands' bottoms (Removal: spot removal + counterspells + the 1-2 board-wipe
+ *        slot), at least 8 each, each move with its reason; the rating holds the deck to these same targets
+ *        (`targets.packages`). Then the focused theme packages that get at least 8 of the
+ *        slots left after lands and the core packages, then packages the user pinned (`deck.packageTargets`, 8-40). A
+ *        card counts in every package it belongs to (role or Scryfall tagger tag; lands in none). `lands`: the land
+ *        target from the deck's curve, cheap ramp, cantrips, landfall and commander (28-40; the bracket default while
+ *        the deck has no spells; `roleTargets.land` wins). `offers`: packages to add, the ones the commander points
+ *        at first. `cohesion` (theme and functional packages): members linked to another member in the deck network.
+ *        Under PUT /api/decks/:id: `deck.packageTargets` (`theme:<axis>` or `fn:<id>` -> 8-40) is kept; core package
+ *        sizes are pinned through `roleTargets`.
+ *        A Standard Brawl deck (60 cards): every 8 above is 5 (`packages.packageMin`, 8 x 59/99), the board-wipe slot
+ *        is 0-1, the land target is its own (22 + 0.8 x average mana value, 22-26), and the theme packages share the
+ *        slots of 59 cards; EDHREC stays off. Brawl (100 cards) reads exactly as Commander.
+ *        'package' (Complete package) takes `options.package` ('ramp' | 'draw' | 'removal' | 'protection' |
+ *        'theme:<axis>' | 'fn:<id>'; anything else is a 400) and answers like 'fix': it adds the package's best
+ *        missing cards for this deck (its target from `packages`, or 8 for a package not planned yet), cards that
+ *        also serve another planned package first, board wipes only up to the 1-2 slot and one-sided wipes first.
+ *        Under 100 cards they are plain adds; at 100 each add cuts the weakest unlocked card that is in none of the
+ *        deck's packages and is no win condition, graveyard hate, recursion or tutor (never a commander, never lands
+ *        below the land target); in Standard Brawl the size is 60. The card options, free copies, price and locked cards
+ *        hold; on a Brawl deck "owned" is its own collection and "Only what I can craft" holds across every card added
+ *        (one wildcard spent per unowned card). `note` says what could
+ *        not be added and why, when the rating falls (and which part lost most), and when the deck breaks a rule.
+ * GET  /api/packages?colors=UB[&freeOnly=1][&arenaFormat=standardbrawl] -> PackagesResponse
+ *        While an MTG Arena collection is active the cards are its format's (Brawl, or Standard Brawl with
+ *        `arenaFormat`), and in Standard Brawl every 8 below is 5 (`packageMin`, 8 x 59/99).
+ *        Your best packages from the ACTIVE collection for those colours: owned, legal, nonland cards whose
+ *        colour identity fits inside the chosen colours ('C' alone = colourless). The four core packages always
+ *        (even empty), then up to four theme packages (the axes with the most well-played owned cards, at least
+ *        8), then functional packages (Win the game, Pillow fort, Max hand size) that have at least 8 cards.
+ *        `total`: owned cards in the package; `cards`: the best 8, by the scorer's deck-free quality (theme
+ *        packages: quality x how strongly the card serves the theme). With `freeOnly=1`, copies held by boxes
+ *        and built decks come after free ones; `heldBy` names the holders either way. No colours is a 400.
+ * POST /api/network     {deck}          -> NetworkResponse
+ *        How the deck's cards work together. `nodes`: every nonland card and the commanders (lands are
+ *        left out). `edges`: { a, b, kind, weight 0..1, reasons [from a, from b] }, kind 'combo' (1, or 0.5
+ *        one card away), 'feeds' (enabler x payoff x the deck's theme weight), 'typal' (0.6) or
+ *        'commander' (the card's synergy with the commander). `clusters`: biggest first, named by their
+ *        theme or combo. `cohesion` 0-100 = 60% the share of non-staple cards that connect + 40% the share
+ *        of link weight inside the two biggest clusters (`cohesionParts`). `unconnected`: non-staple cards
+ *        with no link of 0.15 or more and commander synergy under 0.3. `cards` covers every node. Cached
+ *        EDHREC data only, never a request. A body that is not a deck is a 400.
+ *        GET /api/decks tiles carry `cohesion` (the same number).
  * Held copies ("!"): the cards, build and proposal responses carry `heldBy` (see HeldBy). In the card
  *        browser and in proposals a card is in it when adding one more copy to the deck (one more than
  *        the deck has) would need a copy that a box or another built deck holds: owned in that
@@ -53,6 +103,11 @@
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
+ *        `filters.package`: only cards of that package (role or Scryfall tagger tag, as in `packages`; lands in none),
+ *        read at the deck's bracket (Standard Brawl: the middle one), from the deck's own format pool. Every card then
+ *        carries `also`: the names of the deck's other planned packages it is in, and with sort score descending the
+ *        cards come in dual-purpose order (score plus a bonus per other package, gated cards last). For a Brawl deck
+ *        `filters.owned` reads the deck's own collection, as a build does.
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
@@ -219,15 +274,16 @@
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
+import type { RoleNeed } from '@/engine/targets';
 import type {
-  ArenaRarity, AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, Format, ImproveGoals, Role,
-  SwapProposal, Targets, Wildcards,
+  ArenaRarity, AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackageId, PackageKind, PackagePlan, DeckSummary,
+  FixChange, FixResult, Format, ImproveGoals, Role, SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
 /** The two MTG Arena formats a deck of an Arena collection can be in (`Deck.arenaFormat`; missing is 'brawl'). */
 export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
 
-export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, Wildcards };
+export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, RoleNeed, Wildcards };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -241,7 +297,11 @@ export type ClientCard = Pick<
   arenaRarity: ArenaRarity | null;
 };
 
-export type ScoredCard = ClientCard & { score: CardScore };
+export type ScoredCard = ClientCard & {
+  score: CardScore;
+  /** Only with `filters.package`: the names of the deck's other planned packages this card is also in. */
+  also?: string[];
+};
 export type CardLookup = Record<string, ClientCard>;
 /**
  * oracleId -> names of the boxes and built decks ("Landing Party box", "Krenko, Mob Boss (built)")
@@ -327,6 +387,8 @@ export interface DeckTile {
   targetBracket: Bracket;
   cardCount: number;
   rating: number; legal: boolean;
+  /** How well the deck's cards work together, 0-100 (the same number as `NetworkResponse.cohesion`). */
+  cohesion: number;
   floor: number; playsLike: Bracket;
   /** Complete combos in the deck. */
   combos: number;
@@ -336,6 +398,18 @@ export interface DeckTile {
   collectionId: string;
   format: Format;
 }
+/** GET /api/packages: your best packages per colour (see the header). */
+export interface PackagesResponse {
+  colors: ColorLetter[];
+  /** The format the packages are read in: the active collection's ('brawl' or 'standardbrawl' for MTG Arena, per `arenaFormat`). */
+  format: Format;
+  /** The format's package minimum (8, or 5 in Standard Brawl): the hand size and the fewest cards a theme or functional package needs here. */
+  packageMin: number;
+  packages: { id: PackageId; name: string; kind: PackageKind; total: number; cards: ClientCard[] }[];
+  heldBy: HeldBy;
+}
+/** POST /api/network: the deck's network (see `DeckNetwork`) and a card for every node. */
+export type NetworkResponse = DeckNetwork & { cards: CardLookup };
 export interface DecksResponse { decks: DeckTile[] }
 export interface DeckResponse {
   deck: Deck; updatedAt: string; cards: CardLookup;
@@ -358,6 +432,17 @@ export interface AnalyzeResponse {
   /** `targets` as they would be without the deck's own wanted counts (`deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<AxisId, number>;
+  /** The axes the deck is focused on, whether it already is, and the weights the Focus button saves. */
+  themeFocus: { axes: AxisId[]; focused: boolean; weights: Record<AxisId, number> };
+  /** The deck's own plan (see the header): core packages, focused themes, pins, lands, offers. */
+  packages: PackagePlan;
+  /**
+   * Role coverage of the finished deck: one entry per band, the four core packages counted by
+   * membership (role or tag) against their package targets (`spot-removal` is the Removal package,
+   * `wipe` the board-wipe slot), the rest by role. The rating, the scorer and the Packages tab use
+   * these same numbers.
+   */
+  roles: RoleNeed[];
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
   /** Deck oracle ids the database does not know. */
@@ -401,6 +486,8 @@ export interface CardFilters {
   maxPrice?: number;
   /** true: only cards in the deck; false: only cards not in it. */
   inDeck?: boolean;
+  /** Only cards of this package (see `packages` under POST /api/analyze); unknown ids are a 400. */
+  package?: PackageId;
 }
 export type CardSort = 'score' | 'name' | 'mv' | 'price' | 'popularity';
 export interface CardsRequest {
@@ -419,7 +506,7 @@ export interface CardsResponse {
   heldBy: HeldBy;
 }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix' | 'package';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
@@ -446,6 +533,8 @@ export interface BuildRequestOptions {
    * is always the deck's own collection, whichever collection is active.
    */
   craftableOnly?: boolean;
+  /** 'package' only (required there): the package to complete ('ramp' | 'draw' | 'removal' | 'protection' | 'theme:<axis>' | 'fn:<id>'). */
+  package?: string;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -705,12 +794,15 @@ export const moveDeck = (id: string, deck: Deck, collectionId: string) =>
   call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck, move: collectionId });
 export const deleteDeck = (id: string) => call<{ ok: true }>('DELETE', `/api/decks/${encodeURIComponent(id)}`);
 
+export const getPackages = (colors: ColorLetter[], freeOnly: boolean, signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<PackagesResponse>('GET', `/api/packages${query({ colors: colors.join(''), freeOnly: freeOnly ? 1 : undefined, arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getNetwork = (deck: Deck, signal?: AbortSignal) => call<NetworkResponse>('POST', '/api/network', { deck }, signal);
 export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeResponse>('POST', '/api/analyze', { deck }, signal);
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
 export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace' | 'swapin', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
-export function buildDeck(deck: Deck, mode: 'fix', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
+export function buildDeck(deck: Deck, mode: 'fix' | 'package', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }

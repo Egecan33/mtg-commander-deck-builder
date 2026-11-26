@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild, mulberry32 } from '@/engine/builder';
+import { deckNetwork } from '@/engine/network';
 import { QUALITY_EXPECTED, rateDeck, ratingCapped } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
-import { roleNeeds } from '@/engine/targets';
+import { summarizeDeck } from '@/engine/summary';
+import { roleNeeds, targetsFor } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, Card, Deck, DeckRating, EngineContext, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
+import { withFiveUnconnected, withTenRandom } from '../helpers/network';
 
 const db = fixtureDb();
 const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
@@ -156,7 +159,8 @@ describe('rateDeck shortfalls become fixes', () => {
     const none = { ...d, main: [...kept, { oracleId: card('Island').oracleId, qty: cut, locked: false }] };
     const over = sub(rateDeck(d, ctx), 'roles');
     const short = sub(rateDeck(none, ctx), 'roles');
-    expect(over.fixes.some((f) => /over on ramp/.test(f.text))).toBe(true);
+    // (The over-ramp note is still made; the three larger package shortfalls show first.)
+    expect(roleNeeds(d, ctx).find((n) => n.role === 'ramp')!.over).toBeGreaterThan(10);
     expect(short.fixes.some((f) => f.filter?.role === 'ramp')).toBe(true);
     expect(over.value).toBeGreaterThan(short.value);
   });
@@ -463,6 +467,26 @@ describe('rateDeck: quality pass 2', () => {
     expect(sub(starved, 'mana').value).toBeLessThan(0.45);
   });
 
+  it("the land count is free within two of the plan's target, and one of a target the user set", () => {
+    const full = fixtureDeck('upgraded', 3);
+    const spells = full.main.filter((e) => !isLand(e.oracleId)).sort((a, b) => db.get(a.oracleId)!.oracleId.localeCompare(db.get(b.oracleId)!.oracleId));
+    const n = spells.reduce((a, e) => a + e.qty, 0);
+    const landFix = (d: Deck) => sub(rateDeck(d, ctx), 'mana').fixes.some((f) => /^(Add|Cut) \d+ lands?/.test(f.text));
+    let checked = 0;
+    for (let lands = 31; lands <= 46; lands++) {
+      const d: Deck = { ...full, main: [...spells.slice(0, Math.min(n, 99 - lands)), { oracleId: card('Forest').oracleId, qty: lands, locked: false }] };
+      const s = summarizeDeck(d, db);
+      if (s.cardCount !== 100) continue;
+      const gap = Math.abs(s.landsEffective - targetsFor(d, ctx, s).lands);
+      if (gap <= 2) expect(landFix(d), `${lands} lands, gap ${gap}`).toBe(false);
+      if (gap >= 3) expect(landFix(d), `${lands} lands, gap ${gap}`).toBe(true);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(8);
+    const pinned: Deck = { ...full, roleTargets: { land: Math.round(summarizeDeck(full, db).landsEffective) + 2 } };
+    expect(landFix(pinned)).toBe(true);
+  });
+
   describe('role numbers are the shared ones (targets.roleNeeds)', () => {
     const decks: [string, Deck][] = [
       ['precon B2', fixtureDeck('precon', 2)], ['upgraded B3', fixtureDeck('upgraded', 3)], ['cedh B5', fixtureDeck('cedh', 5)],
@@ -490,10 +514,13 @@ describe('rateDeck: quality pass 2', () => {
       });
     }
 
-    it('counterspells are a band of their own in a blue deck, as in the scorer', () => {
+    it('counterspells count inside the Removal package in a blue deck, as in the scorer and the Packages tab', () => {
       const d = fixtureDeck('cedh', 5);
       const needs = roleNeeds(d, ctx, { scaled: true });
-      expect(needs.some((n) => n.role === 'counterspell')).toBe(true);
+      expect(needs.some((n) => n.role === 'counterspell')).toBe(false);
+      const counters = d.main.filter((e) => hasRole(e.oracleId, 'counterspell')).reduce((n, e) => n + e.qty, 0);
+      expect(counters).toBeGreaterThan(0);
+      expect(needs.find((n) => n.role === 'spot-removal')!.count).toBeGreaterThanOrEqual(counters);
       const all = allFixes(rateDeck(d, ctx)).map((f) => f.text).join('\n');
       expect(all).not.toMatch(/targeted interaction/);
     });
@@ -688,5 +715,42 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
         }
       }
     }
+  });
+});
+
+describe('rateDeck: cohesion', () => {
+  it('Synergy is 70% theme and 30% cohesion', () => {
+    for (const [name, bracket] of [['precon', 2], ['upgraded', 3], ['cedh', 5]] as const) {
+      const deck = fixtureDeck(name, bracket);
+      const cohesion = deckNetwork(deck, ctx).cohesion;
+      const value = sub(rateDeck(deck, ctx), 'synergy').value;
+      expect(value, name).toBeLessThanOrEqual(0.7 + (0.3 * cohesion) / 100 + 0.001);
+      expect(value, name).toBeGreaterThanOrEqual((0.3 * cohesion) / 100 - 0.02);
+    }
+  });
+
+  it('ten random cards lower Synergy', () => {
+    const deck = fixtureDeck('precon', 2);
+    expect(sub(rateDeck(withTenRandom(deck), ctx), 'synergy').value).toBeLessThan(sub(rateDeck(deck, ctx), 'synergy').value);
+  });
+
+  it("the unconnected fix names the cards and points at the deck's theme", () => {
+    const { deck, added } = withFiveUnconnected(fixtureDeck('upgraded', 3), ctx);
+    const fix = sub(rateDeck(deck, ctx), 'synergy').fixes.find((f) => /^5 cards connect to nothing in this deck: /.test(f.text));
+    expect(fix).toBeTruthy();
+    for (const id of added) expect(fix!.text).toContain(card(db.get(id)!.name).name);
+    expect(fix!.filter?.axis).toBe('typal:elf');
+  });
+
+  // Review I5: the clustered share cost Synergy points with no reason (Six lost 0.25 with an empty fix list).
+  it('a low clustered share gets a reason that names the groups', () => {
+    const deck = fixtureDeck('cedh', 5);
+    const net = deckNetwork(deck, ctx);
+    expect(net.cohesionParts.clustered).toBeLessThan(0.9);
+    const synergy = rateDeck(deck, ctx).subscores.find((s) => s.key === 'synergy')!;
+    const line = synergy.fixes.find((i) => /^Links split across \d+ groups: /.test(i.text));
+    expect(line, JSON.stringify(synergy.fixes.map((i) => i.text))).toBeTruthy();
+    expect(line!.text).toContain(net.clusters[0].name);
+    expect(synergy.value).toBeLessThan(1);
   });
 });

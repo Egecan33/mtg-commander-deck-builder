@@ -3,11 +3,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as api from '@/app/lib/api';
+import { overlapKey } from '@/engine/builder';
+import { deckNetwork } from '@/engine/network';
+import { deckKey, engineContext } from '@/server/context';
 import type { AnalyzeResponse, CardsResponse, DeckResponse, ImportResponse, ScoredCard } from '@/app/lib/api';
 import * as analyzeRoute from '@/app/api/analyze/route';
 import * as buildRoute from '@/app/api/build/route';
 import * as cardsRoute from '@/app/api/cards/route';
 import * as collectionRoute from '@/app/api/collection/route';
+import * as networkRoute from '@/app/api/network/route';
 import * as commandersRoute from '@/app/api/commanders/route';
 import * as deckRoute from '@/app/api/decks/[id]/route';
 import * as decksRoute from '@/app/api/decks/route';
@@ -15,6 +19,7 @@ import * as edhrecRoute from '@/app/api/edhrec/route';
 import * as exportRoute from '@/app/api/export/route';
 import * as imgRoute from '@/app/api/img/[size]/[file]/route';
 import * as importRoute from '@/app/api/import/route';
+import * as packagesRoute from '@/app/api/packages/route';
 import * as partnersRoute from '@/app/api/partners/route';
 import * as proxiesRoute from '@/app/api/proxies/route';
 import * as settingsRoute from '@/app/api/settings/route';
@@ -36,7 +41,7 @@ type RouteModule = Partial<Record<'GET' | 'POST' | 'PUT' | 'DELETE', unknown>>;
 const ROUTES: [RegExp, RouteModule][] = [
   [/^\/api\/status$/, statusRoute], [/^\/api\/sync$/, syncRoute], [/^\/api\/commanders$/, commandersRoute],
   [/^\/api\/partners$/, partnersRoute], [/^\/api\/decks$/, decksRoute], [/^\/api\/decks\/(?<id>[^/]+)$/, deckRoute],
-  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
+  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/network$/, networkRoute], [/^\/api\/packages$/, packagesRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
   [/^\/api\/import$/, importRoute], [/^\/api\/export$/, exportRoute], [/^\/api\/collection$/, collectionRoute],
   [/^\/api\/settings$/, settingsRoute], [/^\/api\/edhrec$/, edhrecRoute], [/^\/api\/proxies$/, proxiesRoute],
   [/^\/api\/img\/(?<size>[^/]+)\/(?<file>[^/]+)$/, imgRoute],
@@ -172,6 +177,28 @@ describe('GET /api/status', () => {
 });
 
 describe('POST /api/analyze', () => {
+  it('analyze reports the theme focus', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    expect(a.themeFocus.axes).toContain('typal:elf');
+    expect(a.themeFocus.axes).toContain('tokens');
+    expect(a.themeFocus.focused).toBe(true);
+    expect(a.themeFocus.weights).toEqual(a.themeWeights);
+  });
+
+  // Review C3: the Rating tab's role list, the rating's fixes and the Packages tab show one set of numbers.
+  it('returns the role coverage the Packages tab shows for the core four', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    for (const [id, key] of [['ramp', 'ramp'], ['draw', 'draw'], ['removal', 'spot-removal'], ['protection', 'protection']] as const) {
+      const p = a.packages.packages.find((x) => x.id === id)!;
+      const r = a.roles.find((x) => x.role === key)!;
+      expect(r.count, id).toBe(p.count);
+      expect(r.band.lo, id).toBe(p.target);
+    }
+    expect(a.roles.some((x) => x.role === 'counterspell')).toBe(false);
+  });
+
   it('rates the precon and scores every card in it', async () => {
     const deck = await imported('precon');
     const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
@@ -936,5 +963,168 @@ describe('typed client (src/app/lib/api.ts)', () => {
     const url = api.imageUrl(parsed.deck.commanders[0], 'display', 0);
     expect(url).toBe(`/api/img/display/${parsed.deck.commanders[0]}_0.webp`);
     expect((await request('GET', url)).status).toBe(404); // well-formed, just not on disk
+  });
+});
+
+describe('POST /api/network', () => {
+  it("returns the deck's network with a card for every node", async () => {
+    const deck = await imported('upgraded', 3);
+    const n = await call<api.NetworkResponse>('POST', '/api/network', { deck });
+    expect(n.nodes.length).toBeGreaterThan(50);
+    for (const node of n.nodes) expect(n.cards[node.oracleId]?.name, node.oracleId).toBeTruthy();
+    expect(n.cohesion).toBe(deckNetwork(deck, engineContext(deck).ctx).cohesion);
+  });
+
+  it('with a body that is not a deck is a 400', async () => {
+    expect((await request('POST', '/api/network', { deck: 'nope' })).status).toBe(400);
+    expect((await request('POST', '/api/network', 'not json')).status).toBe(400);
+  });
+
+  it('makes no request with EDHREC on and nothing cached', async () => {
+    await call('PUT', '/api/settings', { edhrecEnabled: true });
+    const spy = vi.fn(() => { throw new Error('no network'); });
+    vi.stubGlobal('fetch', spy);
+    try {
+      const deck = await imported('upgraded', 3);
+      expect((await request('POST', '/api/network', { deck })).status).toBe(200);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await call('PUT', '/api/settings', { edhrecEnabled: false });
+    }
+  });
+
+  it("deck tiles carry the network's cohesion", async () => {
+    const deck = await imported('upgraded', 3);
+    const saved = await call<DeckResponse>('POST', '/api/decks', { deck });
+    try {
+      const tile = (await call<api.DecksResponse>('GET', '/api/decks')).decks.find((d) => d.id === saved.deck.id)!;
+      expect(Number.isInteger(tile.cohesion)).toBe(true);
+      expect(tile.cohesion).toBeGreaterThanOrEqual(0);
+      expect(tile.cohesion).toBeLessThanOrEqual(100);
+      expect(tile.cohesion).toBe(deckNetwork(saved.deck, engineContext(saved.deck).ctx).cohesion);
+    } finally {
+      await request('DELETE', `/api/decks/${saved.deck.id}`);
+    }
+  });
+});
+
+describe('packages on analyze', () => {
+  it('analyze carries the package plan', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    expect(a.packages.packages.slice(0, 4).map((p) => p.id)).toEqual(['ramp', 'draw', 'removal', 'protection']);
+    expect(a.packages.lands.target).toBe(a.targets.lands);
+    expect(a.packages.packages[0].target).toBe(Math.max(8, a.targets.roles.ramp!.lo));
+    expect(a.packages.packages.some((p) => p.kind === 'theme' && p.cohesion !== null)).toBe(true);
+  });
+
+  it('packageTargets survives a save and drops what it cannot hold', async () => {
+    const deck = await imported('upgraded', 3);
+    const saved = await call<DeckResponse>('POST', '/api/decks', { deck: { ...deck, packageTargets: { 'fn:pillow-fort': 9, ramp: 12, 'fn:nope': 8, 'theme:tokens': 3 } } });
+    try {
+      expect(saved.deck.packageTargets).toEqual({ 'fn:pillow-fort': 9, 'theme:tokens': 8 });
+      const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck: saved.deck });
+      expect(a.packages.packages.find((p) => p.id === 'fn:pillow-fort')).toMatchObject({ target: 9, pinned: true });
+    } finally {
+      await request('DELETE', `/api/decks/${saved.deck.id}`);
+    }
+  });
+
+  it("a package pin is part of the deck's identity", async () => {
+    const deck = await imported('upgraded', 3);
+    expect(deckKey({ ...deck, packageTargets: { 'fn:pillow-fort': 9 } })).not.toBe(deckKey(deck));
+  });
+});
+
+describe("POST /api/build mode 'package'", () => {
+  it('mode package completes a package', async () => {
+    const deck = await imported('upgraded', 3);
+    const r = await call<api.FixResponse>('POST', '/api/build', { deck, mode: 'package', options: { package: 'protection' } });
+    expect(r.changes.length).toBeGreaterThan(0);
+    for (const c of r.changes) expect(r.cards[c.in]?.name).toBeTruthy();
+    expect(size(r.deck)).toBe(100);
+  });
+
+  it('mode package with an unknown package is a 400', async () => {
+    const deck = await imported('upgraded', 3);
+    for (const pkg of [undefined, 'theme:nope', 'fn:x', 'land']) {
+      expect((await request('POST', '/api/build', { deck, mode: 'package', options: pkg === undefined ? {} : { package: pkg } })).status, String(pkg)).toBe(400);
+    }
+  });
+});
+
+describe('GET /api/packages', () => {
+  const ownEverything = () => call('POST', '/api/collection', { text: getCardDb().all().map((c) => `1 ${c.name}`).join('\n') });
+  const clear = () => call('POST', '/api/collection', { text: '' });
+
+  it("lists the active collection's packages for those colours", async () => {
+    await ownEverything();
+    try {
+      const r = await call<api.PackagesResponse>('GET', '/api/packages?colors=UB');
+      expect(r.colors).toEqual(['U', 'B']);
+      expect(r.packages.slice(0, 4).map((p) => p.id)).toEqual(['ramp', 'draw', 'removal', 'protection']);
+      for (const p of r.packages) {
+        for (const c of p.cards) {
+          expect(c.owned).toBe(true);
+          expect(c.colorIdentity.every((k) => k === 'U' || k === 'B')).toBe(true);
+        }
+        if (p.kind === 'functional') expect(p.total).toBeGreaterThanOrEqual(8);
+      }
+      for (const bad of ['', 'XY']) expect((await request('GET', `/api/packages?colors=${bad}`)).status, bad).toBe(400);
+      expect((await request('GET', '/api/packages')).status).toBe(400);
+    } finally {
+      await clear();
+    }
+  });
+
+  it('free copies only puts held copies last', async () => {
+    const cdb = getCardDb();
+    const ring = cdb.all().find((c) => c.name === 'Sol Ring')!;
+    await call('POST', '/api/collection', { text: '1 Sol Ring\n1 Arcane Signet\n1 Mind Stone\n1 Fellwar Stone' });
+    const held = await call<DeckResponse>('POST', '/api/decks', {
+      deck: { id: null, name: 'Holds the ring', commanders: [], companion: null, chosenColor: null, main: [{ oracleId: ring.oracleId, qty: 1, locked: false }], targetBracket: 3, themeWeights: null, built: true },
+    });
+    try {
+      const r = await call<api.PackagesResponse>('GET', '/api/packages?colors=C&freeOnly=1');
+      const ramp = r.packages.find((p) => p.id === 'ramp')!;
+      expect(r.heldBy[ring.oracleId]?.join(' ')).toMatch(/Holds the ring/);
+      expect(ramp.cards.map((c) => c.name)).toContain('Sol Ring');
+      expect(ramp.cards[ramp.cards.length - 1].name).toBe('Sol Ring');
+      const plain = await call<api.PackagesResponse>('GET', '/api/packages?colors=C');
+      expect(plain.heldBy[ring.oracleId]?.join(' ')).toMatch(/Holds the ring/);
+    } finally {
+      await request('DELETE', `/api/decks/${held.deck.id}`);
+      await clear();
+    }
+  });
+});
+
+describe('package filter on the card browser', () => {
+  it("filters.package keeps the package's members", async () => {
+    const deck = shell(['Talrand, Sky Summoner'], { main: [{ oracleId: id('Island'), qty: 99, locked: false }] });
+    const r = await call<CardsResponse>('POST', '/api/cards', { deck, filters: { package: 'fn:pillow-fort' }, pageSize: 200 });
+    expect(r.total).toBeGreaterThanOrEqual(1);
+    const db = getCardDb();
+    expect(r.cards.some((c) => c.score.gate === null)).toBe(true);
+    for (const c of r.cards) {
+      if (c.score.gate === null) expect(c.colorIdentity.every((k) => k === 'U'), c.name).toBe(true);
+      expect(db.tagSlugs?.(c.oracleId).some((t) => ['pillowfort', 'tax-attack', 'fog', 'pseudo-fog'].includes(t)), c.name).toBe(true);
+      expect(c.also).toBeDefined();
+    }
+  });
+
+  it('with a package filter, dual-purpose cards rank first and say so', async () => {
+    const deck = await imported('upgraded', 3);
+    const r = await call<CardsResponse>('POST', '/api/cards', { deck, filters: { package: 'ramp', inDeck: false }, pageSize: 200 });
+    const keys = r.cards.filter((c) => !c.score.gate).map((c) => overlapKey(c.score.score, c.also!.length));
+    for (let i = 1; i < keys.length; i++) expect(keys[i]).toBeLessThanOrEqual(keys[i - 1]);
+    expect(gatedLast(r.cards)).toBe(true);
+    expect(r.cards.some((c) => c.also!.includes('Card draw'))).toBe(true);
+  });
+
+  it('an unknown package is a 400', async () => {
+    const deck = shell(['Talrand, Sky Summoner']);
+    expect((await request('POST', '/api/cards', { deck, filters: { package: 'fn:nope' } })).status).toBe(400);
   });
 });

@@ -3,13 +3,15 @@ import { axisLabel } from '../features';
 import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
 import { karstenSources, pAtLeast } from '../mana';
 import { commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
+import { deckNetwork } from '../network';
 import { createScorer } from '../scoring';
+import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
-import { roleNeeds, scaleTargets, targetsFor } from '../targets';
+import { LAND_PLAN_SLACK, coverageRoles, roleNeeds, scaleTargets, targetPlan } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
-  AxisId, Bracket, BracketReport, Color, Deck, Format, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
+  AxisId, Bracket, BracketReport, Color, Deck, DeckNetwork, Format, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
 } from '../types';
 
 /** Sub-score weights (spec §11, plus card quality); they sum to 100. */
@@ -59,11 +61,13 @@ const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R
 
 /**
  * Role coverage weights (deck-theory.md §7). The counts and bands come from `roleNeeds`
- * (targets.ts), the same numbers the card scorer rewards filling. Win conditions have a sub-score
- * of their own.
+ * (targets.ts), the same numbers the card scorer rewards filling and the Packages tab shows: the
+ * four core packages (Ramp, Card draw, Removal with its counterspells, Protection) against their
+ * package targets, the board-wipe slot, and the other bands. Win conditions have a sub-score of
+ * their own.
  */
 const COVERAGE: Partial<Record<Role, number>> = {
-  ramp: 3, draw: 3, 'spot-removal': 3, counterspell: 1.5, wipe: 2, protection: 2, recursion: 1.5, 'graveyard-hate': 1.5, tutor: 1,
+  ramp: 3, draw: 3, 'spot-removal': 3, wipe: 2, protection: 2, recursion: 1.5, 'graveyard-hate': 1.5, tutor: 1,
 };
 /** Total interaction (spot + counters + wipes) per bracket (§7). */
 const INTERACTION_BAND: PerBracket<readonly [number, number]> = [[9, 16], [11, 17], [12, 18], [13, 18], [14, 20]];
@@ -158,6 +162,7 @@ interface Facts {
   summary: DeckSummary;
   targets: Targets;       // scaled to the deck's size
   fullTargets: Targets;   // what the finished deck should hold
+  landSlack: number;      // lands either way of the target that cost nothing
   needs: Map<Role, RoleNeed>; // role counts against the scaled bands (`roleNeeds`, shared with the scorer)
   castable: number;       // how much of the deck its mana can cast (0..1): the lower of colour sources and land count
   filled: number;         // cardCount / the format's deck size, at most 1
@@ -174,6 +179,12 @@ interface Facts {
   /** Cards outside the commander's colours: the rule violation names them, the mana base is not asked to cast them. */
   offIdentity: Set<string>;
   count(pred: (c: DeckCard) => boolean): number;
+  /** The role-coverage entries a card counts toward (`coverageRoles`: core packages by role or tag). */
+  covers(c: DeckCard): Role[];
+  /** The deck's scorer, built once per rating. */
+  scorer(): Scorer;
+  /** The deck's network, built once per rating from the same scorer. */
+  network(): DeckNetwork;
 }
 
 const has = (c: DeckCard, role: Role): boolean => c.features.roles.includes(role);
@@ -222,10 +233,11 @@ function manaPart(f: Facts): Part {
   const { summary: s, targets: t, cards } = f;
   const issues: Issue[] = [];
 
-  // Land count against the target for this deck's curve and bracket: full marks within one land.
+  // Land count against the target for this deck's curve and bracket: full marks within two lands of
+  // the plan's target, within one of a count the user set (`LAND_PLAN_SLACK`).
   const tol = Math.max(1.5, 4 * f.filled);
   // No lands at all is never "on target", however small the deck.
-  const landScore = s.landsEffective <= 0 && f.fullTargets.lands > 0 ? 0 : band(s.landsEffective, t.lands - 1, t.lands + 1, tol);
+  const landScore = s.landsEffective <= 0 && f.fullTargets.lands > 0 ? 0 : band(s.landsEffective, t.lands - f.landSlack, t.lands + f.landSlack, tol);
   const landGap = Math.round(t.lands - s.landsEffective);
   if (landScore < 1 && landGap > 0) {
     issues.push({
@@ -292,7 +304,7 @@ function rolesPart(f: Facts): Part {
     const weight = COVERAGE[role];
     if (!weight) continue;
     const { count: n, band: b, label } = need;
-    const owed = (f.fullTargets.roles[role]?.lo ?? 0) >= 1;
+    const owed = need.owed;
     // Short of the band costs quickly; over it costs slowly and never more than half the marks
     // (a deck drowning in ramp is still better off than one with none). A role the finished deck
     // owes cards to is never "met" by an empty slot, however small the deck is so far.
@@ -358,6 +370,13 @@ function synergyOf(c: DeckCard, weights: Record<AxisId, number>): number {
   return Math.min(1, best + (second ? 0.15 : 0));
 }
 
+/** Synergy is this share theme (density and balance) ... */
+export const SYNERGY_THEME_SHARE = 0.7;
+/** ... and this share cohesion of the deck's network. */
+export const SYNERGY_COHESION_SHARE = 0.3;
+/** Synergy (0..1) the clustered share must cost before it gets a reason line of its own. */
+const CLUSTER_REASON_LOSS = 0.01;
+
 function synergyPart(f: Facts): Part {
   const issues: Issue[] = [];
   const { weights, primary, inferred } = themeOf(f);
@@ -370,13 +389,13 @@ function synergyPart(f: Facts): Part {
     density = INFERRED_THEME_CAP;
     issues.push({
       text: `The commander names no theme this engine recognises, so the deck is rated against its own largest one (${axisLabel(primary)}). Set the theme weights to confirm it.`,
-      filter: { axis: primary }, actionable: false, loss: 0.6 * (1 - INFERRED_THEME_CAP),
+      filter: { axis: primary }, actionable: false, loss: SYNERGY_THEME_SHARE * 0.6 * (1 - INFERRED_THEME_CAP),
     });
   }
   if (onTheme < want) {
     issues.push({
       text: `Add ${want - onTheme} more on-theme cards (${label}): ${onTheme} of the deck's spells work with the commander, want ${want} or more.`,
-      filter: { axis: primary }, actionable: true, loss: 0.6 * (1 - density),
+      filter: { axis: primary }, actionable: true, loss: SYNERGY_THEME_SHARE * 0.6 * (1 - density),
     });
   }
 
@@ -394,10 +413,35 @@ function synergyPart(f: Facts): Part {
     const plenty = e < p ? 'payoffs' : 'enablers';
     issues.push({
       text: `${label}: only ${plural(lo, scarce.slice(0, -1))} against ${hi} ${plenty}. Add ${enough - lo} more ${scarce}.`,
-      filter: { axis: primary }, actionable: true, loss: 0.4 * (1 - balance),
+      filter: { axis: primary }, actionable: true, loss: SYNERGY_THEME_SHARE * 0.4 * (1 - balance),
     });
   }
-  return { value: 0.6 * density + 0.4 * balance, issues };
+
+  // Cohesion: how many cards work with another card, and how focused the links are.
+  const net = f.network();
+  const nonStaple = net.nodes.filter((n) => !n.commander && !n.staple).length;
+  if (net.unconnected.length > 0 && nonStaple > 0) {
+    const n = net.unconnected.length;
+    const names = net.unconnected.map((id) => f.ctx.db.get(id)?.name ?? id);
+    const list = n > 5 ? `${names.slice(0, 5).join(', ')} and ${n - 5} more` : n > 1 ? `${names.slice(0, -1).join(', ')} and ${names[n - 1]}` : names[0];
+    issues.push({
+      text: `${n} ${n === 1 ? 'card connects' : 'cards connect'} to nothing in this deck: ${list}.`,
+      filter: { axis: primary }, actionable: true, loss: SYNERGY_COHESION_SHARE * 0.6 * n / nonStaple,
+    });
+  }
+  // The other 40% of cohesion: how much of the link weight sits inside the two biggest groups.
+  const clustered = net.cohesionParts.clustered;
+  const clusterLoss = SYNERGY_COHESION_SHARE * 0.4 * (1 - clustered);
+  if (clusterLoss >= CLUSTER_REASON_LOSS && net.clusters.length > 0) {
+    const groups = net.clusters.map((c) => c.name);
+    const named = groups.length > 3 ? `${groups.slice(0, 3).join(', ')} and ${groups.length - 3} more` : groups.length > 1 ? `${groups.slice(0, -1).join(', ')} and ${groups[groups.length - 1]}` : groups[0];
+    // A reason, not a swap Fix deck can aim at: which groups the links fall into is the deck's shape.
+    issues.push({
+      text: `Links split across ${plural(groups.length, 'group')}: ${named}. ${pct(clustered)} of the links sit inside the two biggest; cards that feed ${net.clusters[0].name} tie the deck together.`,
+      filter: null, actionable: false, loss: clusterLoss,
+    });
+  }
+  return { value: SYNERGY_THEME_SHARE * (0.6 * density + 0.4 * balance) + SYNERGY_COHESION_SHARE * net.cohesion / 100, issues };
 }
 
 /**
@@ -412,7 +456,7 @@ function synergyPart(f: Facts): Part {
  */
 function qualityPart(f: Facts): Part {
   const { db } = f.ctx;
-  const scorer = createScorer(f.deck, f.ctx);
+  const scorer = f.scorer();
   const expected = QUALITY_EXPECTED[f.bi];
   const rated = new Map<string, { name: string; value: number; qty: number; roles: readonly Role[] }>();
   let sum = 0;
@@ -657,8 +701,9 @@ function consistencyPart(f: Facts): Part {
   const sum = (pred: (c: DeckCard) => boolean) => libraryCards.reduce((n, c) => n + (pred(c) ? c.qty : 0), 0);
 
   // Fast decks keep hands on cheap mana as well as lands, so a mana rock or dork counts as half a land.
+  // Ramp and card draw are the Ramp and Card draw packages (role or tag), as everywhere else.
   const fastDeck = f.bracket >= 4;
-  const cheapMana = sum((c) => nonland(c) && c.card.cmc <= 2 && (has(c, 'ramp') || has(c, 'fast-mana')));
+  const cheapMana = sum((c) => nonland(c) && c.card.cmc <= 2 && (f.covers(c).includes('ramp') || has(c, 'fast-mana')));
   const landish = Math.round(libraryCards.reduce((n, c) => n + finite(c.features.landWeight) * c.qty, 0) + (fastDeck ? 0.5 * cheapMana : 0));
   const hand = Math.min(7, library);
 
@@ -683,7 +728,7 @@ function consistencyPart(f: Facts): Part {
     });
   }
 
-  const starters = sum((c) => nonland(c) && c.card.cmc <= 3 && (has(c, 'ramp') || has(c, 'draw') || has(c, 'fast-mana')));
+  const starters = sum((c) => nonland(c) && c.card.cmc <= 3 && (f.covers(c).includes('ramp') || f.covers(c).includes('draw') || has(c, 'fast-mana')));
   const early = pAtLeast(library, starters, Math.min(library, 10), 1);
   if (early < 0.85) {
     issues.push({
@@ -774,12 +819,19 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const size = deckSizeFor(db);
   const std = format === 'standardbrawl';
   const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3))) as Bracket;
-  const fullTargets = targetsFor(deck, ctx, summary);
+  const plan = targetPlan(deck, ctx, summary);
+  const fullTargets = plan.targets;
+  // Standard Brawl keeps its own land rule (within one land of its 22-26 target); the plan's
+  // two-land slack is the 100-card formats'.
+  const landSlack = plan.lands.source === 'plan' && !std ? LAND_PLAN_SLACK : 1;
   const filled = Math.min(1, Math.max(0, summary.cardCount) / size);
   const commanderIds = new Set(deck.commanders);
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
+  let scorer: Scorer | null = null;
+  let network: DeckNetwork | null = null;
+  const covered = new Map<string, Role[]>();
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity, size, std,
+    deck, ctx, cards, summary, bracket, fullTargets, landSlack, filled, commanderIds, offIdentity, size, std,
     countScale: filled * (std ? (size - 1) / 99 : 1),
     tag: std ? 'Standard Brawl' : `Bracket ${bracket}`,
     at: std ? 'in Standard Brawl' : `at Bracket ${bracket}`,
@@ -792,6 +844,13 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
     ),
     report: analyzeBracket(deck, ctx),
     count: (pred) => cards.reduce((n, c) => n + (pred(c) ? c.qty : 0), 0),
+    covers: (c) => {
+      let hit = covered.get(c.card.oracleId);
+      if (!hit) covered.set(c.card.oracleId, (hit = coverageRoles(c.card, c.features, db.tagSlugs?.(c.card.oracleId) ?? [], bracket)));
+      return hit;
+    },
+    scorer: () => (scorer ??= createScorer(deck, ctx)),
+    network: () => (network ??= deckNetwork(deck, ctx, { scorer: facts.scorer() })),
   };
   const uncastable = 1 - UNCASTABLE_COST * (1 - clamp01(facts.castable)) ** 2;
 

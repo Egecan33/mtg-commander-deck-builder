@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DeckTile } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
+import { packageMinimum } from '@/engine/format';
+import { deckNetwork } from '@/engine/network';
+import { packageDef } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { deckSize } from '@/engine/rules';
 import { ROLE_LABEL } from '@/engine/targets';
@@ -80,6 +83,17 @@ export function sanitizeDeck(input: unknown): Deck {
     }
     if (Object.keys(roleTargets).length > 0) deck.roleTargets = roleTargets;
   }
+  if (isObject(input.packageTargets)) {
+    const packageTargets: Record<string, number> = {};
+    // A package holds at least 8 cards, 5 in a Standard Brawl deck (the engine holds a Standard Brawl
+    // pin on a Commander deck to 8 again).
+    const least = packageMinimum(input.arenaFormat === 'standardbrawl' ? 'standardbrawl' : 'commander');
+    for (const [id, n] of Object.entries(input.packageTargets as Record<string, unknown>)) {
+      const def = packageDef(id);
+      if (def && def.kind !== 'core' && typeof n === 'number' && Number.isFinite(n)) packageTargets[id] = Math.min(40, Math.max(least, Math.round(n)));
+    }
+    if (Object.keys(packageTargets).length > 0) deck.packageTargets = packageTargets;
+  }
   if (input.built === true) deck.built = true;
   if (typeof input.collectionId === 'string' && ID.test(input.collectionId)) deck.collectionId = input.collectionId;
   // 'brawl' is what a missing value means, so it is not stored: existing Arena decks stay as they are.
@@ -148,7 +162,7 @@ export function deleteDeck(id: string): boolean {
   return getDb().prepare('DELETE FROM decks WHERE id = ?').run(id).changes > 0;
 }
 
-type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'legal' | 'floor' | 'playsLike' | 'combos'>;
+type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'cohesion' | 'legal' | 'floor' | 'playsLike' | 'combos'>;
 
 /**
  * Saved decks of one collection (the active one unless named), newest first, with what a tile
@@ -176,7 +190,7 @@ export function listDecks(collectionId: string = activeCollectionId()): DeckTile
     if (!n) {
       const rating = rateDeck(deck, ctx);
       const bracket = analyzeBracket(deck, ctx);
-      n = { cardCount: deckSize(deck), rating: rating.rating, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
+      n = { cardCount: deckSize(deck), rating: rating.rating, cohesion: deckNetwork(deck, ctx).cohesion, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
       numbers.set(key, n);
     }
     const lookup = cardLookup(deck.commanders);

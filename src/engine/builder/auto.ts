@@ -5,18 +5,21 @@ import { rateDeck } from '../rating';
 import { companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { deckCards, isLandCard, summarizeDeck } from '../summary';
-import { targetsFor } from '../targets';
+import { coverageRoles, roleNeeds, targetsFor } from '../targets';
 import type { BuildOptions, Card, CardFeatures, Color, Deck, EngineContext, Role, Targets } from '../types';
 import { bestReplacement, climb, fineRating, nextOffender } from './improve';
 import { COLORS, RELIABLE_SOURCE, addCard, buildPool, deckCount, isCore, isStaple, packWanted, qtyOf, removeCard, sharedTypeFor } from './pool';
 import type { Candidate, Pool } from './pool';
 import { planBonus, tallyDeck } from './plan';
 
-/** Roles the fill keeps at or under the top of their band. */
+/**
+ * Coverage entries (`roleNeeds`: the core packages, the board-wipe slot, the other bands) the fill
+ * keeps at or under the top of their band.
+ */
 const CAPPED_ROLES: readonly Role[] = [
-  'ramp', 'draw', 'wipe', 'tutor', 'counterspell', 'spot-removal', 'graveyard-hate', 'protection', 'recursion',
+  'ramp', 'draw', 'wipe', 'tutor', 'spot-removal', 'graveyard-hate', 'protection', 'recursion',
 ];
-/** Roles the fill brings up to the bottom of their band before anything else when slots run short. */
+/** Entries the fill brings up to the bottom of their band before anything else when slots run short. */
 const QUOTA_ROLES: readonly Role[] = [...CAPPED_ROLES, 'win-condition'];
 /** The fill rescans the whole pool on every Nth pick and only the leaders of that scan in between. */
 const RESCORE_EVERY = 3;
@@ -78,6 +81,13 @@ function fillNonland(start: Deck, ctx: EngineContext, pool: Pool, slots: number)
   // One Shadowborn Apostle does nothing: many-copy cards come in as a pack (`seedPacks`) or not at all.
   let cands = pool.nonland.filter((c) => !used.has(c.card.oracleId) && !(copyLimit(c.card) > 1));
   let ranked: Candidate[] = [];
+  // What each candidate counts toward, by the rating's own membership (packages by role or tag).
+  const keys = new Map<string, Role[]>();
+  const keysOf = (c: Candidate): Role[] => {
+    let hit = keys.get(c.card.oracleId);
+    if (!hit) keys.set(c.card.oracleId, (hit = coverageRoles(c.card, c.f, ctx.db.tagSlugs?.(c.card.oracleId) ?? [], pool.plan.bracket)));
+    return hit;
+  };
 
   for (let i = 0; i < slots && cands.length > 0; i++) {
     const scorer = createScorer(deck, ctx);
@@ -87,13 +97,11 @@ function fillNonland(start: Deck, ctx: EngineContext, pool: Pool, slots: number)
     const full = new Set<Role>();
     const overfull = new Set<Role>(); // spellslinger decks let instants and sorceries run past a band
     let owed = 0;
-    for (const role of QUOTA_ROLES) {
-      const band = targets.roles[role];
-      if (!band) continue;
-      const n = finite(summary.roleCounts[role]);
-      if (n < band.lo) { owed += band.lo - n; under.add(role); }
-      if (n >= band.hi && CAPPED_ROLES.includes(role)) full.add(role);
-      if (n >= band.hi + SPELL_ROLE_SLACK && CAPPED_ROLES.includes(role)) overfull.add(role);
+    for (const n of roleNeeds(deck, ctx, { summary, targets })) {
+      if (!QUOTA_ROLES.includes(n.role)) continue;
+      if (n.count < n.band.lo) { owed += n.band.lo - n.count; under.add(n.role); }
+      if (n.count >= n.band.hi && CAPPED_ROLES.includes(n.role)) full.add(n.role);
+      if (n.count >= n.band.hi + SPELL_ROLE_SLACK && CAPPED_ROLES.includes(n.role)) overfull.add(n.role);
     }
     const mustFill = under.size > 0 && owed >= slots - i;
     const tally = tallyDeck(deck, ctx, pool.plan);
@@ -107,8 +115,8 @@ function fillNonland(start: Deck, ctx: EngineContext, pool: Pool, slots: number)
       let best: Candidate | null = null;
       let bestScore = -Infinity;
       for (const c of scan) {
-        if (strictness === 2 && mustFill && !c.f.roles.some((r) => under.has(r))) continue;
-        if (strictness >= 1 && c.f.roles.some((r) => (c.kind.spell && spellRoom ? overfull.has(r) : full.has(r)))) continue;
+        if (strictness === 2 && mustFill && !keysOf(c).some((r) => under.has(r))) continue;
+        if (strictness >= 1 && keysOf(c).some((r) => (c.kind.spell && spellRoom ? overfull.has(r) : full.has(r)))) continue;
         const bonus = planBonus(c.kind, tally, pool.plan);
         if (bonus === null) continue;
         const s = scorer.score(c.card);
@@ -596,6 +604,54 @@ function ensureWinConditions(start: Deck, ctx: EngineContext, pool: Pool, keep: 
   return deck;
 }
 
+/** Rounds `settleLands` may spend, and how far from its own land target a finished deck may end. */
+const SETTLE_ROUNDS = 3;
+const SETTLE_WITHIN = 1;
+
+/** The free card of the deck the scorer likes least among those `pick` accepts, or null. */
+function weakestFree(deck: Deck, ctx: EngineContext, keep: Set<string>, pick: (card: Card, f: CardFeatures) => boolean): string | null {
+  const scorer = createScorer(deck, ctx);
+  let worst: string | null = null;
+  let worstScore = Infinity;
+  for (const e of deck.main) {
+    if (e.locked || keep.has(e.oracleId) || qtyOf(e) < 1) continue;
+    const card = ctx.db.get(e.oracleId);
+    const f = card ? ctx.db.features(e.oracleId) : undefined;
+    if (!card || !f || !pick(card, f)) continue;
+    const s = scorer.score(card).score;
+    if (s < worstScore || (s === worstScore && worst !== null && e.oracleId < worst)) { worstScore = s; worst = e.oracleId; }
+  }
+  return worst;
+}
+
+/**
+ * The land target follows the spells' curve, and the spells changed after the lands were chosen
+ * (repairs, the power pass, the climb, the finishers). The finished deck is held against its own
+ * target again: more than a land short, its weakest free spells give way to lands; more than a land
+ * over, its weakest free lands give way to spells. Kept only when the rating does not fall.
+ */
+function settleLands(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>): Deck {
+  let deck = start;
+  for (let round = 0; round < SETTLE_ROUNDS; round++) {
+    const s = summarizeDeck(deck, ctx.db);
+    const gap = targetsFor(deck, ctx, s).lands - s.landsEffective;
+    if (Math.abs(gap) <= SETTLE_WITHIN) break;
+    const n = Math.ceil(Math.abs(gap) - SETTLE_WITHIN - 1e-9);
+    let next = deck;
+    for (let k = 0; k < n; k++) {
+      const out = weakestFree(next, ctx, keep, (_card, f) => (gap > 0 ? !isLandCard(f) && !f.roles.includes('win-condition') : isLandCard(f)));
+      if (!out) break;
+      next = removeCard(next, out);
+    }
+    const open = deckSizeFor(ctx.db) - deckCount(next);
+    if (open <= 0) break;
+    next = gap > 0 ? fillLands(next, ctx, pool, open) : fillNonland(next, ctx, pool, open);
+    if (deckCount(next) !== deckCount(deck) || nextOffender(next, ctx, keep)) break;
+    deck = next;
+  }
+  return deck === start || fineRating(rateDeck(deck, ctx)) >= fineRating(rateDeck(start, ctx)) ? deck : start;
+}
+
 function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: BuildOptions): Deck {
   const pool = buildPool(start, ctx, opts);
   let deck = fillOpen(start, ctx, pool);
@@ -612,7 +668,8 @@ function buildOnce(start: Deck, keep: Set<string>, ctx: EngineContext, opts: Bui
   deck = rebalanceBasics(deck, ctx, pool, keep);
   const climbed = climb(deck, ctx, pool, keep, { maxSwaps: CLIMB_SWAPS, evalBudget: CLIMB_EVALS });
   if (climbed.swaps.length > 0) deck = repair(climbed.deck, ctx, pool, keep);
-  return ensureWinConditions(deck, ctx, pool, keep);
+  deck = ensureWinConditions(deck, ctx, pool, keep);
+  return settleLands(deck, ctx, pool, keep);
 }
 
 /**

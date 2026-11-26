@@ -134,7 +134,7 @@ describe('targetsFor', () => {
     const p2 = bands(2).lands;
     const p5 = bands(5).lands;
     expect(p2).toBeGreaterThanOrEqual(36);
-    expect(p2).toBeLessThanOrEqual(39); // held inside the §2.3 band, whatever the regression says
+    expect(p2).toBeLessThanOrEqual(40); // the plan's target is held to the owner's 28-40, whatever the curve says
     expect(p5).toBeLessThan(p2);
     const c5 = bands(5, fixtureDeck('cedh', 5)).lands;
     expect(c5).toBeGreaterThanOrEqual(26);
