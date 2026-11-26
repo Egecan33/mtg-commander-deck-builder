@@ -39,8 +39,10 @@ function ScoreChip({ score, gate }: { score: number | null | undefined; gate: st
     <span
       data-testid="score-badge"
       data-band={band}
+      role="img"
+      aria-label={gate ? `No score: ${gate}` : `Score ${score} of 100`}
       title={gate ? gate : `Score ${score} of 100 for this deck`}
-      className="display inline-flex h-[18px] min-w-[1.6rem] shrink-0 items-center justify-center rounded-[4px] px-1 text-[13px] font-bold leading-none text-[#15110a]"
+      className="inline-flex h-[18px] min-w-[1.6rem] shrink-0 items-center justify-center rounded-[4px] px-1 text-[13px] font-bold leading-none text-[#15110a]"
       style={{ background: BAND_VAR[band] }}
     >
       {gate ? '–' : score}

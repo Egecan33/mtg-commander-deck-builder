@@ -20,8 +20,9 @@ export function HeldMark({ names, small = false, className = '' }: { names: read
     <span
       data-testid="held-mark"
       title={text}
+      role="img"
       aria-label={`Held: ${text}`}
-      className={`display inline-flex shrink-0 items-center justify-center rounded-full bg-ember font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-ember font-bold leading-none text-[#15110a] shadow-[0_1px_3px_rgb(0_0_0/0.7)] ${
         small ? 'h-4 w-4 text-[0.72rem]' : 'h-[1.35rem] w-[1.35rem] text-[0.95rem]'
       } ${className}`}
     >
