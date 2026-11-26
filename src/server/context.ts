@@ -3,7 +3,7 @@ import type { AnalyzeResponse, EdhrecStatus } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
-import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
+import { focusThemeWeights, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
 import { targetsFor } from '@/engine/targets';
 import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
@@ -42,6 +42,8 @@ export interface Report {
   /** The targets without the deck's own wanted counts (`Deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<string, number>;
+  /** The themes the deck is focused on, whether it already is, and the weights Focus on these two saves. */
+  themeFocus: { axes: string[]; focused: boolean; weights: Record<string, number> };
   deckScores: Record<string, CardScore>;
   unknown: string[];
 }
@@ -73,6 +75,7 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
       if (report) return report;
       const { db } = ctx;
       const summary = summarizeDeck(deck, db);
+      const themeWeights = resolveThemeWeights(deck, ctx);
       const deckScores: Record<string, CardScore> = {};
       const unknown: string[] = [];
       for (const id of [...deck.commanders, deck.companion, ...deck.main.map((e) => e.oracleId)]) {
@@ -87,7 +90,8 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         summary,
         targets: targetsFor(deck, ctx, summary),
         defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
-        themeWeights: resolveThemeWeights(deck, ctx),
+        themeWeights,
+        themeFocus: { ...themeFocus(themeWeights), weights: focusThemeWeights(themeWeights) },
         deckScores, unknown,
       });
     },

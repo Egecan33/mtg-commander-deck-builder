@@ -33,6 +33,9 @@
  *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
  *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
  *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
+ *        `themeFocus`: the axes the deck is focused on (the two strongest themes and the creature type
+ *        they name), whether it already is, and the weights **Focus on these two** saves (every other
+ *        theme at a quarter). A commander's or inferred theme is already focused; a deck's own weights are never changed.
  * Held copies ("!"): the cards, build and proposal responses carry `heldBy` (see HeldBy). In the card
  *        browser and in proposals a card is in it when adding one more copy to the deck (one more than
  *        the deck has) would need a copy that a box or another built deck holds: owned in that
@@ -319,6 +322,8 @@ export interface AnalyzeResponse {
   /** `targets` as they would be without the deck's own wanted counts (`deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<AxisId, number>;
+  /** The axes the deck is focused on, whether it already is, and the weights the Focus on these two button saves. */
+  themeFocus: { axes: AxisId[]; focused: boolean; weights: Record<AxisId, number> };
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
   /** Deck oracle ids the database does not know. */

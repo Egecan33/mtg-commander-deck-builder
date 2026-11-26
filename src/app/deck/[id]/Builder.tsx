@@ -1094,6 +1094,7 @@ export function Builder({ id }: { id: string }) {
                 deck={deck}
                 onChange={(axis, w) => mutate((d) => ({ ...d, themeWeights: { ...(d.themeWeights ?? analysis.themeWeights), [axis]: w } }))}
                 onReset={() => mutate((d) => ({ ...d, themeWeights: null }))}
+                onFocus={() => mutate((d) => ({ ...d, themeWeights: analysis.themeFocus.weights }))}
                 onShow={(axis) => {
                   setQuery({ ...DEFAULT_QUERY, axis, fromFix: null });
                   showBrowser();

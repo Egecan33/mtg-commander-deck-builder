@@ -172,6 +172,15 @@ describe('GET /api/status', () => {
 });
 
 describe('POST /api/analyze', () => {
+  it('analyze reports the theme focus', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    expect(a.themeFocus.axes).toContain('typal:elf');
+    expect(a.themeFocus.axes).toContain('tokens');
+    expect(a.themeFocus.focused).toBe(true);
+    expect(a.themeFocus.weights).toEqual(a.themeWeights);
+  });
+
   it('rates the precon and scores every card in it', async () => {
     const deck = await imported('precon');
     const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
