@@ -56,8 +56,8 @@
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
- *        'fix' (Fix deck) makes the deck legal and 100 cards (cards that break a rule are replaced by the best
- *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
+ *        'fix' (Fix deck) makes the deck legal and full (100 cards, 60 in Standard Brawl) (cards that break a rule are replaced by the best
+ *        swap the engine agrees with, or removed; over the size the weakest unlocked cards go; under it it is
  *        filled), then (full fix only) brings a deck that breaks its own target bracket's rules (Game
  *        Changers at Bracket 2 and the like) inside it with the same routine as `only: 'bracket'`, and
  *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
@@ -65,7 +65,7 @@
  *        highest rating is kept, when that is above the rating the steps before it left, else none of it).
  *        Every change is in `changes` ({ out, in, reason, summary }; `out` '' for an add, `in` '' for a cut;
  *        `summary` one short line such as "Ramp 6 → 7 of 10–13", `reason` the full sentence).
- *        Making the deck legal and 100 cards always stands, even when it costs rating points (a deck that
+ *        Making the deck legal and full always stands, even when it costs rating points (a deck that
  *        breaks a rule is capped at 40 and cannot be played; `note` then says what it cost), so
  *        `ratingAfter` can be below `ratingBefore` only for that reason; the improve part never ends below
  *        the rating the steps before it left. `note` also explains an empty result (what
@@ -82,7 +82,7 @@
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        'swapin' takes `options.in` (a card not in the deck, or a basic land already in it for one more copy;
  *        400 without it), `count` 1-10, and returns the deck cards it could replace, best rating after
- *        first; a deck under 100 cards gets the plain add (`out` '') first. It returns [] for an illegal
+ *        first; a deck under its size gets the plain add (`out` '') first. It returns [] for an illegal
  *        or gated card, a card the options rule out, or a non-basic card already in the deck.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
@@ -96,7 +96,7 @@
  *        'add' takes `options.role` ('land' or a role with a band: ramp, draw, spot-removal,
  *        counterspell, wipe, protection, recursion, tutor, win-condition, graveyard-hate) and returns
  *        up to `count` (default 5, max 10) ways to add one such card: `in` with the card to cut as
- *        `out`, or `out: ''` (a plain add) while the deck is under 100 cards.
+ *        `out`, or `out: ''` (a plain add) while the deck is under its size.
  *        The engine dissents instead of refusing: a proposal it thinks is not an improvement still
  *        comes back, with `agrees: false` and an `objection` in plain words. Illegal cards are never
  *        proposed.

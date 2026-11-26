@@ -274,3 +274,6 @@ export const isAbort = (e: unknown): boolean => e instanceof DOMException && e.n
 export function brokenRules(rating: DeckRating, cardCount: number, size = 100): Violation[] {
   return rating.violations.filter((v) => v.code !== 'size' || cardCount > size);
 }
+
+/** Why Standard Brawl cannot be chosen: its legality arrives with the cards sync. */
+export const NO_STANDARD_BRAWL = 'The card data has no Standard Brawl legality yet. Update the card data once (Card data, Cards), then Standard Brawl is available.';

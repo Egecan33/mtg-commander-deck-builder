@@ -134,7 +134,8 @@ export function Builder({ id }: { id: string }) {
   // The deck's collection decides its format: an MTG Arena deck is a Brawl deck (Arena cards, wildcards).
   const deckCollection = collections.find((c) => c.id === (deck?.collectionId ?? activeCollection?.id)) ?? null;
   const otherCollection = collections.find((c) => c.id !== deckCollection?.id && c.kind !== deckCollection?.kind) ?? null;
-  const format: Format = analysis ? analysis.format : deckCollection?.kind === 'arena' ? (deck?.arenaFormat ?? 'brawl') : 'commander';
+  // The deck's own settings, not the last analysis: after a switch the old analysis still carries the old format.
+  const format: Format = deckCollection ? (deckCollection.kind === 'arena' ? (deck?.arenaFormat ?? 'brawl') : 'commander') : analysis ? analysis.format : 'commander';
   const brawl = format !== 'commander';
   const std = format === 'standardbrawl';
   // Cards in a full deck: 60 in Standard Brawl, 100 otherwise.
@@ -453,10 +454,15 @@ export function Builder({ id }: { id: string }) {
   }, []);
   const rebuild = async (mode: 'auto' | 'fill', label: string, seed?: number) => {
     if (!deck) return;
+    const before = deck;
     setBusy(label);
     try {
-      const res = await buildDeck(deck, mode, { ...buildOpts(), seed });
+      const res = await buildDeck(before, mode, { ...buildOpts(), seed });
       learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info(`The deck changed while ${label.toLowerCase()} was working, so nothing was applied. Try again.`);
+        return;
+      }
       setProposals(null);
       mutate((d) => {
         // A rebuild changes the cards, never whether the deck is built.
@@ -581,7 +587,8 @@ export function Builder({ id }: { id: string }) {
     if (!deck) return;
     setBusy(kind);
     setPanel('improve');
-    const bracket = options.bracket === 'keep' ? deck.targetBracket : options.bracket;
+    // Standard Brawl has no brackets: a power setting left over from an earlier Brawl deck must not steer it.
+    const bracket = std || options.bracket === 'keep' ? deck.targetBracket : options.bracket;
     try {
       let res;
       if (kind === 'improve') {
@@ -667,7 +674,7 @@ export function Builder({ id }: { id: string }) {
       await moveDeck(id, deck, to.id);
       dirty.current = false;
       switched.current = true;
-      await switchTo(to.id, `Moved to your ${to.name} collection: it is now checked as a ${to.kind === 'arena' ? 'Brawl' : 'Commander'} deck.`);
+      await switchTo(to.id, `Moved to your ${to.name} collection: it is now checked as a ${to.kind === 'arena' ? (deck.arenaFormat === 'standardbrawl' ? 'Standard Brawl' : 'Brawl') : 'Commander'} deck.`);
     } catch (e) {
       notify.error(e);
     } finally {
@@ -680,6 +687,10 @@ export function Builder({ id }: { id: string }) {
     if (!deck || to === (deck.arenaFormat ?? 'brawl')) return;
     const full = to === 'standardbrawl' ? 60 : 100;
     const total = deckCount(deck);
+    // What was suggested or fixed under the old rules may not be legal under the new ones.
+    setProposals(null);
+    setReplacing(null);
+    setFixed(null);
     mutate((d) => {
       const { arenaFormat: _drop, ...rest } = d;
       void _drop;
@@ -894,7 +905,7 @@ export function Builder({ id }: { id: string }) {
           />
           <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1">
             <span className={`chip ${count === DECK_SIZE ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / {DECK_SIZE}</span>
-            <FormatChip format={format} collection={deckCollection} other={otherCollection} busy={moving} onMove={(to) => void moveTo(to)} onSwitch={switchFormat} />
+            <FormatChip format={format} collection={deckCollection} other={otherCollection} busy={moving || !!busy} onMove={(to) => void moveTo(to)} onSwitch={switchFormat} standardBrawlCards={status?.counts.standardBrawl} />
             {manual && (
               <button
                 type="button"

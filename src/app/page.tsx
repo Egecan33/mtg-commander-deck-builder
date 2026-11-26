@@ -106,7 +106,7 @@ export default function DecksPage() {
         <div className="mt-10 grid max-w-[46rem] gap-4 rounded-lg border border-slag bg-anvil p-8">
           <h2 className="text-[1.35rem]">Start with a commander, or bring a deck you already play</h2>
           <p className="text-ash">
-            Pick a commander and a bracket and Commander Forge builds a legal 100-card deck you can then change card by card. Or paste a list you already
+            Pick a commander and Commander Forge builds a legal deck (100 cards, or 60 in Standard Brawl) you can then change card by card. Or paste a list you already
             have: it is rated, and you get an ordered set of swaps that make it better.
           </p>
           <div className="flex gap-2">

@@ -212,7 +212,7 @@ export function RatingPanel({
         )}
       </Section>
 
-      <Section title="The nine parts">
+      <Section title="The parts">
         <ul className="grid gap-3.5">
           {rating.subscores.map((s) => {
             const pct = Math.round(s.value * 100);

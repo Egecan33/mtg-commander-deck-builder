@@ -8,7 +8,7 @@ import {
   type ArenaFormat, type ArenaStatus, type CollectionInfo, type ProxyItem, type ProxyListResponse, type StatusResponse,
 } from '../lib/api';
 import { useFilters } from '../lib/filters';
-import { errText, fmtDate, isAbort } from '../lib/ui';
+import { NO_STANDARD_BRAWL, errText, fmtDate, isAbort } from '../lib/ui';
 import { Menu } from './Menu';
 
 // ---------------------------------------------------------------------------------------------
@@ -349,7 +349,14 @@ export function Shell({ children }: { children: ReactNode }) {
                   testId="mode-brawl"
                   items={[
                     { label: 'Brawl (100)', description: 'Arena Brawl: 100 cards, one commander.', onSelect: () => setArenaFormat('brawl'), testId: 'arena-format-brawl' },
-                    { label: 'Standard Brawl (60)', description: 'Standard cards only: 60 cards, one commander, one opponent.', onSelect: () => setArenaFormat('standardbrawl'), testId: 'arena-format-standardbrawl' },
+                    {
+                      label: 'Standard Brawl (60)',
+                      description: 'Standard cards only: 60 cards, one commander, one opponent.',
+                      onSelect: () => setArenaFormat('standardbrawl'),
+                      testId: 'arena-format-standardbrawl',
+                      disabled: status?.counts.standardBrawl === 0,
+                      title: status?.counts.standardBrawl === 0 ? NO_STANDARD_BRAWL : undefined,
+                    },
                   ]}
                 />
               )}

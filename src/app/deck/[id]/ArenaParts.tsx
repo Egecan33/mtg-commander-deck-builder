@@ -4,6 +4,7 @@ import { CardGrid } from '../../components/CardGrid';
 import { CardTile, unknownCard } from '../../components/CardTile';
 import { Menu, type MenuItem } from '../../components/Menu';
 import { Section } from '../../components/Section';
+import { NO_STANDARD_BRAWL } from '../../lib/ui';
 import type { ArenaRarity, ArenaReport, CardLookup, CollectionInfo, Format } from '../../lib/api';
 
 const ORDER: readonly ArenaRarity[] = ['common', 'uncommon', 'rare', 'mythic'];
@@ -21,9 +22,11 @@ export function rarityStat(rarity: ArenaRarity | null): { label: string; value: 
  * checked under that collection's rules.
  */
 export function FormatChip({
-  format, collection, other, busy, onMove, onSwitch,
+  format, collection, other, busy, onMove, onSwitch, standardBrawlCards,
 }: {
   format: Format; collection: CollectionInfo | null; other: CollectionInfo | null; busy: boolean; onMove: (to: CollectionInfo) => void;
+  /** Cards the card data holds as legal in Standard Brawl; 0 means the cards sync has not brought that legality yet. */
+  standardBrawlCards?: number;
   /** MTG Arena decks: changes only the deck's Arena format (Brawl or Standard Brawl). */
   onSwitch?: (to: 'brawl' | 'standardbrawl') => void;
 }) {
@@ -43,7 +46,8 @@ export function FormatChip({
       label: to === 'brawl' ? 'Switch to Brawl' : 'Switch to Standard Brawl',
       description: `Its cards stay as they are; it is then checked as a ${to === 'brawl' ? '100-card Brawl' : '60-card Standard Brawl'} deck.`,
       onSelect: () => onSwitch(to),
-      disabled: busy,
+      disabled: busy || (to === 'standardbrawl' && standardBrawlCards === 0),
+      ...(to === 'standardbrawl' && standardBrawlCards === 0 ? { title: NO_STANDARD_BRAWL } : {}),
       testId: 'deck-switch-format',
     });
   }

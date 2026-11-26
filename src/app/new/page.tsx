@@ -99,7 +99,7 @@ export default function NewDeckPage() {
     companion: null,
     chosenColor,
     main: [],
-    targetBracket: bracket,
+    targetBracket: std ? 3 : bracket,
     themeWeights: null,
     ...(std ? { arenaFormat: 'standardbrawl' as const } : {}),
   });
@@ -237,7 +237,7 @@ export default function NewDeckPage() {
         {!commander ? (
           <div className="text-ash">
             <h2 className="text-[1.3rem] text-bone">Nothing chosen yet</h2>
-            <p className="mt-2">Click a card on the left. You then choose a bracket, and either have the deck built for you or start from an empty list.</p>
+            <p className="mt-2">Click a card on the left. You then choose how to start (a bracket too, outside Standard Brawl), and either have the deck built for you or start from an empty list.</p>
           </div>
         ) : (
           <>
