@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { CommanderRecsResponse, RecCard, RecSection, RecSectionId, RecTypeId, RecsQuery } from '@/app/lib/api';
+import type { CommanderRecsResponse, RecCard, RecEmptyAction, RecSection, RecSectionId, RecTypeId, RecsQuery } from '@/app/lib/api';
 import { budgetMax, type Budget } from '@/app/lib/budget';
 import { isBasicLand } from '@/engine/rules';
 import { AXIS_MEMBER } from '@/engine/summary';
@@ -121,23 +121,29 @@ export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecs
   const sets = newestSets();
   const fresh = newCardIds();
   const ownedAll = ownedSet();
-  const emptyFor = (id: RecSectionId): string => {
-    if (id === 'new' && fresh === null) return 'Set release dates are missing. Sync printings under Card data to see new cards.';
+  const emptyFor = (id: RecSectionId): { text: string; action?: RecEmptyAction } => {
+    if (id === 'new' && fresh === null) return { text: 'Set release dates are missing. Sync printings under Card data to see new cards.', action: 'sync-printings' };
     if (q.ownedOnly) {
       return ownedAll.size === 0
-        ? 'Your collection is empty. Add cards under Collection.'
-        : `Nothing in your collection fits ${names} with these filters. Turn off Only my collection to see every card.`;
+        ? { text: 'Your collection is empty. Add cards under Collection.', action: 'collection' }
+        : { text: `Nothing in your collection fits ${names} with these filters. Turn off Only my collection to see every card.`, action: 'all-cards' };
     }
-    if (id === 'owned') return ownedAll.size === 0 ? 'Your collection is empty. Add cards under Collection.' : `None of your cards fits ${names} here.`;
-    if (cap !== null) return `No card under $${cap} fits here. Choose Any price to see more.`;
-    return `No card fits ${names} here.`;
+    if (id === 'owned') {
+      return ownedAll.size === 0 ? { text: 'Your collection is empty. Add cards under Collection.', action: 'collection' } : { text: `None of your cards fits ${names} here.` };
+    }
+    if (cap !== null) return { text: `No card under $${cap} fits here. Choose Any price to see more.`, action: 'any-price' };
+    return { text: `No card fits ${names} here.` };
   };
 
   const section = (id: RecSectionId, title: string, list: typeof P, note?: string, headline = false): RecSection | null => {
     if (list.length === 0 && !headline) return null;
     const out: RecSection = { id, title, total: list.length, cards: list.slice(0, MAX_SECTION_CARDS).map(toRec) };
     if (note) out.note = note;
-    if (list.length === 0) out.empty = emptyFor(id);
+    if (list.length === 0) {
+      const e = emptyFor(id);
+      out.empty = e.text;
+      if (e.action) out.emptyAction = e.action;
+    }
     return out;
   };
   const edhrec = analysis.ctx.edhrec;

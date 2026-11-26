@@ -474,7 +474,11 @@ export interface RecCard {
   quality: number;
   edhrec?: { inclusion: number; decks: number; lift: number | null };
 }
-export interface RecSection { id: RecSectionId; title: string; total: number; cards: RecCard[]; note?: string; empty?: string }
+/** The button an empty section offers: the filter to turn off, or the page to open. */
+export type RecEmptyAction = 'all-cards' | 'any-price' | 'sync-printings' | 'collection';
+export interface RecSection {
+  id: RecSectionId; title: string; total: number; cards: RecCard[]; note?: string; empty?: string; emptyAction?: RecEmptyAction;
+}
 export interface CommanderRecsResponse {
   commanders: string[]; query: RecsQuery; edhrec: EdhrecStatus; sections: RecSection[];
   scores: Record<string, CardScore>; cards: CardLookup; heldBy: HeldBy;

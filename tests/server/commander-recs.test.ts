@@ -50,6 +50,7 @@ describe('New cards', () => {
     const none = await get('krenko-mob-boss');
     expect(sec(none, 'new').total).toBe(0);
     expect(sec(none, 'new').empty).toMatch(/Sync printings/);
+    expect(sec(none, 'new').emptyAction).toBe('sync-printings');
   });
 });
 
@@ -174,10 +175,12 @@ describe('filters', () => {
     const empty = await get('krenko-mob-boss', '?owned=1');
     for (const s of empty.sections) expect(s.total).toBe(0);
     expect(sec(empty, 'synergy').empty).toMatch(/Collection/);
+    expect(sec(empty, 'synergy').emptyAction).toBe('collection');
     replaceCollection('1 Forest\n1 Llanowar Elves\n1 Cultivate');
     const green = await get('krenko-mob-boss', '?owned=1');
     expect(green.sections.map((s) => s.id).filter((x) => !['new', 'synergy', 'top', 'game-changers', 'owned'].includes(x))).toEqual([]);
     expect(sec(green, 'synergy').empty).toMatch(/Turn off Only my collection/);
+    expect(sec(green, 'synergy').emptyAction).toBe('all-cards');
     replaceCollection('');
   });
 

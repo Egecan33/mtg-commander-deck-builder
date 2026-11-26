@@ -11,7 +11,7 @@ import { pickOption, type FilterOption } from '@/app/components/FilterBar';
 import { HeldMark } from '@/app/components/held';
 import { JumpRail, JumpScope } from '@/app/components/JumpRail';
 import { Section, useSectionLimit } from '@/app/components/Section';
-import type { CommanderRecsResponse, RecCard } from '@/app/lib/api';
+import type { CommanderRecsResponse, RecCard, RecEmptyAction } from '@/app/lib/api';
 import { setFilters, useFilters } from '@/app/lib/filters';
 import { fmtInt, fmtPrice } from '@/app/lib/ui';
 import { CommanderPackages } from './CommanderPackages';
@@ -31,12 +31,11 @@ function RecList({ cards, children }: { cards: RecCard[]; children: (cards: RecC
   return <ul className="grid gap-px overflow-hidden rounded-md border border-slag bg-slag">{children(limit === null ? cards : cards.slice(0, limit))}</ul>;
 }
 
-function EmptyAction({ text }: { text: string }) {
-  if (/Only my collection/.test(text)) return <button type="button" className="btn btn-sm" onClick={() => setFilters({ ownedOnly: false })}>Turn off Only my collection</button>;
-  if (/Any price/.test(text)) return <button type="button" className="btn btn-sm" onClick={() => setFilters({ budget: 'any' })}>Any price</button>;
-  if (/Sync printings/.test(text)) return <Link href="/data" className="btn btn-sm">Card data</Link>;
-  if (/Collection/.test(text)) return <Link href="/collection" className="btn btn-sm">Collection</Link>;
-  return null;
+function EmptyAction({ action }: { action: RecEmptyAction }) {
+  if (action === 'all-cards') return <button type="button" className="btn btn-sm" onClick={() => setFilters({ ownedOnly: false })}>Turn off Only my collection</button>;
+  if (action === 'any-price') return <button type="button" className="btn btn-sm" onClick={() => setFilters({ budget: 'any' })}>Any price</button>;
+  if (action === 'sync-printings') return <Link href="/data" className="btn btn-sm">Card data</Link>;
+  return <Link href="/collection" className="btn btn-sm">Collection</Link>;
 }
 
 export function RecsTab({ data, name, edhrecDecks, avg, packagesWanted, onWantPackages, std = false }: {
@@ -64,7 +63,7 @@ export function RecsTab({ data, name, edhrecDecks, avg, packagesWanted, onWantPa
 
   const body = (s: ArrangedSection) => {
     if (s.cards.length === 0) {
-      return <EmptyState message={s.empty ?? 'Nothing here.'} action={s.empty ? <EmptyAction text={s.empty} /> : undefined} testId="rec-empty" />;
+      return <EmptyState message={s.empty ?? 'Nothing here.'} action={s.emptyAction ? <EmptyAction action={s.emptyAction} /> : undefined} testId="rec-empty" />;
     }
     if (f.view === 'list') {
       return (
