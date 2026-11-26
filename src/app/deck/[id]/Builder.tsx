@@ -214,19 +214,35 @@ export function Builder({ id }: { id: string }) {
     deckRef.current = deck;
   }, [deck]);
 
+  // ---- the card search column, shown or hidden (remembered for every deck)
+  const { ready: filtersReady, ownedOnly: storedOwnedOnly, browser: browserShown } = useFilters();
+  // "/" on a hidden card search shows it, then the search box takes the focus.
+  const focusSearch = useRef(false);
+  const showBrowser = useCallback(() => setFilters({ browser: true }), []);
+  useEffect(() => {
+    if (!browserShown || !focusSearch.current || !searchRef.current) return;
+    focusSearch.current = false;
+    searchRef.current.focus();
+  }, [browserShown]);
+
   // ---- keyboard: "/" goes to search. Esc is handled by whichever overlay is open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (e.key === '/' && !e.metaKey && !e.ctrlKey && !(el && /INPUT|TEXTAREA|SELECT/.test(el.tagName))) {
         e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        if (!searchRef.current) {
+          focusSearch.current = true;
+          showBrowser();
+          return;
+        }
+        searchRef.current.focus();
+        searchRef.current.select();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [showBrowser]);
 
   // ---- card actions
   const add = useCallback(
@@ -464,7 +480,6 @@ export function Builder({ id }: { id: string }) {
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
   // "Only my collection" is a choice about the player, not about one deck: it is one of the shared filters.
-  const { ready: filtersReady, ownedOnly: storedOwnedOnly } = useFilters();
   useEffect(() => {
     if (filtersReady) setOptions((o) => (o.ownedOnly === storedOwnedOnly ? o : { ...o, ownedOnly: storedOwnedOnly }));
   }, [filtersReady, storedOwnedOnly]);
@@ -556,7 +571,9 @@ export function Builder({ id }: { id: string }) {
   };
   const applyFix = (fix: Fix) => {
     const next = queryForFix(fix);
-    if (next) setQuery(next);
+    if (!next) return;
+    setQuery(next);
+    showBrowser();
   };
 
   // ---- render
@@ -820,21 +837,34 @@ export function Builder({ id }: { id: string }) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_22.5rem] grid-rows-[minmax(0,1fr)]">
-        <Browser
-          deck={deck}
-          settled={settled}
-          rev={rev}
-          query={query}
-          setQuery={setQuery}
-          extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
-          held={held}
-          onAdd={add}
-          onRemove={remove}
-          onOpen={openCard}
-          searchRef={searchRef}
-        />
+      <div
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
+        data-browser={browserShown ? 'shown' : 'hidden'}
+      >
+        {browserShown && (
+          <Browser
+            deck={deck}
+            settled={settled}
+            rev={rev}
+            query={query}
+            setQuery={setQuery}
+            extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+            held={held}
+            onAdd={add}
+            onRemove={remove}
+            onOpen={openCard}
+            searchRef={searchRef}
+            onHide={() => setFilters({ browser: false })}
+          />
+        )}
         <DeckView
+          lead={
+            browserShown ? undefined : (
+              <button type="button" className="btn btn-sm" onClick={showBrowser} title="Show the card search beside the deck (or press /)" data-testid="browser-show">
+                Show card search
+              </button>
+            )
+          }
           deck={deck}
           lookup={lookup}
           scoreOf={scoreOf}
@@ -904,7 +934,10 @@ export function Builder({ id }: { id: string }) {
                 deck={deck}
                 onChange={(axis, w) => mutate((d) => ({ ...d, themeWeights: { ...(d.themeWeights ?? analysis.themeWeights), [axis]: w } }))}
                 onReset={() => mutate((d) => ({ ...d, themeWeights: null }))}
-                onShow={(axis) => setQuery({ ...DEFAULT_QUERY, axis, fromFix: null })}
+                onShow={(axis) => {
+                  setQuery({ ...DEFAULT_QUERY, axis, fromFix: null });
+                  showBrowser();
+                }}
               />
             ) : (
               <ImprovePanel

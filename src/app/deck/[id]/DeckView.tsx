@@ -27,8 +27,10 @@ const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead,
 }: {
+  /** Shown before the deck's heading (Show card search, when it is hidden). */
+  lead?: ReactNode;
   /** Extra actions for the whole deck, shown under the header. */
   tools?: ReactNode;
   /** Shown above the cards (what the deck takes from boxes and built decks, the box offer). */
@@ -172,6 +174,7 @@ export function DeckView({
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col border-l border-slag" aria-label="Deck" data-testid="deck-view">
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+        {lead}
         <h2 className="mr-auto text-[18px] leading-none">Deck</h2>
         <FilterBar show={['groupBy', 'view']} groups={GROUPS} testId="deck-view-controls" />
       </div>

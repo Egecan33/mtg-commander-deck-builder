@@ -24,6 +24,8 @@ export interface Filters {
   groupBy: string;
   /** A page's sort id. Pages check it against their own options. */
   sort: string;
+  /** The deck page shows its card search column. */
+  browser: boolean;
   /** False until the browser's storage has been read (the server render and the first hydration pass). */
   ready: boolean;
 }
@@ -39,10 +41,11 @@ export const FILTER_STORAGE_KEYS: Record<FilterKey, string> = {
   view: 'cf-view-mode',
   groupBy: 'cf-view-group',
   sort: 'cf-view-sort',
+  browser: 'cf-view-browser',
 };
 
 export const DEFAULT_FILTERS: Filters = {
-  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, size: 'M', view: 'grid', groupBy: '', sort: '', ready: false,
+  bracket: 3, budget: 'any', ownedOnly: false, freeOnly: null, size: 'M', view: 'grid', groupBy: '', sort: '', browser: true, ready: false,
 };
 
 export const BUDGETS: { id: Budget; label: string; maxUsd: number | null }[] = [
@@ -77,6 +80,7 @@ export function readFilters(storage: Pick<Storage, 'getItem'> | null): Filters {
     view: view === 'grid' || view === 'list' ? view : DEFAULT_FILTERS.view,
     groupBy: get('groupBy') ?? DEFAULT_FILTERS.groupBy,
     sort: get('sort') ?? DEFAULT_FILTERS.sort,
+    browser: flag(get('browser')) ?? DEFAULT_FILTERS.browser,
     ready: true,
   };
 }
