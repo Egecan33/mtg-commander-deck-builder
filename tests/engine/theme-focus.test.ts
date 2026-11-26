@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { autoBuild } from '@/engine/builder';
 import { commanderThemeWeights } from '@/engine/features';
-import { focusThemeWeights, resolveThemeWeights, themeFocus } from '@/engine/summary';
+import { focusThemeWeights, resolveTheme, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
+import { targetsFor } from '@/engine/targets';
 import type { Bracket, Deck, EngineContext } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck } from '../helpers/network';
@@ -32,6 +33,31 @@ describe('theme focus', () => {
     expect(themeFocus(r).axes).toEqual(['tokens', 'typal', 'typal:elf']);
   });
 
+  // Review I2: Krenko's attack 0.87 and Sin's landfall 0.87 were quartered.
+  it('keeps every axis at 75% of the second axis or at 0.6 and up', () => {
+    const w = { tokens: 1, 'typal:goblin': 1, attack: 0.87, sacrifice: 0.62, lifegain: 0.51, counters: 0.4 };
+    expect(themeFocus(w).axes).toEqual(['attack', 'sacrifice', 'tokens', 'typal', 'typal:goblin']);
+    const f = focusThemeWeights(w);
+    expect(f.attack).toBe(0.87);
+    expect(f.sacrifice).toBe(0.62);
+    expect(f.lifegain).toBeCloseTo(0.51 * 0.25, 6);
+    expect(f.counters).toBeCloseTo(0.1, 6);
+    // 75% of the second axis: 0.5 against a cut of 0.6 stays, 0.4 does not
+    expect(themeFocus({ a: 1, b: 0.6, c: 0.5, d: 0.4 }).axes).toEqual(['a', 'b', 'c']);
+  });
+
+  it('archetype deltas, role bands and land terms read the unfocused weights', () => {
+    for (const c of db.all()) {
+      if (!/Legendary Creature/.test(c.typeLine ?? '')) continue;
+      const deck = alone(c.name);
+      const unfocused = commanderThemeWeights([c]);
+      if (!Object.values(unfocused).some((v) => v >= 0.5)) continue;
+      expect(resolveTheme(deck, ctx).unfocused, c.name).toEqual(unfocused);
+      const s = summarizeDeck(deck, db);
+      expect(targetsFor(deck, ctx, s), c.name).toEqual(targetsFor({ ...deck, themeWeights: unfocused }, ctx, s));
+    }
+  });
+
   it('ties at the cut are all kept', () => {
     const w = resolved('Leonardo, the Balance');
     expect(w.tokens).toBe(1);
@@ -57,7 +83,7 @@ describe('theme focus', () => {
   });
 
   it("a deck's own weights come back untouched", () => {
-    const own = { tokens: 1, counters: 0.9, lifegain: 0.8, attack: 0.7 };
+    const own = { tokens: 1, counters: 0.9, lifegain: 0.5, attack: 0.4 };
     const deck = { ...alone('Lathril, Blade of the Elves'), themeWeights: own };
     expect(resolveThemeWeights(deck, ctx)).toEqual(own);
     expect(themeFocus(own).focused).toBe(false);

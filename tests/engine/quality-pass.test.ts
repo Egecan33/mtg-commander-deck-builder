@@ -176,10 +176,10 @@ describe('resolveTheme: one theme resolution for the scorer and the rating', () 
     expect(resolveTheme(sized, ctx).inferred).toBe('typal:dragon');
 
     const user = { ...precon, themeWeights: { landfall: 1 } };
-    expect(resolveTheme(user, ctx)).toEqual({ weights: { landfall: 1 }, source: 'user', inferred: null });
+    expect(resolveTheme(user, ctx)).toEqual({ weights: { landfall: 1 }, unfocused: { landfall: 1 }, source: 'user', inferred: null });
     const lathril = fixtureDeck('upgraded', 3);
     expect(resolveTheme(lathril, ctx).source).toBe('commander');
-    expect(resolveTheme(deck([], 3), ctx)).toEqual({ weights: {}, source: 'commander', inferred: null });
+    expect(resolveTheme(deck([], 3), ctx)).toEqual({ weights: {}, unfocused: {}, source: 'commander', inferred: null });
   });
 
   it("the deck's own dragons are scored as its theme, not as its weakest cards", () => {

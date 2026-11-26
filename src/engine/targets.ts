@@ -1,6 +1,6 @@
 import { landTarget } from './mana';
 import { allowedIdentity, commanderCards } from './rules';
-import { deckCards, isLandCard, resolveThemeWeights, summarizeDeck } from './summary';
+import { deckCards, isLandCard, summarizeDeck, unfocusedThemeWeights } from './summary';
 import type { AxisId, Bracket, Card, CardFeatures, Deck, DeckSummary, EngineContext, PlanMove, Role, RoleBand, Targets } from './types';
 import type { CorePackageId } from './types';
 
@@ -167,7 +167,9 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
   if (blue) roles.counterspell = { lo: COUNTER_BLUE[i][0], hi: COUNTER_BLUE[i][1] };
 
   const avgMv: RoleBand = { lo: AVG_MV[i][0], hi: AVG_MV[i][1] };
-  const weights = resolveThemeWeights(deck, ctx);
+  // Archetype deltas, the plan's moves and the land target read the weights before the focus, so
+  // focusing a deck's themes never moves its numbers.
+  const weights = unfocusedThemeWeights(deck, ctx);
   const cards = deckCards(deck, ctx.db).cards;
   const commanderIds = new Set(deck.commanders);
 
