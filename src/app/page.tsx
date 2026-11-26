@@ -130,13 +130,6 @@ export default function DecksPage() {
                   <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-anvil to-transparent" />
                   <div className="absolute bottom-2 right-3 flex items-end gap-2">
                     <div
-                      className="flex h-7 items-center rounded-md bg-iron px-2 text-[0.8rem] tabular-nums text-bone"
-                      title="How well the cards work together, out of 100"
-                      data-testid="deck-cohesion"
-                    >
-                      Cohesion {d.cohesion}
-                    </div>
-                    <div
                       className="display flex h-12 min-w-12 items-center justify-center rounded-md px-2 text-[1.6rem] font-bold text-[#15110a] shadow-lg"
                       style={{ background: BAND_VAR[band] }}
                       title={broken ? 'Not legal: the rating is capped' : d.cardCount < 100 ? 'Rating so far, out of 100' : 'Deck rating out of 100'}
@@ -151,6 +144,8 @@ export default function DecksPage() {
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
                     <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
+                    {/* in the caption row, not over the art (app map) */}
+                    <span className="chip tabular-nums" title="How well the cards work together, out of 100" data-testid="deck-cohesion">Cohesion {d.cohesion}</span>
                     {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
                     {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
                     {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
