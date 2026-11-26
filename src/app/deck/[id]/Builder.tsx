@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { commanderHref } from '../../lib/links';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
@@ -810,11 +811,20 @@ export function Builder({ id }: { id: string }) {
               No commander. Open a legendary creature and choose “Make commander”.
             </div>
           )}
-          {deck.commanders.map((c) => (
-            <button key={c} type="button" className="card w-[3.9rem] cursor-zoom-in" onClick={() => setDetail(c)} aria-label={`Details for ${lookup[c]?.name ?? 'commander'}`} data-testid="commander-thumb">
-              <CardImage id={c} name={lookup[c]?.name ?? 'Commander'} known={!!lookup[c]} />
-            </button>
-          ))}
+          {deck.commanders.map((c) => {
+            const first = lookup[deck.commanders[0]];
+            const second = deck.commanders.length === 2 ? lookup[deck.commanders[1]] : undefined;
+            const self = lookup[c];
+            const href = self ? first && second ? commanderHref(first, second) : commanderHref(self) : null;
+            const image = <CardImage id={c} name={self?.name ?? 'Commander'} known={!!self} />;
+            return href ? (
+              <Link key={c} href={href} className="card block w-[3.9rem]" title="Open the commander page" aria-label={`Open the commander page for ${self?.name ?? 'the commander'}`} data-testid="commander-thumb">
+                {image}
+              </Link>
+            ) : (
+              <button key={c} type="button" className="card w-[3.9rem] cursor-zoom-in" onClick={() => setDetail(c)} aria-label="Details for commander" data-testid="commander-thumb">{image}</button>
+            );
+          })}
         </div>
 
         <div className="min-w-0 flex-1">

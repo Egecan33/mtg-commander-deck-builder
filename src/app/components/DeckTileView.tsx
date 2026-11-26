@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { DeckTile } from '../lib/api';
+import { commanderHref } from '../lib/links';
 import { BAND_VAR, bandOf, bracketName, fmtDate } from '../lib/ui';
 import { ArtCrop } from './ArtCrop';
 
@@ -32,19 +34,32 @@ export function DeckTileView({ deck: d, footer }: { deck: DeckTile; footer?: Rea
                     {Math.round(d.rating)}
                   </div>
                 </div>
-                <div className="px-4 pb-3 pt-2">
+                <div className="px-4 pt-2">
                   <h2 className="truncate text-[1.2rem] leading-snug">{d.name}</h2>
-                  <p className="truncate text-ash">{d.commanders.map((c) => c.name).join(' and ') || 'Choose a commander in the builder'}</p>
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
-                    <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
-                    {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
-                    {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
-                    {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
-                    {d.combos > 0 && <span className="chip" data-testid="tile-combos">{d.combos} {d.combos === 1 ? 'combo' : 'combos'}</span>}
-                  </div>
                 </div>
               </button>
+              <div className="px-4 pb-3">
+                <p className="truncate text-ash" data-testid="deck-tile-commanders">
+                  {d.commanders.length === 0
+                    ? 'Choose a commander in the builder'
+                    : d.commanders.map((c, i) => (
+                        <span key={c.oracleId}>
+                          {i > 0 && ' and '}
+                          <Link href={d.commanders.length === 2 ? commanderHref(d.commanders[0], d.commanders[1]) : commanderHref(c)} className="hover:text-bone hover:underline" title="Open the commander page" data-testid="deck-tile-commander">
+                            {c.name}
+                          </Link>
+                        </span>
+                      ))}
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
+                  <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
+                  {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
+                  {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
+                  {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
+                  {d.combos > 0 && <span className="chip" data-testid="tile-combos">{d.combos} {d.combos === 1 ? 'combo' : 'combos'}</span>}
+                </div>
+              </div>
       {footer ?? (
         <div className="flex items-center gap-1 border-t border-slag px-2.5 py-1.5">
           <span className="whitespace-nowrap px-1.5 text-[0.78rem] text-smoke">Edited {fmtDate(d.updatedAt)}</span>
