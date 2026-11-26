@@ -7,7 +7,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { CardImage, ColorPip, Gauge } from '../../components/card';
 import { HeldMark, heldText } from '../../components/held';
 import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
-import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice } from '../../lib/ui';
+import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
 export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve';
 
@@ -379,12 +379,10 @@ const NO_ROOM: NotInReason = { lead: 'No card in the deck can make room for it.'
 /** "+1.4 · rating 77 → 79": the change with its sign, then the ratings (one decimal when whole numbers would hide it). */
 function RatingChange({ p }: { p: SwapProposal }) {
   const d = Math.round((p.ratingAfter - p.ratingBefore) * 10) / 10;
-  const fine = Math.round(p.ratingBefore) === Math.round(p.ratingAfter) && p.ratingBefore !== p.ratingAfter;
-  const f = (n: number) => (fine ? n.toFixed(1) : String(Math.round(n)));
   return (
     <span className="tabular-nums" data-testid="swapin-delta" data-delta={d}>
       <span className={d > 0 ? 'text-bone' : 'text-ash'}>{d > 0 ? `+${d.toFixed(1)}` : d < 0 ? `−${Math.abs(d).toFixed(1)}` : '±0'}</span>
-      <span className="text-smoke"> · rating {f(p.ratingBefore)} → {f(p.ratingAfter)}</span>
+      <span className="text-smoke"> · rating {fmtRatingChange(p.ratingBefore, p.ratingAfter)}</span>
     </span>
   );
 }
