@@ -44,7 +44,7 @@ function withoutHolder(map: HeldBy, name: string): HeldBy {
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
-  const { active: activeCollection } = useCollections();
+  const { active: activeCollection, refresh: refreshCollections } = useCollections();
   const proxies = useProxies();
   const { status } = useStatus();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -77,6 +77,8 @@ export function Builder({ id }: { id: string }) {
   const [takingOut, setTakingOut] = useState<string | null>(null);
   const dirty = useRef(false);
   const saveSeq = useRef(0);
+  // `built` as last saved: when a save changes it, the collections are read again.
+  const savedBuilt = useRef(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const learn = useCallback((cards: CardLookup | ClientCard[]) => {
@@ -93,6 +95,7 @@ export function Builder({ id }: { id: string }) {
     getDeck(id, ctrl.signal).then(
       (res) => {
         learn(res.cards);
+        savedBuilt.current = res.deck.built === true;
         setDeck(res.deck);
         setSettled(res.deck);
         // Optional per-commander play data; answers 'off' at once unless switched on under Card data.
@@ -159,9 +162,15 @@ export function Builder({ id }: { id: string }) {
     if (!settled || !dirty.current) return;
     const seq = ++saveSeq.current;
     setSaveState('saving');
+    const builtChanged = (settled.built === true) !== savedBuilt.current;
     updateDeck(id, settled).then(
       () => {
         if (seq === saveSeq.current) setSaveState('saved');
+        if (builtChanged) {
+          savedBuilt.current = settled.built === true;
+          // The collections' holder counts changed, and with them the "Use free copies only" default.
+          void refreshCollections();
+        }
       },
       (e) => {
         if (seq !== saveSeq.current) return;
@@ -169,7 +178,7 @@ export function Builder({ id }: { id: string }) {
         notify.error(`The deck was not saved: ${errText(e)}`);
       },
     );
-  }, [settled, id, notify]);
+  }, [settled, id, notify, refreshCollections]);
 
   const mutate = useCallback((fn: (d: Deck) => Deck) => {
     dirty.current = true;
