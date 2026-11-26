@@ -1,5 +1,5 @@
 import type { CommanderCombosResponse, RecsQuery } from '@/app/lib/api';
-import { budgetMax } from '@/app/lib/filters';
+import { budgetMax } from '@/app/lib/budget';
 import { COMBO_TAG, identityCombos } from '@/engine/brackets';
 import type { Card, FoundCombo } from '@/engine/types';
 import { cardLookup } from './cards';

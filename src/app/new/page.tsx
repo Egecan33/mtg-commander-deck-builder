@@ -4,19 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Bracket, Color, Deck } from '@/engine/types';
 import { CardImage, ColorPip } from '../components/card';
+import { ColorChips } from '../components/ColorChips';
 import { ImportDialog } from '../components/ImportDialog';
 import { useNotify } from '../components/Shell';
 import { VirtualGrid, usePaged } from '../components/VirtualGrid';
 import { buildDeck, createDeck, getCommanders, getPartners, loadEdhrec, type ColorLetter, type ColorMode, type CommanderCard } from '../lib/api';
-import { BRACKETS, COLOR_NAME, COLOR_ORDER, fmtInt } from '../lib/ui';
+import { BRACKETS, COLOR_NAME, fmtInt } from '../lib/ui';
 
 const PAGE = 120;
-const MODES: { id: ColorMode; label: string; hint: string }[] = [
-  { id: 'includes', label: 'Has', hint: 'Identity has every chosen colour' },
-  { id: 'exact', label: 'Exactly', hint: 'Identity is exactly the chosen colours' },
-  { id: 'within', label: 'At most', hint: 'Identity stays inside the chosen colours' },
-];
-
 export default function NewDeckPage() {
   const router = useRouter();
   const notify = useNotify();
@@ -164,33 +159,7 @@ export default function NewDeckPage() {
             />
             {!pickingPartner && (
               <>
-                <div className="flex items-center gap-1.5" role="group" aria-label="Colour identity">
-                  {COLOR_ORDER.map((c) => {
-                    const on = colors.includes(c);
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        aria-pressed={on}
-                        title={COLOR_NAME[c]}
-                        className={`rounded-full p-0.5 ${on ? 'outline outline-2 outline-brass' : ''}`}
-                        onClick={() =>
-                          setColors((cur) => (c === 'C' ? (on ? [] : ['C']) : on ? cur.filter((x) => x !== c) : [...cur.filter((x) => x !== 'C'), c]))
-                        }
-                        data-testid={`color-${c}`}
-                      >
-                        <ColorPip color={c} size="1.5rem" dim={!on && colors.length > 0} />
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="seg" role="group" aria-label="How colours are matched">
-                  {MODES.map((m) => (
-                    <button key={m.id} type="button" aria-pressed={mode === m.id} title={m.hint} onClick={() => setMode(m.id)}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+                <ColorChips colors={colors} mode={mode} onColors={setColors} onMode={setMode} />
               </>
             )}
             {pickingPartner && (

@@ -82,6 +82,7 @@ export const useCollections = (): CollectionsValue => useContext(CollectionsCont
 const NAV = [
   { href: '/', label: 'Decks' },
   { href: '/new', label: 'New deck' },
+  { href: '/commanders', label: 'Commanders' },
   { href: '/collection', label: 'Collection' },
   { href: '/discover', label: 'Best from collection' },
   { href: '/proxies', label: 'Proxies' },
@@ -280,7 +281,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </Link>
             <nav className="flex h-full items-stretch gap-1" aria-label="Main">
               {NAV.map((n) => {
-                const on = n.href === '/' ? pathname === '/' || pathname.startsWith('/deck/') : pathname.startsWith(n.href);
+                const on = n.href === '/' ? pathname === '/' || pathname.startsWith('/deck/') : n.href === '/commanders' ? /^\/(commander|theme)/.test(pathname) : pathname.startsWith(n.href);
                 return (
                   <Link
                     key={n.href}

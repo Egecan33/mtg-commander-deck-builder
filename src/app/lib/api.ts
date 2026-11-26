@@ -236,7 +236,7 @@
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
-import type { Budget } from './filters';
+import type { Budget } from './budget';
 import type {
   AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FoundCombo, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';

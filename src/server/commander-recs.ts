@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CommanderRecsResponse, RecCard, RecSection, RecSectionId, RecTypeId, RecsQuery } from '@/app/lib/api';
-import { budgetMax, type Budget } from '@/app/lib/filters';
+import { budgetMax, type Budget } from '@/app/lib/budget';
 import { isBasicLand } from '@/engine/rules';
 import { AXIS_MEMBER } from '@/engine/summary';
 import type { Card, CardFeatures, CardScore } from '@/engine/types';

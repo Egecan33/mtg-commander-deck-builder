@@ -3,33 +3,11 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { ArtCrop } from './components/ArtCrop';
 import { ImportDialog } from './components/ImportDialog';
 import { useNotify, useStatus } from './components/Shell';
-import { createDeck, deleteDeck, getDeck, imageUrl, listDecks, type ClientCard, type DeckTile } from './lib/api';
+import { createDeck, deleteDeck, getDeck, listDecks, type DeckTile } from './lib/api';
 import { BAND_VAR, bandOf, bracketName, fmtDate } from './lib/ui';
-
-/** The art box of a card image (roughly 7.5-92.5% across, 11-55% down), used as a deck's face. */
-function ArtCrop({ card }: { card: ClientCard }) {
-  const [gone, setGone] = useState(false);
-  return (
-    <div className="relative min-w-0 flex-1 overflow-hidden bg-iron" style={{ aspectRatio: '1.36' }}>
-      {gone ? (
-        <div className="display flex h-full items-center justify-center px-3 text-center text-ash">{card.name}</div>
-      ) : (
-        <img
-          src={imageUrl(card.oracleId, 'display')}
-          alt={card.name}
-          className="absolute max-w-none"
-          style={{ width: '118%', left: '-9%', top: 0, marginTop: '-20%' }}
-          onError={() => setGone(true)}
-          onLoad={(e) => {
-            if (e.currentTarget.naturalWidth === 252) setGone(true);
-          }}
-        />
-      )}
-    </div>
-  );
-}
 
 export default function DecksPage() {
   const router = useRouter();
