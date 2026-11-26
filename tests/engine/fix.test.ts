@@ -165,7 +165,7 @@ describe('fixDeck', () => {
   });
 
   it('a deck short of ramp gains ramp and the rating does not drop', () => {
-    const deck = swapInto(precon, junkFor(precon, 6), (id) => hasRole(id, 'ramp'));
+    const deck = swapInto(precon, junkFor(precon, 7), (id) => hasRole(id, 'ramp'));
     expect(size(deck)).toBe(100);
     expect(validateDeck(deck, db)).toEqual([]);
     expect(rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes).some((f) => f.filter?.role === 'ramp')).toBe(true);

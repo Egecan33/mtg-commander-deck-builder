@@ -9,7 +9,7 @@ import {
 import type { LinkCard } from './edges';
 
 export * from './edges';
-export { clusterNetwork } from './clusters';
+export { CLUSTER_MIN_EDGE, clusterNetwork } from './clusters';
 
 const THEME_KINDS = new Set(['combo', 'feeds', 'typal']);
 

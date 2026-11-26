@@ -1,9 +1,15 @@
 import { axisLabel } from '../features';
 import { mulberry32 } from '../random';
 import type { AxisId, CardDb, NetworkCluster, NetworkEdge, NetworkNode } from '../types';
-import { round3, shortName } from './edges';
+import { ONE_AWAY_EDGE, round3, shortName } from './edges';
 
 const MAX_ROUNDS = 20;
+/**
+ * The weakest edge that can pull two cards into one cluster: the one-away combo edge. Feeds edges
+ * below it only say two cards touch the same axis, and with 12 of them per card they chain every
+ * card of a big axis into one blob.
+ */
+export const CLUSTER_MIN_EDGE = ONE_AWAY_EDGE;
 
 function labelOf(edge: NetworkEdge): string {
   return edge.kind === 'combo' ? `combo:${edge.comboId ?? ''}` : (edge.axis ?? `${edge.kind}:${edge.a}|${edge.b}`);
@@ -11,24 +17,16 @@ function labelOf(edge: NetworkEdge): string {
 
 /**
  * Groups of cards that work together: weighted label propagation over the combo, feeds and typal
- * edges between non-commander cards. The same seed gives the same groups.
+ * edges of at least CLUSTER_MIN_EDGE between non-commander cards (never a commander spoke). The same seed gives the same groups.
  */
 export function clusterNetwork(nodes: NetworkNode[], edges: NetworkEdge[], db: CardDb, seed: number): NetworkCluster[] {
   const commanders = new Set(nodes.filter((n) => n.commander).map((n) => n.oracleId));
   const real = nodes.filter((n) => !n.commander).map((n) => n.oracleId).sort();
   const inner: NetworkEdge[] = [];
-  const toCommander = new Map<string, NetworkEdge>();
   for (const e of edges) {
-    if (e.kind === 'commander') continue;
-    const ca = commanders.has(e.a);
-    const cb = commanders.has(e.b);
-    if (ca && cb) continue;
-    if (ca || cb) {
-      if (e.kind !== 'typal') continue;
-      const id = ca ? e.b : e.a;
-      const prev = toCommander.get(id);
-      if (!prev || e.weight > prev.weight) toCommander.set(id, e);
-    } else inner.push(e);
+    if (e.kind === 'commander' || e.weight < CLUSTER_MIN_EDGE) continue;
+    if (commanders.has(e.a) || commanders.has(e.b)) continue;
+    inner.push(e);
   }
   const adj = new Map<string, { id: string; weight: number }[]>();
   const strongest = new Map<string, NetworkEdge>();
@@ -43,10 +41,6 @@ export function clusterNetwork(nodes: NetworkNode[], edges: NetworkEdge[], db: C
   for (const id of real) {
     const s = strongest.get(id);
     if (s) label.set(id, labelOf(s));
-    else {
-      const c = toCommander.get(id);
-      if (c) label.set(id, labelOf(c));
-    }
   }
   const rng = mulberry32(seed);
   const order = [...real];

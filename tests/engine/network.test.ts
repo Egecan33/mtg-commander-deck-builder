@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { findCombos } from '@/engine/brackets';
 import { axisLabel } from '@/engine/features';
-import { cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
+import { CLUSTER_MIN_EDGE, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
 import { createScorer } from '@/engine/scoring';
 import { deckCards, resolveThemeWeights } from '@/engine/summary';
 import type { DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
@@ -199,6 +199,39 @@ describe('deckNetwork', () => {
     for (const c of a.clusters) { expect(c.cards.length).toBeGreaterThanOrEqual(2); expect(c.name.length).toBeGreaterThan(0); }
     expect(a.clusters[0].cards.length).toBe(Math.max(...a.clusters.map((c) => c.cards.length)));
     expect(a.clusters.some((c) => c.name === 'Elf typal')).toBe(true);
+  });
+
+  it('a two-theme deck splits into at least two clusters, and none holds most of the non-staple cards', () => {
+    const nonStaple = (net: DeckNetwork) => net.nodes.filter((n) => !n.commander && !n.staple).length;
+    const staple = (net: DeckNetwork) => new Set(net.nodes.filter((n) => n.staple).map((n) => n.oracleId));
+    /** The most non-staple cards any one cluster holds. */
+    const biggest = (net: DeckNetwork) => Math.max(...net.clusters.map((c) => c.cards.filter((id) => !staple(net).has(id)).length));
+    // the cEDH list has several themes
+    expect(nets.cedh.clusters.length).toBeGreaterThanOrEqual(2);
+    // an Elf deck that also holds the precon's Dragons: two clear themes
+    const have = new Set(upgraded.main.map((e) => e.oracleId));
+    const dragons = precon.main.filter((e) => !have.has(e.oracleId) && (db.features(e.oracleId)?.axes['typal:dragon']?.e ?? 0) >= 0.5 && (db.features(e.oracleId)?.landWeight ?? 0) < 1);
+    expect(dragons.length).toBeGreaterThanOrEqual(20);
+    const net = deckNetwork({ ...upgraded, main: [...upgraded.main, ...dragons] }, ctx);
+    expect(net.clusters.length).toBeGreaterThanOrEqual(2);
+    expect(net.clusters.map((c) => c.name)).toEqual(expect.arrayContaining(['Elf typal', 'Dragon typal']));
+    expect(biggest(net)).toBeLessThan(nonStaple(net) / 2);
+  });
+
+  it('clusters use only theme edges of at least the minimum weight, never a commander spoke', () => {
+    for (const net of [nets.precon, nets.upgraded, nets.cedh]) {
+      const cluster = new Map<string, number>();
+      for (const c of net.clusters) for (const id of c.cards) cluster.set(id, c.id);
+      const isCommander = new Set(net.nodes.filter((n) => n.commander).map((n) => n.oracleId));
+      expect(net.clusters.every((c) => c.cards.every((id) => !isCommander.has(id)))).toBe(true);
+      // every clustered card has a theme edge of at least the minimum weight to another card of its cluster
+      const ok = new Set<string>();
+      for (const e of net.edges) {
+        if (e.kind === 'commander' || e.weight < CLUSTER_MIN_EDGE) continue;
+        if (cluster.has(e.a) && cluster.get(e.a) === cluster.get(e.b)) { ok.add(e.a); ok.add(e.b); }
+      }
+      for (const id of cluster.keys()) expect(ok.has(id), id).toBe(true);
+    }
   });
 
   it('cohesion follows its formula', () => {
