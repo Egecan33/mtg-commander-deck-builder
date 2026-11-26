@@ -61,7 +61,14 @@ export function ComboRow({
       <p className="mt-0.5 text-[13px] text-ash">{facts.join(' · ')}</p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         {onPutIn && found.missing.length === 1 && (
-          <button type="button" className="btn btn-sm" onClick={() => onPutIn(found.missing[0])} title="Open the card and pick what it takes the place of" data-testid="combo-put-in">
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => onPutIn(found.missing[0])}
+            aria-label={`Put ${lookup[found.missing[0]]?.name ?? 'the missing card'} in`}
+            title="Open the card and pick what it takes the place of"
+            data-testid="combo-put-in"
+          >
             Put it in
           </button>
         )}

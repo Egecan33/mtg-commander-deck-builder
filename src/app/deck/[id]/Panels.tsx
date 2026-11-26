@@ -225,6 +225,7 @@ export function RatingPanel({
                         className="btn btn-sm"
                         disabled={!!busy || deck.commanders.length === 0}
                         onClick={() => onFixPart(s.key as RatingKey)}
+                        aria-label={`${fixing ? 'Fixing' : 'Fix'} ${s.label.toLowerCase()}`}
                         title={
                           deck.commanders.length === 0
                             ? 'Choose a commander first'
@@ -513,6 +514,7 @@ export function PutItIn({
                   type="button"
                   className={`btn btn-sm shrink-0 ${i === best ? 'btn-primary' : ''}`}
                   onClick={() => onSwap(p)}
+                  aria-label={`Swap ${out.name} for ${card.name}`}
                   title={`Take out ${out.name} and put in ${card.name}. Undo puts it back.`}
                   data-testid="swapin-apply"
                 >
