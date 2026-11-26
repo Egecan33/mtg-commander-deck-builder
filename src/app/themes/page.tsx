@@ -19,7 +19,7 @@ export default function ThemesPage() {
       <ul className="mt-6 grid gap-px overflow-hidden rounded-md border border-slag bg-slag">
         {themes?.map((t) => (
           <li key={t.axis} className="flex items-baseline gap-4 bg-anvil px-4 py-2.5" data-testid="theme-row">
-            <Link href={themeHref(t.axis)} className="display text-[18px] hover:text-brass">{t.label}</Link>
+            <Link href={themeHref(t.axis)} className="text-[18px] font-semibold hover:text-brass">{t.label}</Link>
             <span className="ml-auto text-ash tabular-nums">{t.commanders} {t.commanders === 1 ? 'commander leads' : 'commanders lead'} it</span>
           </li>
         ))}
