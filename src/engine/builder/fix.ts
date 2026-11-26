@@ -1,4 +1,5 @@
 import { analyzeBracket } from '../brackets';
+import { formatOf } from '../format';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
@@ -25,6 +26,7 @@ const COMMANDER_CODES: ReadonlySet<string> = new Set(['no-commander', 'bad-comma
 const OFFENCE: Record<string, string> = {
   banned: 'a banned card', identity: "a card outside the commander's colours", copies: 'an extra copy',
   'unknown-card': 'a card the card database does not know', companion: "a card the companion's condition rules out",
+  'not-on-arena': 'a card that is not on MTG Arena',
 };
 
 /** A rule's offender in a change's one-line summary ("Legal: replaces an off-colour card"). */
@@ -111,6 +113,12 @@ function commanderFault(deck: Deck, violations: readonly Violation[]): string | 
 /** Every card that breaks a rule (never a commander, never a locked card): the best agreeing replacement, else removed. */
 function repairRules(start: Deck, ctx: EngineContext, pool: () => Pool, changes: FixChange[]): Deck {
   let deck = start;
+  // A Brawl deck has no sideboard, so no companion: its violation names only the companion, which
+  // is not a main-deck card to cut, so it is dropped here.
+  if (deck.companion && formatOf(ctx.db) === 'brawl') {
+    changes.push({ out: deck.companion, in: '', reason: 'Drops the companion: Brawl decks have no sideboard.', summary: 'Legal: drops the companion (Brawl has no sideboard)' });
+    deck = { ...deck, companion: null };
+  }
   for (let n = 0; n < MAX_REPAIRS; n++) {
     let target: { id: string; v: Violation } | null = null;
     for (const v of validateDeck(deck, ctx.db)) {

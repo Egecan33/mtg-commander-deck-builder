@@ -64,6 +64,17 @@ describe('Brawl builds use Arena cards only', () => {
     expect(validateDeck(r.deck, db)).toEqual([]);
   });
 
+  it('drops the companion of a full Brawl deck, since Brawl has no sideboard', () => {
+    expect(deckSize(full)).toBe(100);
+    const withCompanion: Deck = { ...full, companion: card('Umori, the Collector').oracleId };
+    expect(validateDeck(withCompanion, db).map((v) => v.code)).toEqual(['companion']);
+    const r = fixDeck(withCompanion, ctx, opts());
+    expect(r.deck.companion).toBeNull();
+    expect(r.changes[0]).toMatchObject({ out: card('Umori, the Collector').oracleId, in: '', summary: 'Legal: drops the companion (Brawl has no sideboard)' });
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(r.note ?? '').not.toMatch(/not legal/i);
+  });
+
   it('fixes a Physical deck moved to Arena within the wildcards: non-Arena cards out, no unowned mythic in', () => {
     // Built under Commander rules, so it holds cards Arena does not have (Sol Ring and the like).
     const paper = autoBuild(shell(), { ...ctx, db: fixtureDb() }, opts({ seed: 5 }));
