@@ -2,6 +2,7 @@ import { allowedIdentity, cardFitsDeck, commanderCards, companionViolation, copy
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights } from '../summary';
 import type { AxisId, BuildOptions, Card, CardDb, CardFeatures, Color, Deck, DeckEntry, EngineContext, Role } from '../types';
+import { mulberry32 } from '../random';
 import { kindOf, makePlan } from './plan';
 import type { Kind, Plan } from './plan';
 
@@ -32,18 +33,6 @@ const FETCH_COST = 0.08;
 const ANY_COLOUR_COST = 0.08;
 /** How much a land is played, 0..1: lands are compared by EDHREC rank, which follows what decks really run. */
 const rankQuality = (rank: number | null): number => (rank !== null && rank >= 1 ? Math.min(1, Math.max(0, 1 - Math.log10(rank) / 6)) : 0);
-
-/** Small seeded generator (mulberry32): the same seed gives the same stream on every machine. */
-export function mulberry32(seed: number): () => number {
-  let a = (Number.isFinite(seed) ? Math.floor(seed) : 0) >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 /** EDHREC rank up to which a card is a format staple no bracket minds (Sol Ring, Arcane Signet, Command Tower). */
 const STAPLE_RANK = 25;
@@ -376,3 +365,5 @@ export function packWanted(c: Candidate, tribe: string | null): boolean {
   if (own !== undefined && own.p >= PACK_PAYOFF) return true;
   return c.kind.member && !elsewhere && (own?.e ?? 0) >= AXIS_MEMBER;
 }
+
+export { mulberry32 };
