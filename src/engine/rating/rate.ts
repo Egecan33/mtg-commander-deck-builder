@@ -2,13 +2,13 @@ import { analyzeBracket } from '../brackets';
 import { axisLabel } from '../features';
 import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
 import { cardSourceNeeds, pAtLeast } from '../mana';
-import { allowedIdentity, commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
+import { allowedIdentity, commanderCards, deckSize, hasType, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
 import { deckNetwork } from '../network';
 import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
-import { LAND_PLAN_SLACK, coverageRoles, roleNeeds, scaleTargets, targetPlan } from '../targets';
+import { LAND_PLAN_SLACK, ONE_DROP_MAX, ONE_DROP_MIN, coverageRoles, isOneDrop, isOneDropShape, oneDropWant, roleNeeds, scaleTargets, targetPlan } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
   AxisId, Bracket, BracketReport, Color, Deck, DeckNetwork, Format, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
@@ -511,6 +511,53 @@ function qualityPart(f: Facts): Part {
   return { value, issues };
 }
 
+/** Share of the Curve sub-score a deck without its one-drops loses. */
+const ONE_DROP_COST = 0.08;
+
+/** The one-drops a deck holds (`isOneDrop`, with the network's word on "connected") and the nonland creatures it runs. */
+function oneDropCount(f: Pick<Facts, 'cards' | 'commanderIds' | 'ctx' | 'bracket' | 'network'>, names?: string[]): { oneDrops: number; creatures: number } {
+  let oneDrops = 0;
+  let creatures = 0;
+  let unconnected: Set<string> | null = null;
+  for (const c of f.cards) {
+    if (!nonland(c) || f.commanderIds.has(c.card.oracleId)) continue;
+    if (!hasType(c.card, 'Creature')) continue;
+    creatures += c.qty;
+    if (!isOneDropShape(c.card, c.features)) continue;
+    unconnected ??= new Set(f.network().unconnected);
+    if (isOneDrop(c.card, c.features, f.ctx.db.tagSlugs?.(c.card.oracleId) ?? [], f.bracket, !unconnected.has(c.card.oracleId))) {
+      oneDrops += c.qty;
+      names?.push(c.card.name);
+    }
+  }
+  return { oneDrops, creatures };
+}
+
+/** The one-drops and nonland creatures of any deck, counted the way the rating counts them. */
+export function oneDropsOf(deck: Deck, ctx: EngineContext): { oneDrops: number; creatures: number; names: string[] } {
+  const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, ctx.db)) || 3))) as Bracket;
+  const cards = deckCards(deck, ctx.db).cards;
+  const commanderIds = new Set(deck.commanders);
+  const net = deckNetwork(deck, ctx);
+  const names: string[] = [];
+  const { oneDrops, creatures } = oneDropCount({ cards, commanderIds, ctx, bracket, network: () => net }, names);
+  return { oneDrops, creatures, names };
+}
+
+function oneDropLoss(f: Facts): { cost: number; issue: Issue } | null {
+  const { oneDrops, creatures } = oneDropCount(f);
+  const want = oneDropWant(creatures, f.filled);
+  if (!want || oneDrops >= want.lo) return null;
+  const short = clamp01((want.lo - oneDrops) / want.lo);
+  return {
+    cost: ONE_DROP_COST * short,
+    issue: {
+      text: `${oneDrops === 0 ? 'No' : 'Only 1'} one-mana creature that helps the plan; ${ONE_DROP_MIN}–${ONE_DROP_MAX} give the deck a turn-1 play.`,
+      filter: { creature: true, maxMv: 1 }, actionable: true, loss: ONE_DROP_COST * short,
+    },
+  };
+}
+
 function curvePart(f: Facts): Part {
   const { summary: s, targets: t } = f;
   const issues: Issue[] = [];
@@ -540,8 +587,13 @@ function curvePart(f: Facts): Part {
     });
   }
 
+  // One-mana creatures that help the plan (targets.ts `isOneDrop`): a modest loss on top of the early-plays check.
+  const oneDrop = oneDropLoss(f);
+  if (oneDrop) issues.push(oneDrop.issue);
+  const oneDropCost = oneDrop?.cost ?? 0;
+
   // Karsten's curve model is a casual goldfish (§2.4): it shapes B1-3 only.
-  if (f.bracket >= 4) return { value: 0.7 * mvScore + 0.3 * earlyScore, issues };
+  if (f.bracket >= 4) return { value: Math.max(0, 0.7 * mvScore + 0.3 * earlyScore - oneDropCost), issues };
 
   // Shape: distance to Karsten's curve for the commander's mana value, softened so that the
   // model's empty slot at the commander's own cost is a nudge, not a demand.
@@ -571,7 +623,7 @@ function curvePart(f: Facts): Part {
       filter: { maxMv: Math.max(2, worstIdx) }, actionable: true, loss: 0.3 * worstOver,
     });
   }
-  return { value: 0.5 * mvScore + 0.3 * shape + 0.2 * earlyScore, issues };
+  return { value: Math.max(0, 0.5 * mvScore + 0.3 * shape + 0.2 * earlyScore - oneDropCost), issues };
 }
 
 /** What an interaction card can answer, read off its text. Rough: features carry no target types. */

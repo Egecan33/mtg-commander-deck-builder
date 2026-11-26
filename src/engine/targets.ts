@@ -1,6 +1,6 @@
 import { bracketOf, deckSizeFor, formatOf, packageMinimum } from './format';
 import { landTarget } from './mana';
-import { allowedIdentity, commanderCards } from './rules';
+import { allowedIdentity, commanderCards, hasType } from './rules';
 import { deckCards, isLandCard, summarizeDeck, unfocusedThemeWeights } from './summary';
 import type { AxisId, Bracket, Card, CardDb, CardFeatures, Deck, DeckSummary, EngineContext, PlanMove, Role, RoleBand, Targets } from './types';
 import type { CorePackageId } from './types';
@@ -497,6 +497,52 @@ function coverageBand(role: Role, full: Targets, f: number | null): RoleBand | u
   }
   const band = full.roles[role];
   return band ? scale(band) : undefined;
+}
+
+// ---- one-drops: a turn-1 play for a creature-based deck ------------------------------------------
+
+/** Owner's rule: a creature-based deck holds this many one-mana creatures that help its plan, at most `ONE_DROP_MAX` counted. */
+export const ONE_DROP_MIN = 2;
+export const ONE_DROP_MAX = 4;
+/** A deck is creature-based from this many nonland creatures (as a full deck; scaled with the fill like the other counts). */
+export const ONE_DROP_CREATURES = 12;
+/** Band roles that make a one-drop part of the plan wherever it sits in the network. */
+const ONE_DROP_ROLES: readonly Role[] = ['ramp', 'draw', 'spot-removal', 'protection', 'tutor'];
+/** Theme fit from which a card counts as connected before a network exists (the builder's reading of "not unconnected"). */
+export const ONE_DROP_THEME_FIT = 0.5;
+
+/** The shape: a nonland card whose front face is a creature of mana value 1 or less. */
+export function isOneDropShape(card: Card, f: CardFeatures): boolean {
+  return !isLandCard(f) && hasType(card, 'Creature') && card.cmc <= 1;
+}
+
+/** True when the card fills a core role (ramp, card draw, removal, protection) or tutors. */
+export function hasCoreRole(card: Card, f: CardFeatures, tags: readonly string[], bracket: number): boolean {
+  return coverageRoles(card, f, tags, bracket).some((r) => ONE_DROP_ROLES.includes(r));
+}
+
+/**
+ * The one definition of a one-drop, for the rating, the builder and Fix deck: a nonland creature
+ * (front face) of mana value 1 or less that helps the plan, meaning it fills a core role or it is
+ * connected in the deck (`connected`: the deck network does not list it as unconnected; the
+ * builder, with no network yet, passes whether the card is on theme). Vanilla and off-plan
+ * one-drops do not count. A commander is not a one-drop of its own deck: callers skip it.
+ */
+export function isOneDrop(card: Card, f: CardFeatures, tags: readonly string[], bracket: number, connected: boolean): boolean {
+  return isOneDropShape(card, f) && (connected || hasCoreRole(card, f, tags, bracket));
+}
+
+/**
+ * The one-drops a deck wants: 2 to 4 once it is creature-based (at least 12 nonland creatures as a
+ * full deck), the same in Standard Brawl, scaled by `filled` (cards held / deck size) like the
+ * other counts. Null when the deck is not creature-based or too empty to ask for one.
+ */
+export function oneDropWant(creatures: number, filled: number): { lo: number; hi: number } | null {
+  const f = Number.isFinite(filled) ? Math.min(1, Math.max(0, filled)) : 0;
+  if (creatures < Math.max(1, Math.round(ONE_DROP_CREATURES * f))) return null;
+  const lo = Math.round(ONE_DROP_MIN * f);
+  if (lo < 1) return null;
+  return { lo, hi: Math.max(lo, Math.round(ONE_DROP_MAX * f)) };
 }
 
 // ---- role needs: the one count-against-band computation the scorer and the rating share --------
