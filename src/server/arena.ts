@@ -113,14 +113,18 @@ const stampOf = (found: Found): string =>
     return [f, s.size, s.mtimeMs];
   })]);
 
-async function readLogs(files: string[]): Promise<ArenaLogData> {
+/** The logs read, plus when the log that held the last inventory was written (ms; null without one). */
+async function readLogs(files: string[]): Promise<ArenaLogData & { wildcardsAt: number | null }> {
   const reader = createArenaLogReader();
+  let wildcardsAt: number | null = null;
   // Oldest first, so the newest log has the last word on the detailed-logging switch.
   for (const file of [...files].reverse()) {
+    const before = reader.result().inventories;
     const lines = createInterface({ input: createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
     for await (const line of lines) reader.line(line);
+    if (reader.result().inventories > before) wildcardsAt = statSync(file).mtimeMs;
   }
-  return reader.result();
+  return { ...reader.result(), wildcardsAt };
 }
 
 /** Arena card ids -> this app's cards, through Arena's own card database (name first, then set and number). */
@@ -278,8 +282,13 @@ export async function syncArenaCollection(options: { auto?: boolean } = {}): Pro
 
     const log = await readLogs(found.logs);
     m.detailedLogs = log.detailedLogs;
-    // The wildcards are in the log whether or not it holds decks: kept from every sync that finds them.
-    if (log.wildcards) setWildcards(log.wildcards, 'log', at, ARENA_COLLECTION);
+    // The wildcards are in the log whether or not it holds decks: kept from every sync that finds them,
+    // unless they were typed in after that log was written (an older Player-prev.log never undoes them).
+    if (log.wildcards) {
+      const stored = getWildcards(ARENA_COLLECTION);
+      const typedLater = stored.source === 'hand' && stored.readAt !== null && Date.parse(stored.readAt) >= (log.wildcardsAt ?? 0);
+      if (!typedLater) setWildcards(log.wildcards, 'log', at, ARENA_COLLECTION);
+    }
     if (log.cards.size === 0) {
       if (log.detailedLogs === false) {
         return fail(

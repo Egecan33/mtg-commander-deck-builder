@@ -27,6 +27,8 @@ export interface ArenaLogData {
    * Arena leaves out a rarity the player has none of); null when the log has none.
    */
   wildcards: Wildcards | null;
+  /** Full inventories read so far (a reader fed several logs can tell which one held the last). */
+  inventories: number;
 }
 
 export interface ArenaLogReader {
@@ -74,6 +76,7 @@ function wildcardsOf(inventory: unknown): Wildcards | null {
 export function createArenaLogReader(): ArenaLogReader {
   let detailedLogs: boolean | null = null;
   let wildcards: Wildcards | null = null;
+  let inventories = 0;
   const cards = new Map<number, number>();
   const deckSeen = new Set<string>();
   const poolSeen = new Set<string>();
@@ -107,7 +110,10 @@ export function createArenaLogReader(): ArenaLogReader {
     const obj = value as Record<string, unknown>;
     const skip = new Set<string>(['InventoryInfo']);
     const inventory = wildcardsOf(obj.InventoryInfo);
-    if (inventory) wildcards = inventory;
+    if (inventory) {
+      wildcards = inventory;
+      inventories++;
+    }
 
     // A deck with its summary beside it: skip the deck when the summary says it is ready-made.
     for (const [summaryKey, deckKey] of SUMMARY_PAIRS) {
@@ -175,7 +181,9 @@ export function createArenaLogReader(): ArenaLogReader {
         // a cut-off or non-JSON line
       }
     },
-    result: () => ({ detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size, wildcards: wildcards ? { ...wildcards } : null }),
+    result: () => ({
+      detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size, wildcards: wildcards ? { ...wildcards } : null, inventories,
+    }),
   };
 }
 

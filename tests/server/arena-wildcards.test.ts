@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -99,6 +99,24 @@ describe('wildcards of the MTG Arena collection', () => {
     expect(none.ok).toBe(false);
     expect(none.message).toMatch(/wildcards/i);
     expect(none.wildcards).toEqual({ common: 12, uncommon: 12, rare: 1, mythic: 0 });
+  });
+
+  it('keep what was typed in when a sync reads an older log, and take a newer log', async () => {
+    mkdirSync(logDir(), { recursive: true });
+    const prev = path.join(logDir(), 'Player-prev.log');
+    const log = path.join(logDir(), 'Player.log');
+    writeFileSync(prev, `DETAILED LOGS: ENABLED\n${INVENTORY.replace('"WildCardRares": 1', '"WildCardRares": 7')}\n`);
+    writeFileSync(log, 'DETAILED LOGS: ENABLED\nno inventory in the newest log\n');
+    const hour = 3600;
+    const now = Date.now() / 1000;
+    utimesSync(prev, now - 2 * hour, now - 2 * hour);
+    utimesSync(log, now - hour, now - hour);
+    setWildcards({ common: 1, uncommon: 2, rare: 3, mythic: 4 }, 'hand');
+    // The inventory is in Player-prev.log, written before the counts were typed in.
+    expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'hand', wildcards: { common: 1, uncommon: 2, rare: 3, mythic: 4 } });
+    // A log written after them wins.
+    utimesSync(prev, now + 60, now + 60);
+    expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'log', wildcards: { rare: 7 } });
   });
 
   it('are read by every Arena sync, even one that finds no cards, and shown in the Arena status', async () => {
