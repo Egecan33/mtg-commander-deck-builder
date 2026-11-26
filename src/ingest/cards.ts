@@ -1,7 +1,8 @@
 import path from 'node:path';
 import type { Card, CardFace, Color } from '@/engine/types';
 import { DATA_DIR, writeSyncState, type Db } from '@/server/db';
-import { downloadToFile, readJsonLines, resolveBulk } from './http';
+import { createArenaIndex } from './arena-cards';
+import { downloadToFile, fetchBulk, readJsonLines, resolveBulk } from './http';
 
 /* Scryfall objects are external JSON; they are read defensively through `any`. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -63,7 +64,17 @@ export function toCard(scryfall: any): Card | null {
     faces,
     imageFaces: TWO_IMAGE_LAYOUTS.has(scryfall.layout) && rawFaces.length === 2 ? 2 : 1,
     isMeldResult: false,
+    // Filled from the default-cards printings by `syncCards` (`createArenaIndex`).
+    arenaRarity: null,
+    arenaPrinting: null,
+    brawlLegality: brawlLegalityOf(scryfall),
   };
+}
+
+/** Scryfall's `legalities.brawl` (Arena's 100-card Brawl); anything but legal or banned is not_legal. */
+export function brawlLegalityOf(scryfall: any): 'legal' | 'banned' | 'not_legal' {
+  const v = scryfall?.legalities?.brawl;
+  return v === 'legal' || v === 'banned' ? v : 'not_legal';
 }
 
 export interface ImageRef { face: 0 | 1; display: string; grid: string }
@@ -107,14 +118,35 @@ export async function syncCards(db: Db, log: Log): Promise<void> {
   const kept: { card: Card; images: ImageRef[]; imageUpdatedAt: string | null }[] = [];
   const meldNames = new Set<string>();
   let lines = 0;
+  // Paper cards legal in Brawl that Commander does not list at all: not stored (see the plan's rulings), only counted.
+  let brawlOnly = 0;
   for await (const raw of readJsonLines<any>(file)) {
     lines++;
     for (const n of meldResultNames([raw])) meldNames.add(n);
     const card = toCard(raw);
     if (card) kept.push({ card, images: imageRefs(raw), imageUpdatedAt: strOrNull(raw.image_updated_at) });
+    else if (brawlLegalityOf(raw) === 'legal' && raw?.digital !== true) brawlOnly++;
     if (lines % 5000 === 0) log(`cards read ${lines}`);
   }
   if (kept.length < 20_000) throw new Error(`cards: only ${kept.length} Commander cards in ${lines} lines; refusing to replace the table`);
+
+  // Which cards are on MTG Arena, at what rarity, comes from the printings (default-cards).
+  const defaults = path.join(DATA_DIR, 'raw', 'default-cards.jsonl.gz');
+  await fetchBulk('default_cards', defaults, log);
+  const arena = createArenaIndex();
+  let printings = 0;
+  for await (const raw of readJsonLines<any>(defaults)) {
+    arena.add(raw);
+    if (++printings % 20000 === 0) log(`cards read ${printings} printings for Arena data`);
+  }
+  let onArena = 0;
+  for (const { card } of kept) {
+    const info = arena.get(card.oracleId);
+    card.arenaRarity = info?.rarity ?? null;
+    card.arenaPrinting = info?.printing ?? null;
+    if (info) onArena++;
+  }
+  if (onArena < 5_000) throw new Error(`cards: only ${onArena} cards found on MTG Arena in ${printings} printings; refusing to replace the table`);
 
   let meld = 0;
   for (const k of kept) {
@@ -161,6 +193,9 @@ export async function syncCards(db: Db, log: Log): Promise<void> {
     meldResults: meld,
     gameChangers: kept.filter((k) => k.card.gameChanger).length,
     withoutImages: kept.filter((k) => k.images.length === 0).length,
+    onArena,
+    brawlPlayable: kept.filter((k) => k.card.arenaRarity !== null && k.card.brawlLegality === 'legal').length,
+    brawlOnly,
   };
   writeSyncState(db, 'cards', info);
   log(`cards finished ${JSON.stringify(info)}`);

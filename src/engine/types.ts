@@ -1,5 +1,11 @@
 export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 export type Bracket = 1 | 2 | 3 | 4 | 5;
+/** Which rules a deck is checked and built under: paper Commander, or MTG Arena's 100-card Brawl. */
+export type Format = 'commander' | 'brawl';
+/** The rarities MTG Arena has wildcards for. */
+export type ArenaRarity = 'common' | 'uncommon' | 'rare' | 'mythic';
+/** Wildcards per rarity: what the player has, or what a deck needs. */
+export type Wildcards = Record<ArenaRarity, number>;
 
 export interface CardFace {
   name: string; manaCost: string; typeLine: string; oracleText: string;
@@ -19,6 +25,10 @@ export interface Card {
   keywords: string[];
   power: string | null;    // front face
   producedMana: string[];
+  /**
+   * Commander legality as synced. In a Brawl view of the database (`formatCardDb`) it is the card's
+   * Brawl playability instead: 'legal' only when it is on Arena and legal in Brawl.
+   */
   legality: 'legal' | 'banned';
   gameChanger: boolean;
   edhrecRank: number | null;
@@ -26,6 +36,15 @@ export interface Card {
   faces: CardFace[];       // length 1 for single-faced cards
   imageFaces: 1 | 2;       // 2 only for transform / modal_dfc
   isMeldResult: boolean;
+  /**
+   * Lowest rarity among the card's printings that are on MTG Arena (the cheapest wildcard that
+   * crafts it); null when no printing is on Arena. Absent on card data synced before Arena mode (read as null).
+   */
+  arenaRarity?: ArenaRarity | null;
+  /** That cheapest Arena printing (the newest of them on a tie): Arena's set code and collector number. */
+  arenaPrinting?: { set: string; number: string } | null;
+  /** Scryfall's `legalities.brawl` (MTG Arena's 100-card Brawl). Absent on older data (read as 'not_legal'). */
+  brawlLegality?: 'legal' | 'banned' | 'not_legal';
 }
 
 export type Role =
@@ -64,6 +83,8 @@ export interface CardDb {
   byName(name: string): Card | undefined;   // case/diacritic-insensitive; full or front name
   all(): readonly Card[];                    // legal, non-meld-result cards only
   combosFor(oracleId: string): readonly Combo[];
+  /** The format whose pool `all()` holds and whose legality `legality` reports; absent means 'commander'. */
+  format?: Format;
 }
 
 export interface DeckEntry { oracleId: string; qty: number; locked: boolean }
@@ -85,6 +106,11 @@ export interface Deck {
    * copies of the collection count as free, never the deck's cards. Absent means false.
    */
   built?: boolean;
+  /**
+   * The collection the deck belongs to ('physical', 'arena', ...). The engine does not read it; the
+   * server picks the format from the collection's kind. Absent on decks from before collections owned decks.
+   */
+  collectionId?: string;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -149,6 +175,12 @@ export interface ImproveGoals {
 export interface BuildOptions {
   ownedOnly: boolean; owned: Set<string> | null; maxPriceUsd: number | null; seed: number;
   goals?: ImproveGoals | null;
+  /**
+   * "Only what I can craft" (Brawl): the wildcards the player has. Unowned non-basic cards of each
+   * Arena rarity in the result stay within these, counting the ones the deck already needs; `owned`
+   * says what is owned. Null or absent: no cap.
+   */
+  wildcards?: Wildcards | null;
 }
 export interface SwapProposal {
   /** The card to cut; '' when the proposal is a plain add (the deck is under 100 cards). */
