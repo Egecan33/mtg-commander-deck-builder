@@ -737,4 +737,16 @@ describe('rateDeck: cohesion', () => {
     for (const id of added) expect(fix!.text).toContain(card(db.get(id)!.name).name);
     expect(fix!.filter?.axis).toBe('typal:elf');
   });
+
+  // Review I5: the clustered share cost Synergy points with no reason (Six lost 0.25 with an empty fix list).
+  it('a low clustered share gets a reason that names the groups', () => {
+    const deck = fixtureDeck('cedh', 5);
+    const net = deckNetwork(deck, ctx);
+    expect(net.cohesionParts.clustered).toBeLessThan(0.9);
+    const synergy = rateDeck(deck, ctx).subscores.find((s) => s.key === 'synergy')!;
+    const line = synergy.fixes.find((i) => /^Links split across \d+ groups: /.test(i.text));
+    expect(line, JSON.stringify(synergy.fixes.map((i) => i.text))).toBeTruthy();
+    expect(line!.text).toContain(net.clusters[0].name);
+    expect(synergy.value).toBeLessThan(1);
+  });
 });

@@ -356,6 +356,8 @@ function synergyOf(c: DeckCard, weights: Record<AxisId, number>): number {
 export const SYNERGY_THEME_SHARE = 0.7;
 /** ... and this share cohesion of the deck's network. */
 export const SYNERGY_COHESION_SHARE = 0.3;
+/** Synergy (0..1) the clustered share must cost before it gets a reason line of its own. */
+const CLUSTER_REASON_LOSS = 0.01;
 
 function synergyPart(f: Facts): Part {
   const issues: Issue[] = [];
@@ -407,6 +409,18 @@ function synergyPart(f: Facts): Part {
     issues.push({
       text: `${n} ${n === 1 ? 'card connects' : 'cards connect'} to nothing in this deck: ${list}.`,
       filter: { axis: primary }, actionable: true, loss: SYNERGY_COHESION_SHARE * 0.6 * n / nonStaple,
+    });
+  }
+  // The other 40% of cohesion: how much of the link weight sits inside the two biggest groups.
+  const clustered = net.cohesionParts.clustered;
+  const clusterLoss = SYNERGY_COHESION_SHARE * 0.4 * (1 - clustered);
+  if (clusterLoss >= CLUSTER_REASON_LOSS && net.clusters.length > 0) {
+    const groups = net.clusters.map((c) => c.name);
+    const named = groups.length > 3 ? `${groups.slice(0, 3).join(', ')} and ${groups.length - 3} more` : groups.length > 1 ? `${groups.slice(0, -1).join(', ')} and ${groups[groups.length - 1]}` : groups[0];
+    // A reason, not a swap Fix deck can aim at: which groups the links fall into is the deck's shape.
+    issues.push({
+      text: `Links split across ${plural(groups.length, 'group')}: ${named}. ${pct(clustered)} of the links sit inside the two biggest; cards that feed ${net.clusters[0].name} tie the deck together.`,
+      filter: null, actionable: false, loss: clusterLoss,
     });
   }
   return { value: SYNERGY_THEME_SHARE * (0.6 * density + 0.4 * balance) + SYNERGY_COHESION_SHARE * net.cohesion / 100, issues };
