@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DeckTile } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
 import { deckNetwork } from '@/engine/network';
+import { packageDef } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { deckSize } from '@/engine/rules';
 import { ROLE_LABEL } from '@/engine/targets';
@@ -78,6 +79,14 @@ export function sanitizeDeck(input: unknown): Deck {
       if (ROLE_TARGET_KEYS.includes(role) && typeof n === 'number' && Number.isFinite(n)) roleTargets[role as Role] = Math.min(60, Math.max(0, Math.round(n)));
     }
     if (Object.keys(roleTargets).length > 0) deck.roleTargets = roleTargets;
+  }
+  if (isObject(input.packageTargets)) {
+    const packageTargets: Record<string, number> = {};
+    for (const [id, n] of Object.entries(input.packageTargets as Record<string, unknown>)) {
+      const def = packageDef(id);
+      if (def && def.kind !== 'core' && typeof n === 'number' && Number.isFinite(n)) packageTargets[id] = Math.min(40, Math.max(8, Math.round(n)));
+    }
+    if (Object.keys(packageTargets).length > 0) deck.packageTargets = packageTargets;
   }
   if (input.built === true) deck.built = true;
   return deck;

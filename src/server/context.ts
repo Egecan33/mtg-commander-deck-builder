@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto';
 import type { AnalyzeResponse, EdhrecStatus, NetworkResponse } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
 import { deckNetwork } from '@/engine/network';
+import { packagePlan, withCohesion } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { focusThemeWeights, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
 import { targetsFor } from '@/engine/targets';
-import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, PackagePlan, DeckSummary, EngineContext, Targets } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
@@ -34,7 +35,8 @@ export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecS
 export function deckKey(deck: Deck): string {
   const theme = deck.themeWeights ? Object.entries(deck.themeWeights).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
   const wanted = deck.roleTargets ? Object.entries(deck.roleTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
-  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted];
+  const packages = deck.packageTargets ? Object.entries(deck.packageTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
+  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted, packages];
   return createHash('sha1').update(JSON.stringify(shape)).digest('hex');
 }
 
@@ -45,6 +47,8 @@ export interface Report {
   themeWeights: Record<string, number>;
   /** The themes the deck is focused on, whether it already is, and the weights Focus on these two saves. */
   themeFocus: { axes: string[]; focused: boolean; weights: Record<string, number> };
+  /** The deck's own plan: core packages, focused themes, pins, lands and offers, with cohesion. */
+  packages: PackagePlan;
   deckScores: Record<string, CardScore>;
   unknown: string[];
 }
@@ -73,11 +77,10 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
   let report: Report | null = null;
   let pool: ScoredPool | null = null;
   let network: DeckNetwork | null = null;
+  const getNetwork = (): DeckNetwork => (network ??= deckNetwork(deck, ctx, { scorer }));
   return {
     key, deck, ctx, edhrec, scorer,
-    network() {
-      return (network ??= deckNetwork(deck, ctx, { scorer }));
-    },
+    network: getNetwork,
     report() {
       if (report) return report;
       const { db } = ctx;
@@ -99,6 +102,7 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
         themeWeights,
         themeFocus: { ...themeFocus(themeWeights), weights: focusThemeWeights(themeWeights) },
+        packages: withCohesion(packagePlan(deck, ctx, summary), getNetwork()),
         deckScores, unknown,
       });
     },

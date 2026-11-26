@@ -36,6 +36,16 @@
  *        `themeFocus`: the axes the deck is focused on (the two strongest themes and the creature type
  *        they name), whether it already is, and the weights **Focus on these two** saves (every other
  *        theme at a quarter). A commander's or inferred theme is already focused; a deck's own weights are never changed.
+ *        `packages`: the deck's own plan. The four core packages (Ramp, Card draw, Removal, Protection) always come
+ *        first; their targets are the role bands' bottoms (Removal: spot removal + counterspells + the 1-2 board-wipe
+ *        slot), at least 8 each, each move with its reason. Then the focused theme packages that get at least 8 of the
+ *        slots left after lands and the core packages, then packages the user pinned (`deck.packageTargets`, 8-40). A
+ *        card counts in every package it belongs to (role or Scryfall tagger tag; lands in none). `lands`: the land
+ *        target from the deck's curve, cheap ramp, cantrips, landfall and commander (28-40; the bracket default while
+ *        the deck has no spells; `roleTargets.land` wins). `offers`: packages to add, the ones the commander points
+ *        at first. `cohesion` (theme and functional packages): members linked to another member in the deck network.
+ *        Under PUT /api/decks/:id: `deck.packageTargets` (`theme:<axis>` or `fn:<id>` -> 8-40) is kept; core package
+ *        sizes are pinned through `roleTargets`.
  * POST /api/network     {deck}          -> NetworkResponse
  *        How the deck's cards work together. `nodes`: every nonland card and the commanders (lands are
  *        left out). `edges`: { a, b, kind, weight 0..1, reasons [from a, from b] }, kind 'combo' (1, or 0.5
@@ -216,7 +226,7 @@
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
+  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackagePlan, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
 export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
@@ -338,6 +348,8 @@ export interface AnalyzeResponse {
   themeWeights: Record<AxisId, number>;
   /** The axes the deck is focused on, whether it already is, and the weights the Focus on these two button saves. */
   themeFocus: { axes: AxisId[]; focused: boolean; weights: Record<AxisId, number> };
+  /** The deck's own plan (see the header): core packages, focused themes, pins, lands, offers. */
+  packages: PackagePlan;
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
   /** Deck oracle ids the database does not know. */

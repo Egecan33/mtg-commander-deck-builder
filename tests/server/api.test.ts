@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as api from '@/app/lib/api';
 import { deckNetwork } from '@/engine/network';
-import { engineContext } from '@/server/context';
+import { deckKey, engineContext } from '@/server/context';
 import type { AnalyzeResponse, CardsResponse, DeckResponse, ImportResponse, ScoredCard } from '@/app/lib/api';
 import * as analyzeRoute from '@/app/api/analyze/route';
 import * as buildRoute from '@/app/api/build/route';
@@ -991,5 +991,33 @@ describe('POST /api/network', () => {
     } finally {
       await request('DELETE', `/api/decks/${saved.deck.id}`);
     }
+  });
+});
+
+describe('packages on analyze', () => {
+  it('analyze carries the package plan', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    expect(a.packages.packages.slice(0, 4).map((p) => p.id)).toEqual(['ramp', 'draw', 'removal', 'protection']);
+    expect(a.packages.lands.target).toBe(a.targets.lands);
+    expect(a.packages.packages[0].target).toBe(Math.max(8, a.targets.roles.ramp!.lo));
+    expect(a.packages.packages.some((p) => p.kind === 'theme' && p.cohesion !== null)).toBe(true);
+  });
+
+  it('packageTargets survives a save and drops what it cannot hold', async () => {
+    const deck = await imported('upgraded', 3);
+    const saved = await call<DeckResponse>('POST', '/api/decks', { deck: { ...deck, packageTargets: { 'fn:pillow-fort': 9, ramp: 12, 'fn:nope': 8, 'theme:tokens': 3 } } });
+    try {
+      expect(saved.deck.packageTargets).toEqual({ 'fn:pillow-fort': 9, 'theme:tokens': 8 });
+      const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck: saved.deck });
+      expect(a.packages.packages.find((p) => p.id === 'fn:pillow-fort')).toMatchObject({ target: 9, pinned: true });
+    } finally {
+      await request('DELETE', `/api/decks/${saved.deck.id}`);
+    }
+  });
+
+  it("a package pin is part of the deck's identity", async () => {
+    const deck = await imported('upgraded', 3);
+    expect(deckKey({ ...deck, packageTargets: { 'fn:pillow-fort': 9 } })).not.toBe(deckKey(deck));
   });
 });
