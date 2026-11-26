@@ -155,6 +155,13 @@
  *        `{memory: true}` reads that full list out of the running game with the optional mtga-reader
  *        package (see the README); on macOS the system asks for an administrator password unless a
  *        debugger-entitled copy of Node sits beside the reader.
+ *        Every sync also reads the wildcards from the log's last inventory (`ArenaStatus.wildcards`).
+ * GET  /api/arena/wildcards             -> WildcardsInfo   the MTG Arena collection's wildcards (all 0 until read or typed in).
+ * PUT  /api/arena/wildcards {common, uncommon, rare, mythic} -> WildcardsInfo   typed in by hand; each a
+ *        whole number 0..9999, else 400. `source` becomes 'hand'.
+ * POST /api/arena/wildcards             -> WildcardsReadResponse   "Read from Arena": the last `InventoryInfo` in
+ *        Player.log (Player-prev.log before it); a rarity Arena leaves out is 0. When the log has none,
+ *        `ok` is false, `message` says why and the stored counts stay. Local files only.
  * GET  /api/products?q=&limit=          -> ProductsResponse
  *        Physical precon products (digital MTGO/Arena types are hidden), newest release first. `q` is a
  *        case-insensitive name substring or an exact set code; limit 1..200 (50).
@@ -265,6 +272,8 @@ export interface StatusResponse {
     features: number; tags: number; combos: number;
     images: { display: number; grid: number };
     collection: number; decks: number;
+    /** Cards on MTG Arena and legal in Brawl: 0 until `pnpm sync cards` has run with Arena data. */
+    brawl: number;
   };
   /** ISO date of the last cards sync, null when never synced. */
   cardsSyncedAt: string | null;
@@ -347,6 +356,22 @@ export interface AnalyzeResponse {
   conflicts: ConflictReport;
   /** A box not yet linked to a deck that this deck looks like (offer "This deck is my <name> box"); null when none. */
   boxMatch: { boxId: string; name: string } | null;
+  /** Brawl decks: the wildcards the deck needs against those the player has; null for Commander decks. */
+  arena: ArenaReport | null;
+}
+/** One card of a Brawl deck that is not owned: the rarity of wildcard it takes and the Arena printing to craft. */
+export interface CraftLine { oracleId: string; rarity: ArenaRarity; set: string | null; number: string | null }
+export interface ArenaReport {
+  /** Wildcards per rarity for the cards not owned (basic lands are free; each different card counts once). */
+  needed: Wildcards;
+  /** The MTG Arena collection's wildcards. */
+  have: Wildcards;
+  /** Rarities where `needed` is above `have`. */
+  over: ArenaRarity[];
+  /** The cards to craft, commanders first, in deck order. */
+  toCraft: CraftLine[];
+  /** The card data has no Arena information (synced before Arena mode): run `pnpm sync cards`. */
+  noData: boolean;
 }
 
 export interface CardFilters {
@@ -403,6 +428,11 @@ export interface BuildRequestOptions {
   in?: string;
   /** 'fix' only: fix this one part of the rating (a key of the rating's sub-scores); omit to fix them all. */
   only?: RatingKey | null;
+  /**
+   * Brawl decks only: "Only what I can craft" (default true). Cards not owned stay within the MTG Arena
+   * collection's wildcards per rarity, counting the ones the deck already needs; `maxPriceUsd` is ignored.
+   */
+  craftableOnly?: boolean;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -486,7 +516,13 @@ export interface ArenaStatus {
   /** The last sync of this app run (or the last successful one, from the database). */
   last: ArenaSyncResult | null;
   syncedAt: string | null;
+  /** The wildcards stored on the MTG Arena collection (read from the log by every sync, or typed in). */
+  wildcards: WildcardsInfo;
 }
+/** Wildcards of the MTG Arena collection and where they came from: the log (`readAt` the time read) or typed in by hand. */
+export interface WildcardsInfo { wildcards: Wildcards; readAt: string | null; source: 'log' | 'hand' | null }
+/** "Read from Arena": what the log said (`ok` false and a message when it holds no inventory; the stored counts stay). */
+export interface WildcardsReadResponse extends WildcardsInfo { ok: boolean; message: string }
 export interface CollectionResponse {
   count: number; totalQty: number;
   /** `qty` is the total (loose + boxed); `inBoxes` how many of those copies are still sealed in boxes. */
@@ -527,6 +563,10 @@ export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantiti
 export interface DiscoverTier {
   /** Most cards to buy; null = no limit (a normal unrestricted build). */
   cap: number | null;
+  /** On the MTG Arena collection: owned cards only, within your wildcards ('crafted') or the whole Arena pool ('unlimited'). */
+  kind?: 'owned' | 'crafted' | 'unlimited';
+  /** On the MTG Arena collection: the wildcards the deck needs per rarity. */
+  wildcards?: Wildcards;
   rating: number;
   /** Oracle ids of the cards to buy (not owned, not basic lands). */
   buys: string[];
@@ -669,6 +709,9 @@ export const collectionExportUrl = (id?: string) => `/api/collection/export${id 
 export const getArena = (signal?: AbortSignal) => call<ArenaStatus>('GET', '/api/arena', undefined, signal);
 export const syncArena = (auto = false) => call<ArenaStatus>('POST', '/api/arena', { auto });
 export const readArenaMemory = () => call<ArenaStatus>('POST', '/api/arena', { memory: true });
+export const getWildcards = (signal?: AbortSignal) => call<WildcardsInfo>('GET', '/api/arena/wildcards', undefined, signal);
+export const setWildcards = (wildcards: Wildcards) => call<WildcardsInfo>('PUT', '/api/arena/wildcards', wildcards);
+export const readArenaWildcards = () => call<WildcardsReadResponse>('POST', '/api/arena/wildcards');
 
 /** `toBoxes` (positive `delta` only): an earlier removal's `fromBoxes`, so Undo puts the copies back into the same boxes. */
 export const adjustCollection = (oracleId: string, delta: number, toBoxes?: readonly { boxId: string; qty: number }[]) =>
