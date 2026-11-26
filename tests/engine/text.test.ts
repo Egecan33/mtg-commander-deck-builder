@@ -364,4 +364,30 @@ describe('exportArenaDecklist', () => {
     expect(back.commanders).toEqual(deck.commanders);
     expect(back.main.map((e) => [e.oracleId, e.qty]).sort()).toEqual(deck.main.filter((e) => e.qty > 0).map((e) => [e.oracleId, e.qty]).sort());
   });
+
+  describe('with the owned cards (Arena decks)', () => {
+    const arenaDeck: Deck = {
+      ...deck, commanders: [id('Krenko, Mob Boss')],
+      main: [
+        { oracleId: id('Lightning Bolt'), qty: 1, locked: false }, { oracleId: id('Bonecrusher Giant // Stomp'), qty: 1, locked: false },
+        { oracleId: id('Mountain'), qty: 30, locked: false },
+      ],
+    };
+    const owned = new Set([id('Lightning Bolt')]);
+    const printed = (name: string) => `(${card(name).arenaPrinting!.set}) ${card(name).arenaPrinting!.number}`;
+
+    it('names the cheapest Arena printing for each card to craft; owned cards and basics stay name-only', () => {
+      expect(exportArenaDecklist(arenaDeck, db, { owned })).toBe([
+        'Commander', `1 Krenko, Mob Boss ${printed('Krenko, Mob Boss')}`, '',
+        'Deck', '1 Lightning Bolt', `1 Bonecrusher Giant ${printed('Bonecrusher Giant // Stomp')}`, '30 Mountain', '',
+      ].join('\n'));
+    });
+
+    it('still reads back as the same deck', () => {
+      const back = parseDecklist(exportArenaDecklist(arenaDeck, db, { owned }), db);
+      expect(back.unresolved).toEqual([]);
+      expect(back.commanders).toEqual(arenaDeck.commanders);
+      expect(back.main.map((e) => [e.oracleId, e.qty]).sort()).toEqual(arenaDeck.main.map((e) => [e.oracleId, e.qty]).sort());
+    });
+  });
 });
