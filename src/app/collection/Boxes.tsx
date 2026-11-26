@@ -151,7 +151,7 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
                 You already have {fmtInt(overlap.reduce((n, c) => n + Math.min(c.free, c.boxQty), 0))} of this box&apos;s cards outside boxes
               </legend>
               <p className="text-[0.8rem] text-smoke">
-                Singles are usually extra copies, so the box is added on top. Tick the ones that came from this box to count them as this box's cards instead of adding them again.
+                Singles are usually extra copies, so the box is added on top. Tick a card to count it as this box's card instead of adding it again.
               </p>
               <button
                 type="button"
@@ -164,16 +164,19 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
               <ul className="mt-1 grid max-h-56 gap-0.5 overflow-y-auto">
                 {overlap.map((c) => (
                   <li key={c.oracleId}>
-                    <label className="flex items-center gap-2 text-[0.88rem]">
+                    <label className="flex items-start gap-2 text-[0.88rem]">
                       <input
                         type="checkbox"
+                        className="mt-1"
                         checked={checked.has(c.oracleId)}
                         onChange={() => setChecked((cur) => { const n = new Set(cur); if (!n.delete(c.oracleId)) n.add(c.oracleId); return n; })}
                         data-testid="box-overlap-card"
                         data-name={c.name}
                       />
-                      <span className="min-w-0 flex-1 truncate">Count {c.name} as this box&apos;s card</span>
-                      <span className="text-[0.78rem] text-smoke">{c.onlyHere ? 'only in this box' : 'also printed in other sets'}</span>
+                      <span className="min-w-0 flex-1">
+                        {c.name}
+                        <span className="block text-[0.78rem] text-smoke">{c.onlyHere ? 'only in this box' : 'also printed in other sets'}</span>
+                      </span>
                     </label>
                   </li>
                 ))}
