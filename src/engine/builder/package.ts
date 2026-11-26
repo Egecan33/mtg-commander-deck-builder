@@ -1,0 +1,129 @@
+import { rateDeck } from '../rating';
+import { deckCounts } from '../rules';
+import { createScorer } from '../scoring';
+import { ONE_SIDED_WIPE_TAG, inPackage, isWipe, packageDef, packageMembers, tagsOf } from '../packages';
+import { packagePlan } from '../packages';
+import { PACKAGE_MIN } from '../targets';
+import { isLandCard, summarizeDeck } from '../summary';
+import type { BuildOptions, Deck, EngineContext, FixChange, FixResult, PackageId, PackagePlan } from '../types';
+import { searched } from './fix';
+import { shownRating, swapOne } from './improve';
+import { addCard, buildPool, deckCount, qtyOf } from './pool';
+
+/** Score points a card earns for each other planned package it is also in (at most two count). */
+export const OVERLAP_BONUS = 8;
+export const overlapKey = (score: number, also: number): number => score + OVERLAP_BONUS * Math.min(2, also);
+
+export interface PackagePick { oracleId: string; score: number; key: number; also: PackageId[]; held: boolean; oneSided: boolean }
+
+/**
+ * A package's cards the deck could take, best first: nonland members the options allow, without a
+ * score gate, not already in the deck. Dual-purpose cards rank by `overlapKey`.
+ */
+export function rankPackage(
+  deck: Deck, ctx: EngineContext, opts: BuildOptions, id: PackageId,
+  o: { plan?: PackagePlan; held?: ReadonlySet<string>; limit?: number } = {},
+): PackagePick[] {
+  const def = packageDef(id);
+  if (!def) return [];
+  const { db } = ctx;
+  const plan = o.plan ?? packagePlan(deck, ctx);
+  const others = plan.packages.map((p) => packageDef(p.id)).filter((d): d is NonNullable<typeof d> => d !== null && d.id !== id);
+  const pool = buildPool(deck, ctx, { ...opts, goals: null });
+  const scorer = createScorer(deck, ctx);
+  const have = deckCounts(deck);
+  const bracket = deck.targetBracket;
+  const picks: PackagePick[] = [];
+  for (const card of db.all()) {
+    const f = db.features(card.oracleId);
+    if (!f || isLandCard(f) || have.has(card.oracleId) || card.oracleId === deck.companion) continue;
+    const tags = tagsOf(db, card.oracleId);
+    if (!inPackage(def, card, f, tags, bracket) || !pool.allowed(card)) continue;
+    const s = scorer.score(card);
+    if (s.gate) continue;
+    const also = others.filter((d) => inPackage(d, card, f, tags, bracket)).map((d) => d.id);
+    picks.push({ oracleId: card.oracleId, score: s.score, key: overlapKey(s.score, also.length), also, held: o.held?.has(card.oracleId) ?? false, oneSided: tags.includes(ONE_SIDED_WIPE_TAG) });
+  }
+  const rank = (x: PackagePick) => { const r = db.get(x.oracleId)?.edhrecRank; return r !== null && r !== undefined && r >= 1 ? r : Number.POSITIVE_INFINITY; };
+  picks.sort((a, b) => Number(a.held) - Number(b.held) || b.key - a.key || rank(a) - rank(b) || (a.oracleId < b.oracleId ? -1 : 1));
+  return o.limit ? picks.slice(0, o.limit) : picks;
+}
+
+/**
+ * Adds a package's best missing cards, up to its target (8 for a package that is not planned yet).
+ * Under 100 cards they are plain adds; at 100 each add cuts the weakest card that is in none of the
+ * deck's packages. Never cuts a commander, a locked card, or a land below the land target.
+ */
+export function completePackage(deck: Deck, ctx: EngineContext, opts: BuildOptions, id: PackageId): FixResult {
+  const { db } = ctx;
+  const def = packageDef(id);
+  const before = shownRating(rateDeck(deck, ctx));
+  const untouched = (note: string): FixResult => ({ deck, changes: [], ratingBefore: before, ratingAfter: before, note });
+  if (!def) return untouched(`"${String(id)}" is not a package.`);
+  const plan = packagePlan(deck, ctx);
+  const entry = plan.packages.find((p) => p.id === id);
+  const target = entry?.target ?? PACKAGE_MIN;
+  let count = entry?.count ?? packageMembers(deck, db, def).count;
+  const missing = Math.max(0, target - count);
+  if (missing === 0) return untouched(`${def.name} already has ${count} of ${target}.`);
+
+  const picks = rankPackage(deck, ctx, opts, id, { plan });
+  if (picks.length === 0) return untouched(`No ${def.name} card the options allow is left to add${searched(opts)}.`);
+  const scorer = createScorer(deck, ctx);
+  const tracked = new Set(plan.packages.flatMap((p) => p.cards));
+  const wipes = id === 'removal' ? plan.packages.find((p) => p.id === 'removal')?.wipes ?? null : null;
+  let wipeCount = wipes?.count ?? 0;
+  const wipeOf = (pick: PackagePick) => { const f = db.features(pick.oracleId); return !!f && isWipe(f, tagsOf(db, pick.oracleId)); };
+
+  // order: while the wipe slot is short, wipes (one-sided first) come first
+  let queue = picks;
+  if (wipes) {
+    const w = picks.filter(wipeOf).sort((a, b) => Number(b.oneSided) - Number(a.oneSided));
+    const need = Math.max(0, wipes.lo - wipeCount);
+    queue = [...w.slice(0, need), ...picks.filter((p) => !w.slice(0, need).includes(p))];
+  }
+
+  let d = deck;
+  const changes: FixChange[] = [];
+  const brought = new Set<string>();
+  let added = 0;
+  let cutsRanOut = false;
+  const nameOf = (pid: string) => packageDef(pid)?.name ?? pid;
+  const rankOf = (oid: string) => { const r = db.get(oid)?.edhrecRank; return r !== null && r !== undefined && r >= 1 ? r : 0; };
+  for (const pick of queue) {
+    if (added >= missing) break;
+    if (wipes && wipeOf(pick) && wipeCount >= wipes.hi) continue;
+    let out = '';
+    if (deckCount(d) >= 100) {
+      const landsNow = summarizeDeck(d, db).landsEffective;
+      const cut = d.main
+        .filter((e) => {
+          const c = db.get(e.oracleId);
+          const f = db.features(e.oracleId);
+          if (!c || !f || e.locked || qtyOf(e) < 1 || d.commanders.includes(e.oracleId) || e.oracleId === d.companion) return false;
+          if (tracked.has(e.oracleId) || brought.has(e.oracleId)) return false;
+          return !isLandCard(f) || landsNow - f.landWeight >= plan.lands.target;
+        })
+        .map((e) => ({ id: e.oracleId, score: scorer.score(db.get(e.oracleId)!).score }))
+        .sort((a, b) => a.score - b.score || rankOf(b.id) - rankOf(a.id) || (a.id < b.id ? -1 : 1))[0];
+      if (!cut) { cutsRanOut = true; break; }
+      out = cut.id;
+      d = swapOne(d, out, pick.oracleId);
+    } else d = addCard(d, pick.oracleId);
+    brought.add(pick.oracleId);
+    added++;
+    if (wipes && wipeOf(pick)) wipeCount++;
+    const alsoNames = pick.also.map(nameOf).join(' and ');
+    const reason = `Completes ${def.name}${pick.also.length ? ` (also ${alsoNames})` : ''}${out ? "; takes out the weakest card that is in none of the deck's packages" : ''}.`;
+    changes.push({ out, in: pick.oracleId, reason, summary: `${def.name} ${count} → ${count + 1} of ${target}${pick.also.length ? `, also ${alsoNames}` : ''}` });
+    count++;
+  }
+  let note: string | null = null;
+  if (added === 0) note = cutsRanOut
+    ? `Added 0 of ${missing}: every other card is in one of the deck's packages, locked, or a land the deck needs, so nothing more was cut.`
+    : `No ${def.name} card the options allow is left to add${searched(opts)}.`;
+  else if (added < missing) note = cutsRanOut
+    ? `Added ${added} of ${missing}: every other card is in one of the deck's packages, locked, or a land the deck needs, so nothing more was cut.`
+    : `Added ${added} of ${missing}: no other ${def.name} card the options allow${searched(opts)}.`;
+  return { deck: d, changes, ratingBefore: before, ratingAfter: shownRating(rateDeck(d, ctx)), note };
+}

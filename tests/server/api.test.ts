@@ -1021,3 +1021,20 @@ describe('packages on analyze', () => {
     expect(deckKey({ ...deck, packageTargets: { 'fn:pillow-fort': 9 } })).not.toBe(deckKey(deck));
   });
 });
+
+describe("POST /api/build mode 'package'", () => {
+  it('mode package completes a package', async () => {
+    const deck = await imported('upgraded', 3);
+    const r = await call<api.FixResponse>('POST', '/api/build', { deck, mode: 'package', options: { package: 'protection' } });
+    expect(r.changes.length).toBeGreaterThan(0);
+    for (const c of r.changes) expect(r.cards[c.in]?.name).toBeTruthy();
+    expect(size(r.deck)).toBe(100);
+  });
+
+  it('mode package with an unknown package is a 400', async () => {
+    const deck = await imported('upgraded', 3);
+    for (const pkg of [undefined, 'theme:nope', 'fn:x', 'land']) {
+      expect((await request('POST', '/api/build', { deck, mode: 'package', options: pkg === undefined ? {} : { package: pkg } })).status, String(pkg)).toBe(400);
+    }
+  });
+});

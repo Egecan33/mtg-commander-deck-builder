@@ -181,7 +181,7 @@ function fill(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixC
 }
 
 /** " from the cards allowed (owned cards only, up to $2)" when the options narrow the search, else ''. */
-function searched(opts: BuildOptions): string {
+export function searched(opts: BuildOptions): string {
   const limits: string[] = [];
   if (opts.ownedOnly) limits.push('owned cards only');
   if (typeof opts.maxPriceUsd === 'number' && Number.isFinite(opts.maxPriceUsd)) limits.push(`up to $${opts.maxPriceUsd}`);

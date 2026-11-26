@@ -46,6 +46,13 @@
  *        at first. `cohesion` (theme and functional packages): members linked to another member in the deck network.
  *        Under PUT /api/decks/:id: `deck.packageTargets` (`theme:<axis>` or `fn:<id>` -> 8-40) is kept; core package
  *        sizes are pinned through `roleTargets`.
+ *        'package' (Complete package) takes `options.package` ('ramp' | 'draw' | 'removal' | 'protection' |
+ *        'theme:<axis>' | 'fn:<id>'; anything else is a 400) and answers like 'fix': it adds the package's best
+ *        missing cards for this deck (its target from `packages`, or 8 for a package not planned yet), cards that
+ *        also serve another planned package first, board wipes only up to the 1-2 slot and one-sided wipes first.
+ *        Under 100 cards they are plain adds; at 100 each add cuts the weakest unlocked card that is in none of the
+ *        deck's packages (never a commander, never lands below the land target). The card options, free copies,
+ *        price and locked cards hold. `note` says what could not be added and why.
  * POST /api/network     {deck}          -> NetworkResponse
  *        How the deck's cards work together. `nodes`: every nonland card and the commanders (lands are
  *        left out). `edges`: { a, b, kind, weight 0..1, reasons [from a, from b] }, kind 'combo' (1, or 0.5
@@ -395,7 +402,7 @@ export interface CardsResponse {
   heldBy: HeldBy;
 }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix' | 'package';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
@@ -415,6 +422,8 @@ export interface BuildRequestOptions {
   in?: string;
   /** 'fix' only: fix this one part of the rating (a key of the rating's sub-scores); omit to fix them all. */
   only?: RatingKey | null;
+  /** 'package' only (required there): the package to complete ('ramp' | 'draw' | 'removal' | 'protection' | 'theme:<axis>' | 'fn:<id>'). */
+  package?: string;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -665,7 +674,7 @@ export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
 export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace' | 'swapin', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
-export function buildDeck(deck: Deck, mode: 'fix', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
+export function buildDeck(deck: Deck, mode: 'fix' | 'package', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }
