@@ -508,7 +508,16 @@ export function Builder({ id }: { id: string }) {
   const takes = analysis && analysis.conflicts.byHolder.length > 0;
   const notice = takes || offer ? (
     <>
-      {takes && <HeldSummary conflicts={analysis.conflicts} lookup={lookup} onOpen={openCard} takingOut={takingOut} onTakeOut={(holderId, oracleId) => void takeOut(holderId, oracleId)} />}
+      {takes && (
+        <HeldSummary
+          conflicts={analysis.conflicts}
+          lookup={lookup}
+          onOpen={openCard}
+          takingOut={takingOut}
+          onTakeOut={(holderId, oracleId) => void takeOut(holderId, oracleId)}
+          built={!!deck.built}
+        />
+      )}
       {offer && <BoxMatchOffer name={offer.name} busy={linking} onLink={() => void linkMatch()} />}
     </>
   ) : null;

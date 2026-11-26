@@ -28,10 +28,11 @@ function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { i
 
 /**
  * One line per box or built deck the deck takes cards from ("Takes 3 cards from the Landing Party box"), each opening to the card names.
+ * When this deck is built too, it does not take from another built deck, they share copies: "Shares 1 card with B (built)".
  * A box's cards each get "I took it out" (`onTakeOut`). Nothing when there are none.
  */
 export function HeldSummary({
-  conflicts, lookup, onOpen, onTakeOut, takingOut = null,
+  conflicts, lookup, onOpen, onTakeOut, takingOut = null, built = false,
 }: {
   conflicts: ConflictReport;
   lookup: CardLookup;
@@ -39,6 +40,8 @@ export function HeldSummary({
   onTakeOut?: (holderId: string, oracleId: string) => void;
   /** `<holderId>|<oracleId>` of a take-out in progress; every take-out button waits for it. */
   takingOut?: string | null;
+  /** The deck shown is built itself. */
+  built?: boolean;
 }) {
   const [open, setOpen] = useState<string[]>([]);
   if (conflicts.byHolder.length === 0) return null;
@@ -58,7 +61,9 @@ export function HeldSummary({
             >
               <span aria-hidden className="display inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ember text-[0.72rem] font-bold leading-none text-[#15110a]">!</span>
               <span className="min-w-0 flex-1" data-testid="held-holder-line">
-                Takes {n} {n === 1 ? 'card' : 'cards'} from {h.kind === 'box' ? 'the ' : ''}{h.name}
+                {built && h.kind === 'deck'
+                  ? `Shares ${n} ${n === 1 ? 'card' : 'cards'} with ${h.name}: you do not own enough copies for both`
+                  : `Takes ${n} ${n === 1 ? 'card' : 'cards'} from ${h.kind === 'box' ? 'the ' : ''}${h.name}`}
               </span>
               <span className="shrink-0 text-[0.75rem] text-smoke">{isOpen ? 'Hide' : 'Which cards'}</span>
             </button>
