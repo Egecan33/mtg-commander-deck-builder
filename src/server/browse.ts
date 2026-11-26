@@ -1,5 +1,5 @@
 import type {
-  CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommandersResponse, PartnersResponse, ScoredCard,
+  CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommanderSort, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
 import { normalizeName } from '@/engine/carddb';
 import { canPair } from '@/engine/rules';
@@ -8,6 +8,8 @@ import type { Card, Color, Deck, Role } from '@/engine/types';
 import { poolIndex, toClientCard, toCommanderCard } from './cards';
 import { ownedSet } from './collection';
 import { getAnalysis } from './context';
+import { commanderIndex, toCommanderTile } from './commander-index';
+import { discoverState, readBracket, readFreeOnly } from './discover';
 import { heldByFor } from './holders';
 import { HttpError, intParam, isObject } from './http';
 import { getCardDb } from './store';
@@ -137,7 +139,12 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
 
-/** Eligible commanders, most popular first, filtered by name/text and colour identity. */
+const COMMANDER_SORTS: readonly CommanderSort[] = ['popularity', 'name', 'price', 'best'];
+
+/**
+ * Eligible commanders, filtered by name/text, colour identity, theme and ownership, most popular
+ * first unless another sort is asked for.
+ */
 export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const db = getCardDb();
   const index = poolIndex(db);
@@ -148,10 +155,20 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const colorOk = colorMatcher(parseColors(params.get('colors') ?? ''), MODES.includes(mode as ColorMode) ? (mode as ColorMode) : 'includes');
   const words = tokens(params.get('q'));
   const phrase = words.join(' ');
+  const sort = (params.get('sort') ?? 'popularity') as CommanderSort;
+  if (!COMMANDER_SORTS.includes(sort)) throw new HttpError(400, 'sort must be popularity, name, price or best.');
+  const axis = params.get('axis') || null;
+  const ownedOnly = params.get('owned') === '1';
+  const bracket = readBracket(params.get('bracket') ?? 3);
+  const state = discoverState(bracket, 'owned', readFreeOnly(params.get('free')));
+  const bestReady = state.status === 'done';
+  const leads = commanderIndex().byId;
 
   const tiers: Card[][] = [[], [], []];
   for (const card of index.commanders) {
     if (colorOk && !colorOk(card)) continue;
+    if (ownedOnly && !owned.has(card.oracleId)) continue;
+    if (axis && !leads.get(card.oracleId)?.lead.includes(axis)) continue;
     if (words.length === 0) {
       tiers[0].push(card);
       continue;
@@ -161,9 +178,26 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
     const name = index.names[i];
     tiers[name === phrase || normalizeName(card.frontName) === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(card);
   }
-  const matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  let matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  const best = new Map<string, number>();
+  if (sort === 'name') matches = [...matches].sort((a, b) => a.name.localeCompare(b.name));
+  else if (sort === 'price') {
+    const price = (c: Card) => (typeof c.priceUsd === 'number' ? c.priceUsd : Number.POSITIVE_INFINITY);
+    matches = [...matches].sort((a, b) => (price(a) === price(b) ? 0 : price(a) < price(b) ? -1 : 1));
+  } else if (sort === 'best' && bestReady) {
+    for (const e of state.entries) if (e.tiers[0]) best.set(e.commander.oracleId, e.tiers[0].rating);
+    const ranked = matches.filter((c) => best.has(c.oracleId)).sort((a, b) => (best.get(b.oracleId) as number) - (best.get(a.oracleId) as number));
+    matches = [...ranked, ...matches.filter((c) => !best.has(c.oracleId))];
+  }
   const { start, end } = page(matches.length, pageNo, pageSize);
-  return { total: matches.length, page: pageNo, pageSize, commanders: matches.slice(start, end).map((c) => toCommanderCard(c, db, owned)) };
+  return {
+    total: matches.length, page: pageNo, pageSize, bestReady,
+    commanders: matches.slice(start, end).map((c) => {
+      const tile = toCommanderTile(c, owned);
+      const rating = best.get(c.oracleId);
+      return rating === undefined ? tile : { ...tile, best: rating };
+    }),
+  };
 }
 
 /** Every card that may be the second commander next to `oracleId`, most popular first. */

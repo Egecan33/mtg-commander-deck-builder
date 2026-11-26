@@ -12,10 +12,19 @@
  * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'products'|'all';
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active. 'all' runs
  *        the steps in that order, products last.
- * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
+ * GET  /api/commanders?q&colors&mode&page&pageSize&axis&owned&sort&bracket&free -> CommandersResponse
  *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
  *        'within' (identity inside the chosen colours). page is 1-based, pageSize 1..200 (60).
+ *        `axis` keeps the commanders that lead that theme (`CommanderTile.lead`), `owned=1` only commanders in the
+ *        collection. `sort`: popularity (default), name, price (unpriced last) or best; anything else is a 400.
+ *        `best` puts the commanders of a finished Best from collection run (`bracket`, `free` as for /api/discover)
+ *        first, by their owned-only rating (`best`), the rest by popularity; `bestReady` says whether a finished run
+ *        exists, and without one `best` is the popularity order.
+ * GET  /api/themes                      -> ThemesResponse   every theme (axis) with the number of commanders that lead it, most first.
+ * GET  /api/themes/:axis?colors&bracket -> ThemeResponse    :axis is the slug ("typal-elf", "tokens"; 404 when not listed). The commanders
+ *        that lead the theme (inside `colors` when given, most played first) and up to 60 cards that serve it best, scored
+ *        as in a deck of that theme alone at `bracket`. Text only: no EDHREC data.
  * GET  /api/commander/:slug?with&bracket -> CommanderPageResponse
  *        The header of a commander page. `slug` is EDHREC's URL form of the front name ("mr-spock-science-officer");
  *        the full-name form and any letter case also resolve, and two names that slug alike get "<slug>-<8 id characters>".
@@ -310,8 +319,21 @@ export interface CommanderCard extends ClientCard {
   /** The deck is illegal until a colour is chosen. */
   requiresColorChoice: boolean;
 }
-export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number }
-export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderCard[] }
+export type CommanderSort = 'popularity' | 'name' | 'price' | 'best';
+export interface CommandersQuery {
+  q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number;
+  axis?: AxisId; ownedOnly?: boolean; sort?: CommanderSort; bracket?: Bracket; freeOnly?: boolean;
+}
+export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderTile[]; bestReady: boolean }
+export interface ThemeInfo { axis: AxisId; slug: string; label: string; commanders: number }
+export interface ThemesResponse { themes: ThemeInfo[] }
+export interface ThemeResponse {
+  theme: ThemeInfo; colors: ColorLetter[]; bracket: Bracket;
+  commanders: CommanderTile[];
+  /** Oracle ids of the cards that serve this theme best, best first. */
+  top: string[];
+  scores: Record<string, CardScore>; cards: CardLookup;
+}
 /** A commander in a list: its page slug, Scryfall's popularity rank and the themes it leads. */
 export interface CommanderTile extends CommanderCard {
   slug: string;
@@ -686,7 +708,10 @@ export const startSync = (step: SyncStep | 'all') => call<SyncState>('POST', '/a
 export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal) =>
   call<CommandersResponse>(
     'GET',
-    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize })}`,
+    `/api/commanders${query({
+      q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize,
+      axis: params.axis, owned: params.ownedOnly ? 1 : undefined, sort: params.sort, bracket: params.bracket, free: params.freeOnly ? 1 : undefined,
+    })}`,
     undefined,
     signal,
   );
@@ -708,6 +733,9 @@ export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string 
     undefined,
     signal,
   );
+export const getThemes = (signal?: AbortSignal) => call<ThemesResponse>('GET', '/api/themes', undefined, signal);
+export const getTheme = (slug: string, o: { colors?: ColorLetter[]; bracket: Bracket }, signal?: AbortSignal) =>
+  call<ThemeResponse>('GET', `/api/themes/${encodeURIComponent(slug)}${query({ colors: o.colors?.join(''), bracket: o.bracket })}`, undefined, signal);
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 
