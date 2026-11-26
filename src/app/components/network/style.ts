@@ -1,4 +1,4 @@
-import type { NetworkEdge, NetworkEdgeKind, NetworkNode } from '@/engine/types';
+import type { NetworkEdge, NetworkEdgeKind } from '@/engine/types';
 
 /** Edge colours are the app's own tokens (ruling D19): ember stays reserved for "!". */
 export const EDGE_COLOR: Record<NetworkEdgeKind, string> = {
@@ -19,12 +19,8 @@ export function edgeWidth(e: NetworkEdge): 1 | 2 | 3 {
 
 export const edgeOpacity = (kind: NetworkEdgeKind): number => (kind === 'commander' ? 0.18 : kind === 'typal' || kind === 'package' ? 0.55 : 0.85);
 
-/** Node radius in layout units: the commander is the biggest, cards that connect to nothing the smallest. */
-export function nodeRadius(n: NetworkNode, maxDegree: number): number {
-  if (n.commander) return 34;
-  if (n.unconnected) return 8;
-  return maxDegree > 0 ? 10 + 18 * Math.sqrt(Math.max(0, n.degree) / maxDegree) : 10;
-}
+/** Node radius in layout units: the layout's own (its collision force keeps these discs apart). */
+export { layoutRadius as nodeRadius, maxDegreeOf } from '@/engine/network/draw';
 
 /** The square at the centre of the art box the deck tiles crop, in texture coordinates. */
 export const ART_BOX = { u: 0.194, v: 0.45, w: 0.613, h: 0.44 };
@@ -37,5 +33,3 @@ export function nodeReasons(id: string, edges: NetworkEdge[]): string[] {
     .slice(0, 3)
     .map((e) => (e.a === id ? e.reasons[0] : e.reasons[1]));
 }
-
-export const maxDegreeOf = (nodes: NetworkNode[]): number => nodes.reduce((m, n) => (n.commander ? m : Math.max(m, n.degree)), 0);

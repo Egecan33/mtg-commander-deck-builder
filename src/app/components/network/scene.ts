@@ -26,12 +26,14 @@ export interface NetworkScene {
   dispose(): void;
 }
 
-interface SceneLink extends LayoutLink { edgeIndex: number }
+type SceneLink = LayoutLink;
 const PLACEHOLDER_WIDTH = 252; // the server's placeholder image
+/** Padding, in pixels, around the graph when the camera fits it to the view. */
+const FIT_PADDING = 48;
 
 export async function createNetworkScene(
   container: HTMLElement,
-  input: { network: DeckNetwork; names: (id: string) => string; reducedMotion: boolean },
+  input: { network: DeckNetwork; names: (id: string) => string; reducedMotion: boolean; kinds: ReadonlySet<NetworkEdgeKind> },
   on: SceneHandlers,
 ): Promise<NetworkScene> {
   const THREE = await import('three');
@@ -39,11 +41,12 @@ export async function createNetworkScene(
   const { network } = input;
   const maxDegree = maxDegreeOf(network.nodes);
   const nodes = layoutNodes(network);
-  const links: SceneLink[] = layoutLinks(network).map((l, edgeIndex) => ({ ...l, edgeIndex }));
+  // Only the drawn edges (each card's strongest few feeds links, every other link) are scene objects.
+  const links: SceneLink[] = layoutLinks(network);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const neighbours = new Map<string, Set<string>>();
-  for (const e of network.edges) {
-    for (const [x, y] of [[e.a, e.b], [e.b, e.a]] as const) (neighbours.get(x) ?? neighbours.set(x, new Set()).get(x)!).add(y);
+  for (const l of links) {
+    for (const [x, y] of [[l.source, l.target], [l.target, l.source]] as const) (neighbours.get(x) ?? neighbours.set(x, new Set()).get(x)!).add(y);
   }
 
   // ---- shared textures -----------------------------------------------------------------------
@@ -112,7 +115,8 @@ export async function createNetworkScene(
   };
 
   // ---- the graph -----------------------------------------------------------------------------
-  const kinds = new Set<NetworkEdgeKind>(['combo', 'feeds', 'typal', 'commander']);
+  // The legend's choice carries over when the scene is rebuilt (a deck change): review I6.
+  const kinds = new Set<NetworkEdgeKind>(input.kinds);
   const lineObjects: { line: InstanceType<typeof THREE.Line>; link: SceneLink }[] = [];
   const graph = new ForceGraph3D(container, { controlType: 'orbit', rendererConfig: { antialias: true, alpha: true } })
     .backgroundColor('rgba(0,0,0,0)')
@@ -202,10 +206,12 @@ export async function createNetworkScene(
   const canvas = graph.renderer().domElement;
   const lost = (e: Event) => { e.preventDefault(); on.contextLost(); };
   canvas.addEventListener('webglcontextlost', lost);
-  graph.onEngineStop(() => { settled = true; on.settled(true); wake(); });
-  if (input.reducedMotion) on.settled(true);
+  // The camera frames the whole graph once it settles and whenever the view changes size (controller finding U2).
+  const fit = (ms: number) => { if (nodes.length > 0) graph.zoomToFit(ms, FIT_PADDING); };
+  graph.onEngineStop(() => { const first = !settled; settled = true; on.settled(true); if (first) fit(input.reducedMotion ? 0 : 500); wake(); });
+  if (input.reducedMotion) { on.settled(true); fit(0); }
 
-  const visible = (): number => network.edges.filter((e) => kinds.has(e.kind)).length;
+  const visible = (): number => links.filter((l) => kinds.has(l.kind)).length;
   return {
     setKinds(next) {
       kinds.clear();
@@ -223,7 +229,7 @@ export async function createNetworkScene(
       wake();
       graph.cameraPosition({ x: c[0], y: c[1], z: c[2] + Math.min(1600, 2.2 * r + 80) }, { x: c[0], y: c[1], z: c[2] }, input.reducedMotion ? 0 : 600);
     },
-    resize(width, height) { graph.width(width).height(height); wake(); },
+    resize(width, height) { graph.width(width).height(height); if (settled) fit(0); wake(); },
     dispose() {
       if (idle) clearTimeout(idle);
       container.removeEventListener('pointermove', onMove);
@@ -235,7 +241,11 @@ export async function createNetworkScene(
       for (const d of disposables) d.dispose();
       for (const { line } of lineObjects) { line.geometry.dispose(); (line.material as InstanceType<typeof THREE.LineBasicMaterial>).dispose(); }
       for (const s of sprites.values()) { (s.art.material as InstanceType<typeof THREE.SpriteMaterial>).dispose(); (s.ring?.material as InstanceType<typeof THREE.SpriteMaterial> | undefined)?.dispose(); }
+      // Give the WebGL context back at once (review M3): browsers keep only a few alive.
+      const renderer = graph.renderer() as { forceContextLoss?: () => void; dispose?: () => void };
       graph._destructor();
+      renderer.dispose?.();
+      renderer.forceContextLoss?.();
     },
   };
 }

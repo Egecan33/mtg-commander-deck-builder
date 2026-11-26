@@ -21,4 +21,5 @@ declare module 'd3-force-3d' {
   export function forceManyBody(): Force;
   export function forceRadial(radius: number | ((d: never) => number), x?: number, y?: number, z?: number): Force;
   export function forceZ(z?: number): Force;
+  export function forceCollide(radius?: number | ((d: never) => number)): Force;
 }
