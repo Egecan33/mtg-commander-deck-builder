@@ -151,6 +151,8 @@
  *        a cheap pre-score picks the best 40 (`considered` says out of how many). Single commanders
  *        only (no partner pairs). Each entry carries tier 0 (owned cards only, basic lands free)
  *        and the unlimited tier. 'empty' means no collection has been imported.
+ *        Ratings use the same cached EDHREC data as the deck page (cache only, never a request, none when
+ *        EDHREC is off); `entry.basis` says 'edhrec' or 'text'. The cache key includes which EDHREC pages are cached.
  * GET  /api/discover?bracket=N          -> DiscoverState   progress and the entries finished so far.
  * POST /api/discover/tiers {bracket, commander} -> DiscoverTiersResponse
  *        The 5/10/15/20-buy tiers for one listed commander (computed once, then cached): the
@@ -472,7 +474,12 @@ export interface DiscoverTier {
   /** The deck itself, ready for POST /api/decks. */
   deck: Deck;
 }
-export interface DiscoverEntry { commander: ClientCard; preScore: number; tiers: DiscoverTier[] }
+export interface DiscoverEntry {
+  commander: ClientCard; preScore: number;
+  /** What the ratings were computed from: cached EDHREC data for this commander ('edhrec'), or the card text alone ('text'). Same as the deck page. */
+  basis: 'edhrec' | 'text';
+  tiers: DiscoverTier[];
+}
 /** Whose commanders "Best from collection" ranks: the ones in the collection, or the ones that are not. */
 export type DiscoverScope = 'owned' | 'unowned';
 export interface DiscoverState {

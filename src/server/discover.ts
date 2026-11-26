@@ -7,7 +7,8 @@ import { ownedSet } from './collection';
 import { freeOwnedSet } from './holders';
 import { HttpError } from './http';
 import { getSettings } from './settings';
-import { getCardDb } from './store';
+import { peekEdhrec } from './edhrec';
+import { getCardDb, getDb } from './store';
 
 /** Owned commanders that get a full build; above this the pre-score picks. */
 export const DISCOVER_MAX = 40;
@@ -31,14 +32,26 @@ const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve)
 /** The owned cards a search uses: with `freeOnly`, only cards with a copy no box or built deck holds. */
 const ownedFor = (freeOnly: boolean): Set<string> => (freeOnly ? freeOwnedSet(new Set()) : ownedSet());
 
-function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): string {
-  const ids = [...ownedFor(freeOnly)].sort();
-  return createHash('sha1').update(JSON.stringify([bracket, scope, freeOnly, ids, getCardDb().all().length])).digest('hex');
+/** Which commanders have EDHREC data in the cache (and how fresh): a result built from other data is stale. */
+function edhrecStamp(): string {
+  if (!getSettings().edhrecEnabled) return 'off';
+  const rows = getDb().prepare("SELECT key, fetched_at FROM edhrec_cache WHERE json != 'null' ORDER BY key").all() as { key: string; fetched_at: string }[];
+  return createHash('sha1').update(JSON.stringify(rows)).digest('hex').slice(0, 12);
 }
 
-function context(): EngineContext {
+function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): string {
+  const ids = [...ownedFor(freeOnly)].sort();
+  return createHash('sha1').update(JSON.stringify([bracket, scope, freeOnly, ids, getCardDb().all().length, edhrecStamp()])).digest('hex');
+}
+
+/**
+ * The engine context for one commander: the cached EDHREC data the deck page would use for a deck
+ * with this commander at this bracket (`engineContext`), else none. Cache only, never a request.
+ */
+function context(commander: string, bracket: Bracket): EngineContext {
   const s = getSettings();
-  return { db: getCardDb(), edhrec: null, mldOverrides: s.mldOverrides, extraTurnOverrides: s.extraTurnOverrides };
+  const { data } = peekEdhrec([commander], bracket);
+  return { db: getCardDb(), edhrec: data, mldOverrides: s.mldOverrides, extraTurnOverrides: s.extraTurnOverrides };
 }
 
 function toTier(t: TierDeck, ctx: EngineContext): DiscoverTier {
@@ -65,17 +78,17 @@ const withCards = (job: Job): DiscoverState => {
 async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): Promise<void> {
   const s = job.state;
   try {
-    const ctx = context();
+    const db = getCardDb();
     const owned = ownedFor(freeOnly);
-    const ownedCards = [...owned].map((id) => ctx.db.get(id)).filter((c): c is Card => !!c && c.legality === 'legal');
+    const ownedCards = [...owned].map((id) => db.get(id)).filter((c): c is Card => !!c && c.legality === 'legal');
     // 'unowned': every commander the collection does not hold, ranked by what the owned cards build around it.
-    const candidates = scope === 'owned' ? discoverCandidates(ctx.db, owned, true) : discoverCandidates(ctx.db, owned, false).filter((c) => !owned.has(c.oracleId));
+    const candidates = scope === 'owned' ? discoverCandidates(db, owned, true) : discoverCandidates(db, owned, false).filter((c) => !owned.has(c.oracleId));
     s.considered = candidates.length;
 
     let ranked = candidates.map((c) => ({ c, pre: 0 }));
     if (scope === 'unowned' && ranked.length > UNOWNED_SHORTLIST) {
       // Thousands of commanders: the real pre-score (about a second each on the full pool) is only for the best few.
-      const quick = ranked.map((r) => ({ ...r, fit: quickFit(r.c, ownedCards, ctx.db) }));
+      const quick = ranked.map((r) => ({ ...r, fit: quickFit(r.c, ownedCards, db) }));
       quick.sort((a, b) => b.fit - a.fit || (a.c.edhrecRank ?? 1e9) - (b.c.edhrecRank ?? 1e9) || (a.c.oracleId < b.c.oracleId ? -1 : 1));
       ranked = quick.slice(0, UNOWNED_SHORTLIST);
       await tick();
@@ -84,7 +97,7 @@ async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: b
       s.stage = scope === 'owned' ? 'Scoring your commanders' : 'Scoring commanders you do not own';
       s.total = ranked.length;
       for (const r of ranked) {
-        r.pre = preScore(r.c, ownedCards, ctx, bracket);
+        r.pre = preScore(r.c, ownedCards, context(r.c.oracleId, bracket), bracket);
         s.done++;
         if (s.done % 4 === 0) await tick();
       }
@@ -98,9 +111,10 @@ async function run(job: Job, bracket: Bracket, scope: DiscoverScope, freeOnly: b
     s.built = ranked.length;
     for (const r of ranked) {
       await tick();
+      const ctx = context(r.c.oracleId, bracket);
       const t = eagerTiers(r.c.oracleId, ctx, owned, bracket);
       // The green dot means owned at all, as everywhere else; `owned` may leave held copies out.
-      const entry: DiscoverEntry = { commander: toClientCard(r.c, ctx.db, ownedSet()), preScore: Math.round(r.pre), tiers: [toTier(t.owned, ctx), toTier(t.unlimited, ctx)] };
+      const entry: DiscoverEntry = { commander: toClientCard(r.c, ctx.db, ownedSet()), preScore: Math.round(r.pre), basis: ctx.edhrec ? 'edhrec' : 'text', tiers: [toTier(t.owned, ctx), toTier(t.unlimited, ctx)] };
       s.entries = [...s.entries, entry].sort((a, b) => b.tiers[0].rating - a.tiers[0].rating || b.preScore - a.preScore);
       s.done++;
     }
@@ -163,7 +177,7 @@ export function discoverTiers(bracket: Bracket, commander: unknown, scope: Disco
   if (!job || !entry) throw new HttpError(404, 'That commander is not in the result for this bracket. Run the search again.');
   let tiers = job.lazy.get(entry.commander.oracleId);
   if (!tiers) {
-    const ctx = context();
+    const ctx = context(entry.commander.oracleId, bracket);
     tiers = buyTiers(entry.tiers[0].deck, ctx, ownedFor(freeOnly), LAZY_CAPS).map((t) => toTier(t, ctx));
     job.lazy.set(entry.commander.oracleId, tiers);
   }

@@ -192,6 +192,7 @@ export default function DiscoverPage() {
                     <span className="block text-[0.75rem] text-ash">{tierLabel(t)}</span>
                     <span className="display text-[1.35rem] font-bold leading-none" style={{ color: BAND_VAR[bandOf(t.rating)] }}>{t.rating}</span>
                     <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length ? `${t.buys.length} to buy` : 'no buys'}</span>
+                    <span className="mt-0.5 block text-[0.7rem] text-smoke" data-testid="discover-basis">{entry.basis === 'edhrec' ? 'Scored with EDHREC data' : 'Scored from card text'}</span>
                   </span>
                 ))}
               </button>
