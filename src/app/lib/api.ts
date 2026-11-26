@@ -48,7 +48,9 @@
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
  *        'fix' (Fix deck) makes the deck legal and 100 cards (cards that break a rule are replaced by the best
  *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
- *        filled), then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
+ *        filled), then (full fix only) brings a deck that breaks its own target bracket's rules (Game
+ *        Changers at Bracket 2 and the like) inside it with the same routine as `only: 'bracket'`, and
+ *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
  *        the engine objects to are skipped; the run may dip on the way, and the prefix that ends at its
  *        highest rating is kept, when that is above the rating the legality step left, else none of it).
  *        Every change is in `changes` ({ out, in, reason }; `out` '' for an add, `in` '' for a cut).
