@@ -3,11 +3,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as api from '@/app/lib/api';
+import { deckNetwork } from '@/engine/network';
+import { engineContext } from '@/server/context';
 import type { AnalyzeResponse, CardsResponse, DeckResponse, ImportResponse, ScoredCard } from '@/app/lib/api';
 import * as analyzeRoute from '@/app/api/analyze/route';
 import * as buildRoute from '@/app/api/build/route';
 import * as cardsRoute from '@/app/api/cards/route';
 import * as collectionRoute from '@/app/api/collection/route';
+import * as networkRoute from '@/app/api/network/route';
 import * as commandersRoute from '@/app/api/commanders/route';
 import * as deckRoute from '@/app/api/decks/[id]/route';
 import * as decksRoute from '@/app/api/decks/route';
@@ -36,7 +39,7 @@ type RouteModule = Partial<Record<'GET' | 'POST' | 'PUT' | 'DELETE', unknown>>;
 const ROUTES: [RegExp, RouteModule][] = [
   [/^\/api\/status$/, statusRoute], [/^\/api\/sync$/, syncRoute], [/^\/api\/commanders$/, commandersRoute],
   [/^\/api\/partners$/, partnersRoute], [/^\/api\/decks$/, decksRoute], [/^\/api\/decks\/(?<id>[^/]+)$/, deckRoute],
-  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
+  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/network$/, networkRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
   [/^\/api\/import$/, importRoute], [/^\/api\/export$/, exportRoute], [/^\/api\/collection$/, collectionRoute],
   [/^\/api\/settings$/, settingsRoute], [/^\/api\/edhrec$/, edhrecRoute], [/^\/api\/proxies$/, proxiesRoute],
   [/^\/api\/img\/(?<size>[^/]+)\/(?<file>[^/]+)$/, imgRoute],
@@ -945,5 +948,48 @@ describe('typed client (src/app/lib/api.ts)', () => {
     const url = api.imageUrl(parsed.deck.commanders[0], 'display', 0);
     expect(url).toBe(`/api/img/display/${parsed.deck.commanders[0]}_0.webp`);
     expect((await request('GET', url)).status).toBe(404); // well-formed, just not on disk
+  });
+});
+
+describe('POST /api/network', () => {
+  it("returns the deck's network with a card for every node", async () => {
+    const deck = await imported('upgraded', 3);
+    const n = await call<api.NetworkResponse>('POST', '/api/network', { deck });
+    expect(n.nodes.length).toBeGreaterThan(50);
+    for (const node of n.nodes) expect(n.cards[node.oracleId]?.name, node.oracleId).toBeTruthy();
+    expect(n.cohesion).toBe(deckNetwork(deck, engineContext(deck).ctx).cohesion);
+  });
+
+  it('with a body that is not a deck is a 400', async () => {
+    expect((await request('POST', '/api/network', { deck: 'nope' })).status).toBe(400);
+    expect((await request('POST', '/api/network', 'not json')).status).toBe(400);
+  });
+
+  it('makes no request with EDHREC on and nothing cached', async () => {
+    await call('PUT', '/api/settings', { edhrecEnabled: true });
+    const spy = vi.fn(() => { throw new Error('no network'); });
+    vi.stubGlobal('fetch', spy);
+    try {
+      const deck = await imported('upgraded', 3);
+      expect((await request('POST', '/api/network', { deck })).status).toBe(200);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await call('PUT', '/api/settings', { edhrecEnabled: false });
+    }
+  });
+
+  it("deck tiles carry the network's cohesion", async () => {
+    const deck = await imported('upgraded', 3);
+    const saved = await call<DeckResponse>('POST', '/api/decks', { deck });
+    try {
+      const tile = (await call<api.DecksResponse>('GET', '/api/decks')).decks.find((d) => d.id === saved.deck.id)!;
+      expect(Number.isInteger(tile.cohesion)).toBe(true);
+      expect(tile.cohesion).toBeGreaterThanOrEqual(0);
+      expect(tile.cohesion).toBeLessThanOrEqual(100);
+      expect(tile.cohesion).toBe(deckNetwork(saved.deck, engineContext(saved.deck).ctx).cohesion);
+    } finally {
+      await request('DELETE', `/api/decks/${saved.deck.id}`);
+    }
   });
 });

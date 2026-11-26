@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DeckTile } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
+import { deckNetwork } from '@/engine/network';
 import { rateDeck } from '@/engine/rating';
 import { deckSize } from '@/engine/rules';
 import { ROLE_LABEL } from '@/engine/targets';
@@ -114,7 +115,7 @@ export function deleteDeck(id: string): boolean {
   return getDb().prepare('DELETE FROM decks WHERE id = ?').run(id).changes > 0;
 }
 
-type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'legal' | 'floor' | 'playsLike' | 'combos'>;
+type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'cohesion' | 'legal' | 'floor' | 'playsLike' | 'combos'>;
 
 /** Saved decks, newest first, with what a tile shows. Ratings are computed once per deck version. */
 export function listDecks(): DeckTile[] {
@@ -137,7 +138,7 @@ export function listDecks(): DeckTile[] {
     if (!n) {
       const rating = rateDeck(deck, ctx);
       const bracket = analyzeBracket(deck, ctx);
-      n = { cardCount: deckSize(deck), rating: rating.rating, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
+      n = { cardCount: deckSize(deck), rating: rating.rating, cohesion: deckNetwork(deck, ctx).cohesion, legal: rating.legal, floor: bracket.floor, playsLike: bracket.playsLike, combos: bracket.combos.included.length };
       numbers.set(key, n);
     }
     const lookup = cardLookup(deck.commanders);
