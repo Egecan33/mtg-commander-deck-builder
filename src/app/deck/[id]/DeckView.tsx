@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
-import type { CardScore, Deck, DeckEntry } from '@/engine/types';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import type { CardScore, Deck, DeckEntry, FoundCombo } from '@/engine/types';
 import { CardGrid } from '../../components/CardGrid';
+import { ComboRow } from '../../components/ComboRow';
 import { CardTile, LockIcon, unknownCard, type TileMark } from '../../components/CardTile';
 import { EmptyState } from '../../components/EmptyState';
 import { FilterBar, pickOption, type FilterOption } from '../../components/FilterBar';
@@ -23,12 +24,22 @@ const GROUPS: FilterOption[] = [
 
 interface Row { entry: DeckEntry; card: ClientCard | undefined; zone: 'commander' | 'companion' | 'main' }
 
+/** The combos the deck has and the ones a card short, as returned by the analysis. */
+export interface DeckCombos { included: FoundCombo[]; oneAway: FoundCombo[] }
+const COMBO_CAP = 5;
+
 const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead, combos, comboHeld, onPutIn,
 }: {
+  /** The deck's combos (null while the analysis loads: no Combos section yet). */
+  combos?: DeckCombos | null;
+  /** Boxes and built decks holding the cards a combo is missing. */
+  comboHeld?: HeldBy;
+  /** Put it in, on a combo one card away: opens that card's detail. */
+  onPutIn?: (id: string) => void;
   /** Shown before the deck's heading (Show card search, when it is hidden). */
   lead?: ReactNode;
   /** Extra actions for the whole deck, shown under the header. */
@@ -76,6 +87,36 @@ export function DeckView({
   }, [deck, lookup, grouping]);
 
   const empty = deck.main.length === 0;
+  const [allAway, setAllAway] = useState(false);
+  const leadZones = groups.filter((g) => g.rows[0]?.zone !== 'main').length;
+  const comboSection = combos ? (
+    <Section key="combos" id="deck-combos" title="Combos" count={combos.included.length} testId="deck-combos" data={{ 'data-complete': combos.included.length, 'data-one-away': combos.oneAway.length }}>
+      {combos.included.length === 0 ? (
+        <p className="text-ash" data-testid="combos-none">No combo in this deck yet.</p>
+      ) : (
+        <ul className="grid gap-2" data-testid="combos-complete">
+          {combos.included.map((f) => <ComboRow key={f.combo.id} found={f} lookup={lookup} onOpen={onOpen} />)}
+        </ul>
+      )}
+      {combos.oneAway.length > 0 && (
+        <div className="mt-4" data-testid="combos-one-away">
+          <h4 className="mb-2 text-[15px] font-semibold">
+            One card away <span className="ml-1 font-normal text-ash [font-variant-numeric:tabular-nums]">{combos.oneAway.length}</span>
+          </h4>
+          <ul className="grid gap-2">
+            {(allAway ? combos.oneAway : combos.oneAway.slice(0, COMBO_CAP)).map((f) => (
+              <ComboRow key={f.combo.id} found={f} lookup={lookup} heldBy={comboHeld} onOpen={onOpen} onPutIn={onPutIn} />
+            ))}
+          </ul>
+          {combos.oneAway.length > COMBO_CAP && (
+            <button type="button" className="btn btn-sm btn-quiet mt-2" onClick={() => setAllAway(!allAway)}>
+              {allAway ? 'Show fewer' : `Show all ${combos.oneAway.length}`}
+            </button>
+          )}
+        </div>
+      )}
+    </Section>
+  ) : null;
 
   const tile = ({ entry, card, zone }: Row) => {
     const id = entry.oracleId;
@@ -196,9 +237,10 @@ export function DeckView({
               />
             )}
 
-            {groups.map((g) => (
+            {groups.map((g, i) => (
+              <Fragment key={g.label}>
+              {i === leadZones && comboSection}
               <Section
-                key={g.label}
                 id={sectionId(g.label)}
                 title={g.label}
                 count={g.rows.reduce((s, r) => s + r.entry.qty, 0)}
@@ -213,7 +255,9 @@ export function DeckView({
                   </ul>
                 )}
               </Section>
+              </Fragment>
             ))}
+            {leadZones >= groups.length && comboSection}
           </div>
         </div>
       </JumpScope>

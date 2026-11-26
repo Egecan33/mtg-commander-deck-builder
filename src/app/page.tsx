@@ -150,6 +150,7 @@ export default function DecksPage() {
                     {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
                     {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
                     {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
+                    {d.combos > 0 && <span className="chip" data-testid="tile-combos">{d.combos} {d.combos === 1 ? 'combo' : 'combos'}</span>}
                   </div>
                 </div>
               </button>

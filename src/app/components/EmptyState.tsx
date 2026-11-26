@@ -13,7 +13,7 @@ export function EmptyState({
 }) {
   return (
     <div className={`rounded-[6px] border border-dashed border-slag px-4 py-3.5 ${className}`} data-testid={testId}>
-      {title && <p className="display text-[15px] text-bone">{title}</p>}
+      {title && <p className="text-[15px] font-medium text-bone">{title}</p>}
       <p className={`max-w-[60ch] text-ash ${title ? 'mt-1' : ''}`}>{message}</p>
       {action && <div className="mt-2.5">{action}</div>}
     </div>

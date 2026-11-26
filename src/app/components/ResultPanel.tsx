@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState, type ReactNode } from 'react';
 import type { CardLookup, HeldBy } from '../lib/api';
+import { fmtRatingChange } from '../lib/ui';
 import { CardImage } from './card';
 import { HeldMark } from './held';
 
@@ -45,13 +46,6 @@ function Line({ lead, summary, reason, base }: { lead?: ReactNode; summary?: str
 }
 
 const STRIP = 24;
-
-/** "88 → 91", with one decimal when whole numbers would hide the change. */
-function ratingText(before: number, after: number): string {
-  const fine = Math.round(before) === Math.round(after) && before !== after;
-  const f = (n: number) => (fine ? n.toFixed(1) : String(Math.round(n)));
-  return `Rating ${f(before)} → ${f(after)}`;
-}
 
 const kindOf = (c: Change) => (c.out === '' ? 'add' : c.in === '' ? 'cut' : 'swap');
 const cards = (n: number) => `${n} ${n === 1 ? 'card' : 'cards'}`;
@@ -110,7 +104,7 @@ export function ResultPanel({
         <div className="min-w-0 flex-1" role="status">
           <h2 className="text-[18px] leading-tight" data-testid={`${base}-title`}>{title}</h2>
           {before !== undefined && after !== undefined && (
-            <p className="mt-0.5 text-[13px] text-ash" data-testid={`${base}-rating`}>{ratingText(before, after)}</p>
+            <p className="mt-0.5 text-[13px] text-ash" data-testid={`${base}-rating`}>Rating {fmtRatingChange(before, after)}</p>
           )}
         </div>
         <div className="flex shrink-0 gap-1.5">

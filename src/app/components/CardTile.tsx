@@ -8,8 +8,8 @@ import { CardImage } from './card';
 import { HeldMark, heldText } from './held';
 
 export type { TileSize } from '../lib/filters';
-/** `in-deck`: a search result that is already in the open deck. */
-export type TileMark = 'weakest' | 'locked' | 'illegal' | 'in-deck';
+/** `in-deck`: a search result that is already in the open deck. `missing`: the card a combo still needs (dashed outline, "Missing"). */
+export type TileMark = 'weakest' | 'locked' | 'illegal' | 'in-deck' | 'missing';
 export interface TileStat { label: string; value: string; title?: string }
 export type DataAttrs = { [k: `data-${string}`]: string | number | boolean | undefined };
 
@@ -54,6 +54,7 @@ const OUTLINE: Partial<Record<TileMark, string>> = {
   illegal: 'outline outline-2 outline-band-low',
   weakest: 'outline outline-2 outline-band-mid',
   'in-deck': 'outline outline-2 outline-ash',
+  missing: 'outline outline-2 outline-dashed outline-ash',
 };
 
 /**
@@ -90,14 +91,16 @@ export function CardTile({
   const name = card.name;
   const held = heldBy && heldBy.length > 0 ? heldBy : undefined;
   const has = (m: TileMark) => marks.includes(m);
-  const outline = has('illegal') ? OUTLINE.illegal : has('weakest') ? OUTLINE.weakest : has('in-deck') ? OUTLINE['in-deck'] : '';
+  const outline = has('illegal') ? OUTLINE.illegal : has('weakest') ? OUTLINE.weakest : has('in-deck') ? OUTLINE['in-deck'] : has('missing') ? OUTLINE.missing : '';
   const word = has('illegal')
     ? { text: 'Not legal', cls: 'text-band-low' }
     : has('weakest')
       ? { text: 'weakest', cls: 'text-band-mid' }
       : has('in-deck')
         ? { text: status ?? 'In deck', cls: 'text-bone' }
-        : null;
+        : has('missing')
+          ? { text: 'Missing', cls: 'text-bone' }
+          : null;
   const title = gate && (has('illegal') || dim)
     ? `${name}: ${gate}`
     : has('weakest')

@@ -1,0 +1,17 @@
+Mono path[0] = '/Applications/MTGA.app/Contents/Resources/Data/Managed'
+DETAILED LOGS: ENABLED
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+[UnityCrossThreadLogger]Client.SceneChange {"fromSceneName":"Store","toSceneName":"DeckListViewer"}
+[UnityCrossThreadLogger]==> StartHook {"id":"11111111-2222-3333-4444-555555555555","request":"{}"}
+[UnityCrossThreadLogger]11/22/2026 8:02:11 PM
+<== StartHook(11111111-2222-3333-4444-555555555555)
+{"InventoryInfo":{"SeqId":1,"Gems":250,"Gold":1300,"WildCardCommons":4,"WildCardUnCommons":3,"WildCardRares":1,"Boosters":[]},"DeckSummariesCacheVersion":7,"DeckSummaries":[{"DeckIdInternal":"aaaaaaaa-0000-0000-0000-000000000001","Name":"Goblins Everywhere!","Attributes":[{"name":"Format","value":"HistoricBrawl"}],"Description":"","DeckTileId":72401,"DeckArtId":0,"PreferredCosmetics":{}},{"DeckIdInternal":"aaaaaaaa-0000-0000-0000-000000000002","Name":"New Deck","Attributes":[],"Description":""},{"DeckIdInternal":"aaaaaaaa-0000-0000-0000-000000000009","Name":"?=?Loc/Decks/Precon/2022_WC/Player1","Attributes":[{"name":"Format","value":"Standard"}],"Description":""}],"DecksCacheVersion":7,"DecksInternal":{"aaaaaaaa-0000-0000-0000-000000000001":{"MainDeck":[{"cardId":60235,"quantity":1},{"cardId":77521,"quantity":4},{"cardId":70464,"quantity":1}],"Sideboard":[{"cardId":77521,"quantity":1}],"CommandZone":[{"cardId":72401,"quantity":1}],"Companions":[],"CardSkins":[]},"aaaaaaaa-0000-0000-0000-000000000002":{"MainDeck":[{"cardId":98688,"quantity":1},{"cardId":77584,"quantity":2}]},"aaaaaaaa-0000-0000-0000-000000000009":{"MainDeck":[{"cardId":55555,"quantity":4}]}}}
+[UnityCrossThreadLogger]==> Deck_UpsertDeckV2 {"id":"66666666-2222-3333-4444-555555555555","request":"{\"Summary\":{\"DeckId\":\"aaaaaaaa-0000-0000-0000-000000000003\",\"Name\":\"Lands\"},\"Deck\":{\"MainDeck\":[{\"cardId\":70466,\"quantity\":2}],\"Sideboard\":[],\"CommandZone\":[],\"Companions\":[]}}"}
+<== EventGetCoursesV2(77777777-2222-3333-4444-555555555555)
+{"Courses":[{"CourseId":"bbbbbbbb-0000-0000-0000-000000000001","InternalEventName":"QuickDraft_FDN_20261101","CurrentModule":"DeckSelect","CourseDeckSummary":{"DeckId":"cccccccc-0000-0000-0000-000000000001","Name":"?=?Loc/Decks/Precon/Event_Loaner","Attributes":[]},"CourseDeck":{"MainDeck":[{"cardId":77777,"quantity":3}],"Sideboard":[],"CommandZone":[],"Companions":[],"CardSkins":[]},"CardPool":[93917,68766,80858,80858]},{"CourseId":"bbbbbbbb-0000-0000-0000-000000000002","InternalEventName":"Ladder","CardPool":[]}]}
+<== DeckGetAllPreconDecksV3(99999999-2222-3333-4444-555555555555)
+{"CacheVersion":-1242307562,"PreconDecks":[{"Summary":{"DeckId":"dddddddd-0000-0000-0000-000000000001","Name":"?=?Loc/Decks/Precon/FNM_Brawl_Kaza","Attributes":[]},"Deck":{"MainDeck":[{"cardId":66666,"quantity":4}],"Sideboard":[],"CommandZone":[{"cardId":66667,"quantity":1}],"Companions":[],"CardSkins":[]}}]}
+<== BotDraftDraftPick(88888888-2222-3333-4444-555555555555)
+{"CurrentModule":"BotDraft","Payload":"{\"Result\":\"Success\",\"PickedCards\":[\"79417\"]}"}
+[UnityCrossThreadLogger]this line has a brace { but is not JSON
+{"truncated": [1, 2

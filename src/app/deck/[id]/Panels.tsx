@@ -1,11 +1,13 @@
 'use client';
 
-import { useRef, useState, type ReactNode } from 'react';
-import type { Bracket, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { Bracket, CardScore, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
+import { CardTile, unknownCard } from '../../components/CardTile';
+import { EmptyState } from '../../components/EmptyState';
 import { CardImage, ColorPip, Gauge } from '../../components/card';
 import { HeldMark, heldText } from '../../components/held';
-import type { AnalyzeResponse, CardLookup, ConflictReport, HeldBy } from '../../lib/api';
-import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules } from '../../lib/ui';
+import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
+import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
 export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve';
 
@@ -152,13 +154,15 @@ const WANTED: { role: Role; label: string }[] = [
 ];
 
 export function RatingPanel({
-  analysis, deck, lookup, busy, onFix, onOpen, onAddOne, onWanted,
+  analysis, deck, lookup, busy, onFix, onFixPart, onOpen, onAddOne, onWanted,
 }: {
   analysis: AnalyzeResponse;
   deck: Deck;
   lookup: CardLookup;
   busy: string | null;
   onFix: (fix: Fix) => void;
+  /** Fix deck for one part of the rating (shown beside a part that has fixes Fix deck can act on). */
+  onFixPart: (key: RatingKey) => void;
   onOpen: (id: string) => void;
   onAddOne: (role: Role) => void;
   /** Sets the wanted count of a role on the deck; null puts it back to the bracket's default. */
@@ -207,12 +211,34 @@ export function RatingPanel({
         <ul className="grid gap-3.5">
           {rating.subscores.map((s) => {
             const pct = Math.round(s.value * 100);
+            const fixable = s.fixes.some((f) => f.actionable);
+            const fixing = busy === `fix:${s.key}`;
             return (
               <li key={s.key} data-testid="subscore" data-key={s.key}>
                 <div className="flex items-baseline gap-2">
                   <span className="font-medium">{s.label}</span>
                   <span className="text-[0.75rem] text-smoke">{s.weight <= 1 ? Math.round(s.weight * 100) : s.weight}% of the rating</span>
-                  <span className="display ml-auto text-[1.05rem] font-bold" style={{ color: BAND_VAR[bandOf(pct)] }}>{pct}</span>
+                  <span className="ml-auto flex items-baseline gap-2">
+                    {fixable && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={!!busy || deck.commanders.length === 0}
+                        onClick={() => onFixPart(s.key as RatingKey)}
+                        aria-label={`${fixing ? 'Fixing' : 'Fix'} ${s.label.toLowerCase()}`}
+                        title={
+                          deck.commanders.length === 0
+                            ? 'Choose a commander first'
+                            : `Fix ${s.label.toLowerCase()} alone: swaps that bring in what this part asks for, with the same card options as Fix deck. Undo puts the deck back.`
+                        }
+                        data-testid="fix-part"
+                        data-part={s.key}
+                      >
+                        {fixing ? 'Fixing' : 'Fix'}
+                      </button>
+                    )}
+                    <span className="display text-[1.05rem] font-bold" style={{ color: BAND_VAR[bandOf(pct)] }}>{pct}</span>
+                  </span>
                 </div>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-iron">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: BAND_VAR[bandOf(pct)] }} />
@@ -320,45 +346,206 @@ export function RatingPanel({
 }
 
 // ---------------------------------------------------------------------------------------------
+// Card detail: put a card in instead of a deck card
+
+/** Why a card gets no "Put it in instead of" list: a short lead ("You do not own it.") and what would change it. */
+export interface NotInReason { lead: string; hint?: string }
+
+/**
+ * Why the swap suggestions rule a card out, from what the page already knows: the card's gate for this
+ * deck, the card options (only my collection, free copies only, price limit) and the boxes and built
+ * decks holding its copies. null when none of them does. Basic lands pass every card option.
+ */
+export function whyNotIn(
+  card: ClientCard,
+  o: { gate: string | null; basic: boolean; ownedOnly: boolean; freeOnly: boolean; maxPriceUsd: number | null; held?: readonly string[] },
+): NotInReason | null {
+  if (o.gate) return { lead: 'Not legal in this deck.', hint: o.gate };
+  if (o.basic) return null;
+  if (o.ownedOnly && !card.owned) return { lead: 'You do not own it.', hint: 'Untick “Only my collection” to see the cards it could replace.' };
+  if (o.ownedOnly && o.freeOnly && o.held && o.held.length > 0) {
+    return { lead: `Held by ${o.held.join(', ')}.`, hint: 'No free copy is left for this deck. Untick “Use free copies only” to see the cards it could replace.' };
+  }
+  if (o.maxPriceUsd !== null && !(card.priceUsd !== null && card.priceUsd <= o.maxPriceUsd)) {
+    return {
+      lead: 'Over your price limit.',
+      hint: `${card.priceUsd === null ? 'It has no price on record' : `It costs ${fmtPrice(card.priceUsd)}`}; the limit set under Improve is ${fmtPrice(o.maxPriceUsd)}.`,
+    };
+  }
+  return null;
+}
+/** The reason when nothing above rules the card out and the deck still has no card to give up for it. */
+const NO_ROOM: NotInReason = { lead: 'No card in the deck can make room for it.' };
+
+/** "+1.4 · rating 77 → 79": the change with its sign, then the ratings (one decimal when whole numbers would hide it). */
+function RatingChange({ p }: { p: SwapProposal }) {
+  const d = Math.round((p.ratingAfter - p.ratingBefore) * 10) / 10;
+  return (
+    <span className="tabular-nums" data-testid="swapin-delta" data-delta={d}>
+      <span className={d > 0 ? 'text-bone' : 'text-ash'}>{d > 0 ? `+${d.toFixed(1)}` : d < 0 ? `−${Math.abs(d).toFixed(1)}` : '±0'}</span>
+      <span className="text-smoke"> · rating {fmtRatingChange(p.ratingBefore, p.ratingAfter)}</span>
+    </span>
+  );
+}
+
+const SWAPIN_SHOWN = 5;
+
+/**
+ * "Put it in instead of" in the card detail of a card that is not in the deck (or one more basic land):
+ * up to five deck cards it could replace, best rating after the swap first, each with its rating
+ * change, the engine's objection when it disagrees (still allowed) and the "!" of the copy the new
+ * card would take; each row's Swap applies it. Under 100 cards "Add without cutting" comes first and
+ * applies the plain-add proposal through `onSwap` (so it gets the same result panel and Undo; before
+ * the list is there it falls back to `add.onAdd`); at 100 the plain add stays as a quiet "Add it
+ * anyway". When the list is empty it says why.
+ */
+export function PutItIn({
+  card, count, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
+}: {
+  card: ClientCard;
+  /** Cards in the deck now. */
+  count: number;
+  /** A basic land already in the deck: the section offers one more copy. */
+  another: boolean;
+  /** The suggestions for this card; `list` is null while they load. */
+  state: { list: SwapProposal[] | null; heldBy: HeldBy; error?: string } | null;
+  /** Set when the card options or the card's gate rule it out (no request is made then). */
+  why: NotInReason | null;
+  lookup: CardLookup;
+  /** The deck's own "!" (cards it takes from boxes and built decks). */
+  deckHeld: HeldBy;
+  scoreOf: (id: string) => CardScore | undefined;
+  /** Applies a proposal: a swap, or the plain add (`out` ''). */
+  onSwap: (p: SwapProposal) => void;
+  /** The plain add, for a card not in the deck yet ("Add it anyway", and "Add without cutting" while the list loads). */
+  add?: { onAdd: () => void; disabled: boolean };
+  /** Scrolls the section into view once its list is there (opened from the card search's "+" on a full deck). */
+  reveal?: boolean;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  const list = why ? [] : (state?.list ?? null);
+  const loading = list === null && !state?.error;
+  const swaps = (list ?? []).filter((p) => p.out !== '' && p.out !== p.in).slice(0, SWAPIN_SHOWN);
+  const plain = list?.find((p) => p.out === '');
+  const open = count < 100;
+  const inHeld = state?.heldBy[card.oracleId];
+  const best = open ? -1 : swaps.findIndex((p) => p.agrees !== false);
+  const reason = why ?? NO_ROOM;
+  useEffect(() => {
+    if (reveal && !loading) ref.current?.scrollIntoView({ block: 'nearest' });
+  }, [reveal, loading]);
+
+  return (
+    <section ref={ref} className="mt-5 border-t border-slag pt-4" aria-label={another ? 'Put another in instead of' : 'Put it in instead of'} data-testid="swapin" data-state={loading ? 'loading' : state?.error ? 'error' : swaps.length > 0 ? 'ready' : 'empty'}>
+      <div className="flex items-baseline gap-2">
+        <h3 className="display text-[18px] leading-tight">{another ? 'Put another in instead of' : 'Put it in instead of'}</h3>
+        {swaps.length > 0 && <span className="text-[13px] tabular-nums text-smoke">{swaps.length}</span>}
+      </div>
+      {!why && (
+        <p className="mt-0.5 text-[13px] text-ash">
+          {open && add
+            ? `The deck has ${count} cards, so it can go in without a cut, or in place of a deck card. Best rating after the swap first.`
+            : open
+              ? 'Or in place of a deck card. Best rating after the swap first.'
+              : `The deck has ${count} cards: pick the card it replaces. Best rating after the swap first.`}
+        </p>
+      )}
+
+      {add && open && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            disabled={add.disabled}
+            onClick={() => (plain ? onSwap(plain) : add.onAdd())}
+            title={`Put ${card.name} in an open slot; nothing is cut. Undo takes it out again.`}
+            data-testid="detail-add"
+          >
+            Add without cutting
+          </button>
+          {plain && <RatingChange p={plain} />}
+        </div>
+      )}
+
+      {loading && <p className="mt-3 text-[13px] text-ash" data-testid="swapin-loading">Looking for the deck cards it could replace</p>}
+      {state?.error && !why && (
+        <p className="mt-3 text-[13px] text-band-low" role="alert">The suggestions could not be worked out: {state.error}</p>
+      )}
+      {!loading && !state?.error && swaps.length === 0 && (
+        <EmptyState
+          className="mt-3"
+          testId="swapin-empty"
+          message={
+            <>
+              <span className="text-bone">{reason.lead}</span>
+              {reason.hint && <> {reason.hint}</>}
+            </>
+          }
+        />
+      )}
+
+      {swaps.length > 0 && (
+        <ul className="mt-3 grid gap-2.5" data-testid="swapin-list">
+          {swaps.map((p, i) => {
+            const known = lookup[p.out];
+            const out = known ?? unknownCard(p.out);
+            const s = scoreOf(p.out);
+            return (
+              <li key={p.out} className="flex items-center gap-3" data-testid="swapin-row" data-out={p.out} data-name={out.name} data-agrees={p.agrees === false ? 'false' : 'true'}>
+                <div className="w-[52px] shrink-0">
+                  <CardTile card={out} size="S" known={!!known} score={s && !s.gate ? Math.round(s.score) : null} heldBy={deckHeld[p.out]} />
+                </div>
+                <div className="min-w-0 flex-1 text-[13px] leading-snug">
+                  <p className="text-bone">Take out {out.name}</p>
+                  <p className="flex flex-wrap items-center gap-x-2">
+                    <RatingChange p={p} />
+                    {inHeld && inHeld.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-ash" data-testid="swapin-held">
+                        <HeldMark names={inHeld} small />
+                        Held by {inHeld.join(', ')}
+                      </span>
+                    )}
+                  </p>
+                  {p.agrees === false && p.objection && (
+                    <p className="text-band-mid" data-testid="swapin-objection">Not recommended: {p.objection}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className={`btn btn-sm shrink-0 ${i === best ? 'btn-primary' : ''}`}
+                  onClick={() => onSwap(p)}
+                  aria-label={`Swap ${out.name} for ${card.name}`}
+                  title={`Take out ${out.name} and put in ${card.name}. Undo puts it back.`}
+                  data-testid="swapin-apply"
+                >
+                  Swap
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {add && !open && (
+        <button
+          type="button"
+          className="btn btn-sm btn-quiet mt-2"
+          disabled={add.disabled}
+          onClick={add.onAdd}
+          title={`The deck goes to ${count + 1} cards and is not legal until one comes out`}
+          data-testid="detail-add"
+        >
+          Add it anyway ({count + 1} cards)
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
 // Bracket
 
-function ComboRow({ found, lookup, onOpen }: { found: FoundCombo; lookup: CardLookup; onOpen: (id: string) => void }) {
-  const missing = new Set(found.missing);
-  return (
-    <li className="rounded-md border border-slag bg-soot p-2.5" data-testid="combo">
-      <div className="flex flex-wrap gap-2 pb-1">
-        {found.combo.cards.map((c) => (
-          <Thumb key={c.oracleId} id={c.oracleId} lookup={lookup} onOpen={onOpen} width={58} dim={missing.has(c.oracleId)} label={missing.has(c.oracleId) ? 'missing' : c.mustBeCommander ? 'commander' : undefined} />
-        ))}
-      </div>
-      <p className="mt-1.5 text-[0.84rem]">{found.combo.produces.slice(0, 3).join(', ') || 'Combo'}</p>
-      <p className="text-[0.76rem] text-smoke">
-        {[found.twoCard ? 'two cards' : `${found.combo.cards.length} cards`, found.early ? 'can come down early' : null, `needs ${found.combo.manaValueNeeded} mana`, found.relevant ? null : 'does not win on its own']
-          .filter(Boolean)
-          .join(', ')}
-      </p>
-    </li>
-  );
-}
-
-function ComboList({ title, items, lookup, onOpen, none }: { title: string; items: FoundCombo[]; lookup: CardLookup; onOpen: (id: string) => void; none: string }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? items : items.slice(0, 5);
-  return (
-    <Section title={title} aside={items.length ? String(items.length) : undefined}>
-      {items.length === 0 ? <p className="text-ash">{none}</p> : (
-        <>
-          <ul className="grid gap-2">{shown.map((f) => <ComboRow key={f.combo.id} found={f} lookup={lookup} onOpen={onOpen} />)}</ul>
-          {items.length > 5 && (
-            <button type="button" className="btn btn-sm btn-quiet mt-2" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${items.length}`}</button>
-          )}
-        </>
-      )}
-    </Section>
-  );
-}
-
-export function BracketPanel({ analysis, deck, lookup, onOpen }: { analysis: AnalyzeResponse; deck: Deck; lookup: CardLookup; onOpen: (id: string) => void }) {
+export function BracketPanel({ analysis, deck, lookup, onOpen, onShowCombos }: { analysis: AnalyzeResponse; deck: Deck; lookup: CardLookup; onOpen: (id: string) => void; onShowCombos: () => void }) {
   const b = analysis.bracket;
   const [allViolations, setAllViolations] = useState(false);
   const violations = allViolations ? b.violationsOfTarget : b.violationsOfTarget.slice(0, 6);
@@ -424,8 +611,14 @@ export function BracketPanel({ analysis, deck, lookup, onOpen }: { analysis: Ana
         )}
       </Section>
 
-      <ComboList title="Combos in the deck" items={b.combos.included} lookup={lookup} onOpen={onOpen} none="No complete combo in the list." />
-      <ComboList title="One card away" items={b.combos.oneAway} lookup={lookup} onOpen={onOpen} none="No combo is a single card short." />
+      <Section title="Combos">
+        <p className="text-[0.86rem]" data-testid="combo-summary">
+          {b.combos.included.length === 0 ? 'No combo in the deck' : `${b.combos.included.length} ${b.combos.included.length === 1 ? 'combo' : 'combos'} in the deck`}
+          {b.combos.oneAway.length > 0 && `, ${b.combos.oneAway.length} one card away`}
+          {'. '}
+          <button type="button" className="text-brass hover:underline" onClick={onShowCombos} data-testid="combo-summary-link">Show them in the deck</button>
+        </p>
+      </Section>
     </div>
   );
 }
@@ -524,7 +717,7 @@ export const GOAL_CHIPS: { id: GoalChip; label: string; roles: Role[] }[] = [
 ];
 
 export interface ImproveOptions {
-  bracket: Bracket | 'keep'; ownedOnly: boolean; maxPrice: string;
+  bracket: Bracket | 'keep'; maxPrice: string;
   /** "Change at most N cards", as typed. */
   maxSwaps: string;
   goals: GoalChip[];
@@ -546,13 +739,17 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, showFreeOnly, showPrice = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, showPrice = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
   /** False for an MTG Arena deck: its budget is the wildcards ("Only what I can craft"), not a price. */
   showPrice?: boolean;
   /** Name of the active collection, for the owned-only box. */
   collectionName: string | null;
+  /** "Only my collection", the shared filter (the header's box shows and sets the same value). */
+  ownedOnly: boolean;
+  /** Sets (and remembers) "Only my collection". */
+  onOwnedOnly: (on: boolean) => void;
   /** The active collection can have boxes and built decks, so "Use free copies only" applies. */
   showFreeOnly: boolean;
   /** "Use free copies only" (with owned-only: copies held by boxes and other built decks do not count). */
@@ -652,18 +849,18 @@ export function ImprovePanel({
             </label>
           )}
           <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOptions({ ...options, ownedOnly: e.target.checked })} data-testid="improve-owned" />
+            <input type="checkbox" checked={ownedOnly} onChange={(e) => onOwnedOnly(e.target.checked)} data-testid="improve-owned" />
             <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>
           </label>
           {showFreeOnly && (
-            <label className={`flex items-center gap-2 pl-6 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`} title="Leave out copies that are sealed in a box or in another built deck">
-              <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => onFreeOnly(e.target.checked)} data-testid="improve-free-only" />
+            <label className={`flex items-center gap-2 pl-6 ${ownedOnly ? 'cursor-pointer' : 'text-smoke'}`} title="Leave out copies that are sealed in a box or in another built deck">
+              <input type="checkbox" checked={freeOnly} disabled={!ownedOnly} onChange={(e) => onFreeOnly(e.target.checked)} data-testid="improve-free-only" />
               <span>Use free copies only</span>
             </label>
           )}
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" className="btn btn-primary" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('improve')} data-testid="improve-run">
+          <button type="button" className="btn" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('improve')} data-testid="improve-run">
             {busy === 'improve' ? 'Working it out' : 'Find improvements'}
           </button>
           <button type="button" className="btn" disabled={!!busy || deck.commanders.length === 0} onClick={() => onRun('swaps')} title="A few stand-alone swaps for the weakest cards" data-testid="suggest-swaps">

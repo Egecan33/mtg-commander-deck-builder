@@ -4,6 +4,7 @@ dist/
 release/
 data/
 *.log
+!tests/fixtures/**/*.log
 .DS_Store
 
 # tooling

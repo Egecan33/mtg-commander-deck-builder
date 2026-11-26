@@ -252,6 +252,12 @@ export function activeFilterCount(q: BrowserQuery): number {
 
 export const fmtPrice = (usd: number | null): string => (usd === null ? 'no price' : `$${usd < 10 ? usd.toFixed(2) : usd.toFixed(0)}`);
 export const fmtInt = (n: number): string => n.toLocaleString('en-US');
+/** "77 → 79": a rating before and after, with one decimal when whole numbers would hide the change. */
+export function fmtRatingChange(before: number, after: number): string {
+  const fine = Math.round(before) === Math.round(after) && before !== after;
+  const f = (n: number) => (fine ? n.toFixed(1) : String(Math.round(n)));
+  return `${f(before)} → ${f(after)}`;
+}
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const d = new Date(iso);
