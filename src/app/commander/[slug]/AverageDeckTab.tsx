@@ -88,7 +88,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
           </div>
         </div>
       )}
-      {view === 'packages' && <CommanderPackages avg={avg} />}
+      {view === 'packages' && <CommanderPackages avg={avg} wanted onWanted={() => undefined} />}
       {view === 'cards' && <DeckView
         deck={deck}
         lookup={analysis.cards}

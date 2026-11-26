@@ -8,11 +8,12 @@ import type { Deck } from '@/engine/types';
 import { shellDeck } from './shell';
 
 export interface AverageDeck { deck: Deck | null; analysis: AnalyzeResponse | null; error: string | null; empty: boolean }
+const BUILD_DELAY_MS = 350;
 const NONE: AverageDeck = { deck: null, analysis: null, error: null, empty: false };
 
 /**
  * The deck Build a deck would make for these commanders and filters (the same options and seed, so
- * the same deck), with its analysis. Built once per filter set and EDHREC state per visit, and only while `enabled`.
+ * the same deck), with its analysis. Built once per filter set and EDHREC state per visit (a result is shared by every tab that shows it), and only while `enabled`.
  */
 export function useAverageDeck(commanders: string[], name: string, q: RecsQuery, enabled: boolean, free: boolean, edhrec: string): AverageDeck {
   const memo = useRef(new Map<string, AverageDeck>());
@@ -21,7 +22,8 @@ export function useAverageDeck(commanders: string[], name: string, q: RecsQuery,
   useEffect(() => {
     if (!enabled || commanders.length === 0 || memo.current.has(key)) return;
     const ctrl = new AbortController();
-    (async () => {
+    // A short wait first: a flurry of filter changes builds once, for the last of them (a started build cannot be cancelled on the server).
+    const timer = setTimeout(async () => {
       try {
         const built = await buildDeck(shellDeck(commanders, q.bracket, name, q.color ?? null, q.arenaFormat), 'auto', {
           ownedOnly: q.ownedOnly, freeOnly: (q.ownedOnly && free) || undefined, maxPriceUsd: budgetMax(q.budget), seed: 1,
@@ -38,8 +40,8 @@ export function useAverageDeck(commanders: string[], name: string, q: RecsQuery,
         memo.current.set(key, { ...NONE, error: e instanceof Error ? e.message : String(e) });
       }
       bump((n) => n + 1);
-    })();
-    return () => ctrl.abort();
+    }, BUILD_DELAY_MS);
+    return () => { clearTimeout(timer); ctrl.abort(); };
   }, [enabled, key, commanders, name, q, free]);
   return memo.current.get(key) ?? NONE;
 }

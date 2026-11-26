@@ -28,7 +28,7 @@ function RoleBar({ label, count, lo, hi, max }: { label: string; count: number; 
   );
 }
 
-export function ChartsTab({ avg, name, bracket }: { avg: AverageDeck; name: string; bracket: number }) {
+export function ChartsTab({ avg, name, bracket }: { avg: AverageDeck; name: string; bracket: number | null }) {
   if (avg.error) return <EmptyState message={`Could not build the average deck: ${avg.error}`} />;
   if (avg.empty) {
     return (
@@ -73,7 +73,7 @@ export function ChartsTab({ avg, name, bracket }: { avg: AverageDeck; name: stri
           ))}
         </div>
       </Section>
-      <Section id="chart-roles" title={`Roles against Bracket ${bracket}'s bands`} testId="chart-roles">
+      <Section id="chart-roles" title={bracket === null ? "Roles against the deck's bands" : `Roles against Bracket ${bracket}'s bands`} testId="chart-roles">
         <div className="grid gap-1">
           {d.roles.map((r) => <RoleBar key={r.role} label={r.label} count={r.count} lo={r.band.lo} hi={r.band.hi} max={maxRole} />)}
         </div>

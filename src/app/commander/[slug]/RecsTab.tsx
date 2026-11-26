@@ -39,13 +39,17 @@ function EmptyAction({ text }: { text: string }) {
   return null;
 }
 
-export function RecsTab({ data, name, edhrecDecks, avg }: { data: CommanderRecsResponse; name: string; edhrecDecks?: number; avg: AverageDeck }) {
+export function RecsTab({ data, name, edhrecDecks, avg, packagesWanted, onWantPackages, std = false }: {
+  data: CommanderRecsResponse; name: string; edhrecDecks?: number; avg: AverageDeck; packagesWanted: boolean; onWantPackages: () => void; std?: boolean;
+}) {
   const f = useFilters();
   const [detail, setDetail] = useState<string | null>(null);
   const groupBy = pickOption(f.groupBy, REC_GROUPS) as GroupBy;
   const sort = pickOption(f.sort, REC_SORTS) as RecSort;
   const sections = useMemo(() => arrangeRecs(data.sections, data.cards, data.scores, groupBy, sort), [data, groupBy, sort]);
   const bracket = data.query.bracket;
+  // The package plan follows the owned section, or the last one when the cards are grouped another way.
+  const packagesAt = groupBy === 'category' && sections.some((s) => s.id === 'owned') ? sections.findIndex((s) => s.id === 'owned') : sections.length - 1;
 
   const stats = (c: RecCard): TileStat[] => {
     const out: TileStat[] = [{ label: 'syn', value: `${c.synergy}%`, title: `Forge: synergy with ${name}` }];
@@ -72,7 +76,7 @@ export function RecsTab({ data, name, edhrecDecks, avg }: { data: CommanderRecsR
               <li key={c.oracleId} className="grid grid-cols-[minmax(0,1fr)_7rem_3rem_3.5rem_8rem_4.5rem_1.5rem] items-center gap-3 bg-anvil px-3 py-1.5" data-testid="rec-row">
                 <button type="button" className="truncate text-left hover:text-brass" onClick={() => setDetail(c.oracleId)}>{card.name}</button>
                 <span className="text-ash"><Mana cost={card.manaCost} /></span>
-                <span title={`Forge: ${data.scores[c.oracleId]?.score} of 100 in a ${name} deck at Bracket ${bracket}`}>{data.scores[c.oracleId]?.score}</span>
+                <span title={`Forge: ${data.scores[c.oracleId]?.score} of 100 in a ${name} deck${std ? '' : ` at Bracket ${bracket}`}`}>{data.scores[c.oracleId]?.score}</span>
                 <span className="text-ash" title={`Forge: synergy with ${name}`}>{c.synergy}%</span>
                 <span className="text-ash">{c.edhrec ? <span title={`EDHREC: in ${c.edhrec.decks} decks`}>{c.edhrec.inclusion}%{c.edhrec.lift !== null ? ` · lift ${c.edhrec.lift.toFixed(1)}` : ''}</span> : ''}</span>
                 <span className="text-right text-ash" title="Scryfall price">{fmtPrice(card.priceUsd)}</span>
@@ -97,7 +101,7 @@ export function RecsTab({ data, name, edhrecDecks, avg }: { data: CommanderRecsR
               card={card}
               size={f.size}
               score={data.scores[c.oracleId]?.score}
-              scoreTitle={`Forge: ${data.scores[c.oracleId]?.score} of 100 in a ${name} deck at Bracket ${bracket}`}
+              scoreTitle={`Forge: ${data.scores[c.oracleId]?.score} of 100 in a ${name} deck${std ? '' : ` at Bracket ${bracket}`}`}
               stats={stats(c)}
               heldBy={data.heldBy[c.oracleId]}
               onOpen={() => setDetail(c.oracleId)}
@@ -113,16 +117,16 @@ export function RecsTab({ data, name, edhrecDecks, avg }: { data: CommanderRecsR
       <div className="grid grid-cols-[11rem_minmax(0,1fr)] gap-6" data-testid="recs">
         <JumpRail className="sticky top-[var(--cmd-bar,6rem)] self-start" />
         <div className="min-w-0">
-          {sections.map((s) => (
+          {sections.map((s, i) => (
             <Fragment key={s.id}>
               <Section id={`rec-${s.id}`} title={s.title} count={s.total} cap={30} data={{ 'data-section': s.id }}>
                 {s.note && <p className="mb-2 text-[13px] text-ash">{s.note}</p>}
                 {body(s)}
                 {s.total > s.cards.length && <p className="mt-2 text-[13px] text-ash" data-testid="rec-capped">Showing the first {s.cards.length} of {fmtInt(s.total)}. Narrow the filters to see the rest.</p>}
               </Section>
-              {groupBy === 'category' && s.id === 'owned' && (
+              {i === packagesAt && (
                 <Section id="rec-packages" title="Packages" data={{ 'data-section': 'packages' }}>
-                  <CommanderPackages avg={avg} />
+                  <CommanderPackages avg={avg} wanted={packagesWanted} onWanted={onWantPackages} />
                 </Section>
               )}
             </Fragment>
