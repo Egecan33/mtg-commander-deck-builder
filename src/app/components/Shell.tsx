@@ -267,6 +267,13 @@ export function Shell({ children }: { children: ReactNode }) {
     },
   }), [collections, arena, arenaBusy, refreshCollections, runArenaSync, readArenaFull, notify]);
   const activeCollection = collectionsValue.active;
+  // A collection picked in the top bar while a deck was open: switched once the deck page has gone.
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingSwitch === null || pathname.startsWith('/deck/')) return;
+    setPendingSwitch(null);
+    void collectionsValue.switchTo(pendingSwitch);
+  }, [pendingSwitch, pathname, collectionsValue]);
   const showStale = status?.ready && status.stale && !staleHidden && pathname !== '/data';
 
   return (
@@ -306,7 +313,14 @@ export function Shell({ children }: { children: ReactNode }) {
                   className="field h-7 py-0 text-[0.82rem]"
                   data-testid="collection-switcher"
                   value={activeCollection?.id ?? ''}
-                  onChange={(e) => void collectionsValue.switchTo(e.target.value)}
+                  onChange={(e) => {
+                    // An open deck belongs to the collection it was opened in (opening it switched there): a
+                    // switch made here leaves for the deck list first, then switches, instead of bouncing back.
+                    if (pathname.startsWith('/deck/')) {
+                      setPendingSwitch(e.target.value);
+                      router.push('/');
+                    } else void collectionsValue.switchTo(e.target.value);
+                  }}
                 >
                   {collections.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -315,7 +329,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   ))}
                 </select>
                 {activeCollection?.kind === 'arena' && (
-                  <span className="chip border-brass text-bone" title="Building for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget" data-testid="mode-brawl">
+                  <span className="chip" title="Building for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget" data-testid="mode-brawl">
                     Brawl
                   </span>
                 )}
