@@ -68,12 +68,19 @@ export function toCard(scryfall: any): Card | null {
     arenaRarity: null,
     arenaPrinting: null,
     brawlLegality: brawlLegalityOf(scryfall),
+    standardBrawlLegality: standardBrawlLegalityOf(scryfall),
   };
 }
 
 /** Scryfall's `legalities.brawl` (Arena's 100-card Brawl); anything but legal or banned is not_legal. */
 export function brawlLegalityOf(scryfall: any): 'legal' | 'banned' | 'not_legal' {
   const v = scryfall?.legalities?.brawl;
+  return v === 'legal' || v === 'banned' ? v : 'not_legal';
+}
+
+/** Scryfall's `legalities.standardbrawl` (Arena's 60-card Standard Brawl); anything but legal or banned is not_legal. */
+export function standardBrawlLegalityOf(scryfall: any): 'legal' | 'banned' | 'not_legal' {
+  const v = scryfall?.legalities?.standardbrawl;
   return v === 'legal' || v === 'banned' ? v : 'not_legal';
 }
 
@@ -196,6 +203,7 @@ export async function syncCards(db: Db, log: Log): Promise<void> {
     onArena,
     brawlPlayable: kept.filter((k) => k.card.arenaRarity !== null && k.card.brawlLegality === 'legal').length,
     brawlOnly,
+    standardBrawlPlayable: kept.filter((k) => k.card.arenaRarity !== null && k.card.standardBrawlLegality === 'legal').length,
   };
   writeSyncState(db, 'cards', info);
   log(`cards finished ${JSON.stringify(info)}`);

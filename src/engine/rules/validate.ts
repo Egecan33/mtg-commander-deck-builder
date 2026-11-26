@@ -1,11 +1,9 @@
-import { formatOf } from '../format';
+import { deckSizeFor, formatLabel, formatOf, isBrawlFormat } from '../format';
 import type { CardDb, Deck, Violation } from '../types';
 import { canLead, canPair, partnerKind } from './commander';
 import { companionViolation } from './companion';
 import { commanderCards, copyLimit, deckCounts, deckSize } from './copies';
 import { cardFitsDeck, requiresColorChoice, rulebreakersOf } from './identity';
-
-const DECK_SIZE = 100;
 
 /**
  * Every rule the deck breaks; an empty array means it is legal. Never throws: unknown cards are
@@ -14,6 +12,7 @@ const DECK_SIZE = 100;
  */
 export function validateDeck(deck: Deck, db: CardDb): Violation[] {
   const out: Violation[] = [];
+  const DECK_SIZE = deckSizeFor(db);
   const counts = deckCounts(deck);
 
   for (const id of counts.keys()) {
@@ -27,7 +26,7 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
   } else if (deck.commanders.length === 1) {
     const c = commanders[0];
     if (c && !canLead(c, formatOf(db))) {
-      const background = formatOf(db) !== 'brawl' && partnerKind(c).some((k) => k.kind === 'background');
+      const background = !isBrawlFormat(formatOf(db)) && partnerKind(c).some((k) => k.kind === 'background');
       out.push({
         code: 'bad-commander',
         message: background
@@ -36,9 +35,9 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
         oracleIds: [c.oracleId],
       });
     }
-  } else if (formatOf(db) === 'brawl') {
+  } else if (isBrawlFormat(formatOf(db))) {
     // Arena publishes "1 commander card" for Brawl: no partners or backgrounds.
-    out.push({ code: 'bad-pair', message: 'A Brawl deck has one commander.', oracleIds: [...deck.commanders] });
+    out.push({ code: 'bad-pair', message: `A ${formatLabel(formatOf(db))} deck has one commander.`, oracleIds: [...deck.commanders] });
   } else if (deck.commanders.length > 2) {
     out.push({ code: 'bad-pair', message: 'A deck can have at most two commanders.', oracleIds: [...deck.commanders] });
   } else if (commanders.length === 2 && !canPair(commanders[0], commanders[1])) {

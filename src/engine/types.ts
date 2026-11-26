@@ -1,7 +1,10 @@
 export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 export type Bracket = 1 | 2 | 3 | 4 | 5;
-/** Which rules a deck is checked and built under: paper Commander, or MTG Arena's 100-card Brawl. */
-export type Format = 'commander' | 'brawl';
+/**
+ * Which rules a deck is checked and built under: paper Commander, MTG Arena's 100-card Brawl, or
+ * MTG Arena's 60-card Standard Brawl.
+ */
+export type Format = 'commander' | 'brawl' | 'standardbrawl';
 /** The rarities MTG Arena has wildcards for. */
 export type ArenaRarity = 'common' | 'uncommon' | 'rare' | 'mythic';
 /** Wildcards per rarity: what the player has, or what a deck needs. */
@@ -45,6 +48,8 @@ export interface Card {
   arenaPrinting?: { set: string; number: string } | null;
   /** Scryfall's `legalities.brawl` (MTG Arena's 100-card Brawl). Absent on older data (read as 'not_legal'). */
   brawlLegality?: 'legal' | 'banned' | 'not_legal';
+  /** Scryfall's `legalities.standardbrawl` (MTG Arena's 60-card Standard Brawl). Absent on older data (read as 'not_legal'). */
+  standardBrawlLegality?: 'legal' | 'banned' | 'not_legal';
 }
 
 export type Role =
@@ -111,6 +116,11 @@ export interface Deck {
    * server picks the format from the collection's kind. Absent on decks from before collections owned decks.
    */
   collectionId?: string;
+  /**
+   * The rules an MTG Arena deck is checked under: 100-card Brawl or 60-card Standard Brawl. Missing
+   * means 'brawl'. Ignored for decks of other collections (they are Commander decks).
+   */
+  arenaFormat?: 'brawl' | 'standardbrawl';
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }

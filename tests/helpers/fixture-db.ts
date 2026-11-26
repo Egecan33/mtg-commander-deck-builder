@@ -64,3 +64,13 @@ export function card(name: string): Card {
 export function deckText(name: 'precon' | 'upgraded' | 'cedh'): string {
   return readFileSync(`${FIXTURES}decks/${name}.txt`, 'utf8');
 }
+
+let standard: FixtureDb | null = null;
+
+/** The fixture as a Standard Brawl database: its pool is the fixture cards on Arena and legal in Standard Brawl. */
+export function standardBrawlFixtureDb(): FixtureDb {
+  if (standard) return standard;
+  const { cards } = JSON.parse(readFileSync(FIXTURES + 'cards.json', 'utf8')) as { cards: Card[] };
+  standard = formatCardDb(fixtureDb(), cards, 'standardbrawl');
+  return standard;
+}

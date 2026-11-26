@@ -188,7 +188,7 @@ function main(): void {
 }
 
 /**
- * `--arena-only`: refreshes only the Arena fields (`arenaRarity`, `arenaPrinting`, `brawlLegality`)
+ * `--arena-only`: refreshes only the Arena fields (`arenaRarity`, `arenaPrinting`, `brawlLegality`, `standardBrawlLegality`)
  * of the committed fixture from the synced database, and adds any COMMANDERS or EXTRAS card it lacks
  * (whole, with its tags). Every other field of the cards already there stays as committed, so tests
  * tuned on that data keep their numbers. combos.json is not touched.
@@ -213,6 +213,7 @@ function refreshArena(): void {
     c.arenaRarity = fresh?.arenaRarity ?? null;
     c.arenaPrinting = fresh?.arenaPrinting ?? null;
     c.brawlLegality = fresh?.brawlLegality ?? 'not_legal';
+    c.standardBrawlLegality = fresh?.standardBrawlLegality ?? 'not_legal';
   }
   const cards = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   writeFileSync(

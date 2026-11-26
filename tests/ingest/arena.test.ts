@@ -136,3 +136,12 @@ describe('fetchBulk', () => {
     expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n');
   });
 });
+
+describe('toCard Standard Brawl legality', () => {
+  it('reads legalities.standardbrawl; anything but legal or banned is not_legal', () => {
+    expect(toCard(oracle({ legalities: { commander: 'legal', standardbrawl: 'legal' } }))?.standardBrawlLegality).toBe('legal');
+    expect(toCard(oracle({ legalities: { commander: 'legal', standardbrawl: 'banned' } }))?.standardBrawlLegality).toBe('banned');
+    expect(toCard(oracle({ legalities: { commander: 'legal', standardbrawl: 'not_legal' } }))?.standardBrawlLegality).toBe('not_legal');
+    expect(toCard(oracle())?.standardBrawlLegality).toBe('not_legal');
+  });
+});
