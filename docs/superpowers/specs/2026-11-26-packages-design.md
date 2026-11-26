@@ -30,6 +30,7 @@ Owner's words: "I want to see my best packages in my collection for each colour,
 
 ### What a package is
 - Core packages and the roles behind them: **Ramp** = `ramp` (+ `fast-mana`); **Card draw** = `draw`; **Removal** = `spot-removal`, `counterspell`, `wipe`; **Protection** = `protection`. A card counts once per package even with several of its roles.
+- Membership also reads Scryfall's tagger tags (already synced by the `tags` step from Scryfall's bulk file; owner: "use Scryfall and scrape all"): Ramp also takes `ramp`, `mana-rock`, `mana-dork`; Card draw takes `draw`, `card-advantage`; Removal takes `removal`, `sweeper`, `counterspell`; Protection takes `protection`, `protects-creature`, `gives-hexproof`, `gives-indestructible`. A card is in a package when its role OR one of those tags says so. Nothing is scraped from Scryfall's website: everything comes from Scryfall's bulk files (cards, printings, tags), as AGENTS.md requires, refreshed by a full sync on 2026-11-26.
 - Theme packages: one per theme axis (the same axes the Themes tab shows). In the deck builder, the deck's top four axes by theme weight; on the Packages page, the four axes with the most good owned cards in that colour (at least 8 cards to qualify).
 - Lands: 35 in the 8×8 frame; the tab shows the deck's land count against 35 and against the bracket's own target, without changing either.
 
