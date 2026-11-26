@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deckNetwork } from '@/engine/network';
 import { DRAWN_FEEDS, drawnEdges, layoutRadius, maxDegreeOf } from '@/engine/network/draw';
-import { STAPLE_RING, settle, toGraphData } from '@/engine/network/layout';
+import { COMMANDER_GAP, STAPLE_RING, settle, toGraphData } from '@/engine/network/layout';
 import type { DeckNetwork, EngineContext, NetworkEdge } from '@/engine/types';
 import { fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck, oddDeck, withFiveUnconnected } from '../helpers/network';
@@ -25,7 +25,8 @@ describe('network layout (d3-force-3d, shared with 3d-force-graph)', () => {
     const odd = deckNetwork(oddDeck(), ctx);
     const [c1, c2] = odd.nodes.filter((n) => n.commander).map((n) => settle(odd).get(n.oracleId));
     expect(c1).toEqual([0, 0, 0]);
-    expect(c2).toEqual([36, 0, 0]);
+    expect(c2).toEqual([COMMANDER_GAP, 0, 0]);
+    expect(COMMANDER_GAP).toBeGreaterThan(2 * 34); // two commander discs never touch
   });
 
   it('unconnected cards settle farther out than the rest', () => {
@@ -66,7 +67,8 @@ describe('network layout (d3-force-3d, shared with 3d-force-graph)', () => {
   });
 
   // Controller finding U1: about fifty nodes overlapped at the centre under 350-500 feeds edges.
-  it('nodes keep apart: no two cards overlap', () => {
+  // Measured as the view first shows them: seen from the front (x, y), where depth does not separate two discs.
+  it('nodes keep apart: no two cards overlap as the view first shows them', () => {
     for (const net of [upgraded, cedh, deckNetwork(fixtureDeck('precon', 2), ctx)]) {
       const pos = settle(net);
       const maxDegree = maxDegreeOf(net.nodes);
@@ -77,14 +79,14 @@ describe('network layout (d3-force-3d, shared with 3d-force-graph)', () => {
         for (let j = i + 1; j < cards.length; j++) {
           const [a, b] = [pos.get(cards[i].oracleId)!, pos.get(cards[j].oracleId)!];
           pairs++;
-          if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 0.8 * (layoutRadius(cards[i], maxDegree) + layoutRadius(cards[j], maxDegree))) overlapping++;
+          if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.8 * (layoutRadius(cards[i], maxDegree) + layoutRadius(cards[j], maxDegree))) overlapping++;
         }
       }
-      expect(overlapping / pairs).toBeLessThan(0.01);
+      expect(overlapping / pairs).toBeLessThan(0.005);
     }
   });
 
-  it("draws every link that is not feeds, and each card's three strongest feeds links", () => {
+  it("draws every link that is not feeds, and each card's strongest few feeds links", () => {
     // twelve cards that all feed each other (66 feeds links), plus the deck's own links
     const ids = Array.from({ length: 12 }, (_, i) => `c${String(i).padStart(2, '0')}`);
     const dense: NetworkEdge[] = [...upgraded.edges];

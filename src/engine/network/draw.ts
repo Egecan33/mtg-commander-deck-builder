@@ -20,7 +20,7 @@ export function toGraphData(net: Pick<DeckNetwork, 'nodes' | 'edges'>, nameOf: (
  */
 
 /** Feeds links drawn per card: each card's strongest few (all of them still count in the numbers). */
-export const DRAWN_FEEDS = 3;
+export const DRAWN_FEEDS = 2;
 
 /**
  * Indices of the edges the view draws: every combo, typal, commander and package link, and a feeds

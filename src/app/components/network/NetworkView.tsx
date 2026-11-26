@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NetworkResponse } from '@/app/lib/api';
 // d3-free: the force layout (d3-force-3d) is loaded only where it runs, the 2D fallback (review M4).
-import { drawnEdges, toGraphData } from '@/engine/network/draw';
+import { DRAWN_FEEDS, drawnEdges, toGraphData } from '@/engine/network/draw';
 import type { Vec3 } from '@/engine/network/layout';
 import type { NetworkEdgeKind } from '@/engine/types';
 import { EmptyState } from '../EmptyState';
@@ -199,7 +199,7 @@ export function NetworkView({
             className={`chip gap-1.5 ${kinds.has(kind) ? 'text-bone' : 'text-smoke'}`}
             aria-pressed={kinds.has(kind)}
             onClick={() => toggle(kind)}
-            title={`${kinds.has(kind) ? 'Hide' : 'Show'} ${EDGE_LABEL[kind].toLowerCase()} links${counts.shown[kind] < counts.total[kind] ? `. ${counts.shown[kind]} of ${counts.total[kind]} are drawn: each card's strongest three; every link counts in the numbers` : ''}`}
+            title={`${kinds.has(kind) ? 'Hide' : 'Show'} ${EDGE_LABEL[kind].toLowerCase()} links${counts.shown[kind] < counts.total[kind] ? `. ${counts.shown[kind]} of ${counts.total[kind]} are drawn: each card's strongest ${DRAWN_FEEDS}; every link counts in the numbers` : ''}`}
             data-testid={`network-legend-${kind}`}
           >
             <span className="inline-block h-0.5 w-3" style={{ background: EDGE_COLOR[kind], opacity: kinds.has(kind) ? 1 : 0.35 }} />

@@ -17,7 +17,8 @@ export function edgeWidth(e: NetworkEdge): 1 | 2 | 3 {
   return e.weight < 0.34 ? 1 : e.weight < 0.67 ? 2 : 3;
 }
 
-export const edgeOpacity = (kind: NetworkEdgeKind): number => (kind === 'commander' ? 0.18 : kind === 'typal' || kind === 'package' ? 0.55 : 0.85);
+/** Feeds links are many and near white: drawn lighter so the cards stay readable (controller finding U1). */
+export const edgeOpacity = (kind: NetworkEdgeKind): number => (kind === 'commander' ? 0.18 : kind === 'feeds' ? 0.5 : kind === 'typal' || kind === 'package' ? 0.55 : 0.85);
 
 /** Node radius in layout units: the layout's own (its collision force keeps these discs apart). */
 export { layoutRadius as nodeRadius, maxDegreeOf } from '@/engine/network/draw';

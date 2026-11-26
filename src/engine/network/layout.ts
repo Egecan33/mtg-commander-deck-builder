@@ -22,11 +22,16 @@ export interface LayoutNode {
 export interface LayoutLink { source: string; target: string; weight: number; kind: NetworkEdge['kind']; edgeIndex: number }
 
 /** Ring radii: staple cards sit on a loose ring, cards that connect to nothing farther out (cards keep apart, so the rings are wide). */
-export const STAPLE_RING = 130;
-export const UNCONNECTED_RING = 360;
-export const COMMANDER_GAP = 36;
+export const STAPLE_RING = 220;
+export const UNCONNECTED_RING = 480;
+/** A second commander sits this far from the first: their discs (34 each) do not touch. */
+export const COMMANDER_GAP = 80;
 
-/** Nodes with seeded starting positions (clusters apart, rings at their radius); commanders pinned. */
+/**
+ * Nodes with seeded starting positions (clusters apart, rings at their radius); commanders pinned.
+ * Every card sits on the z = 0 plane: seen from the front, depth would stack one card over another
+ * (controller finding U1), so the graph is laid out flat and the view can still turn it.
+ */
 export function layoutNodes(net: LayoutSource, seed = 1): LayoutNode[] {
   const rnd = mulberry32(seed);
   const at = (r: number, jitter = 0): Vec3 => {
@@ -49,8 +54,8 @@ export function layoutNodes(net: LayoutSource, seed = 1): LayoutNode[] {
     } else if (n.unconnected) p = at(UNCONNECTED_RING, 10);
     else if (n.staple) p = at(STAPLE_RING, 10);
     else p = [(rnd() - 0.5) * 120, (rnd() - 0.5) * 120, (rnd() - 0.5) * 40];
-    const node: LayoutNode = { id: n.oracleId, x: p[0], y: p[1], z: p[2], info: n };
-    if (pin) { node.fx = pin[0]; node.fy = pin[1]; node.fz = pin[2]; }
+    const node: LayoutNode = { id: n.oracleId, x: p[0], y: p[1], z: 0, fz: 0, info: n };
+    if (pin) { node.fx = pin[0]; node.fy = pin[1]; }
     return node;
   });
 }
@@ -102,10 +107,11 @@ export function configureForces(host: ForceHost, nodes: LayoutNode[], links: Lay
   if (!host.get('charge')) set('charge', charge);
   // Cards never overlap: each keeps its own disc plus a gap clear (controller finding U1).
   const maxDegree = maxDegreeOf(nodes.map((n) => n.info));
-  set('collide', forceCollide((d) => layoutRadius((d as LayoutNode).info, maxDegree) + NODE_GAP).strength(0.9).iterations(2));
+  set('collide', forceCollide((d) => layoutRadius((d as LayoutNode).info, maxDegree) + NODE_GAP).strength(1).iterations(3));
   set('radial', forceRadial((d) => { const n = (d as LayoutNode).info; return n.unconnected ? UNCONNECTED_RING : n.staple ? STAPLE_RING : 0; }, 0, 0, 0)
     .strength((d) => { const n = (d as LayoutNode).info; return n.unconnected || n.staple ? 0.05 : 0.012; }));
-  set('flatten', forceZ(0).strength(0.02));
+  // (Cards are held on z = 0 by `layoutNodes`; this only matters for a node added without it.)
+  set('flatten', forceZ(0).strength(0.3));
   let members: LayoutNode[] = nodes;
   const pull = Object.assign(
     (alpha: number) => {
