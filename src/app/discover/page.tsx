@@ -198,40 +198,34 @@ export default function DiscoverPage() {
           const shown = tiers.find((t) => tierKey(t) === picked) ?? tiers[0];
           // Free copies only: a commander you own whose every copy is held counts as one to get.
           const heldCommander = scope === 'unowned' && !!freeOnly && entry.commander.owned;
+          const pageHref = `${commanderHref(entry.commander)}?owned=1${freeOnly ? '&free=1' : ''}`;
           return (
             <li key={id} className="rounded-md border border-slag bg-anvil" data-testid="discover-entry" data-name={entry.commander.name}>
-              <button type="button" className="flex w-full items-center gap-4 p-3 text-left" onClick={() => expand(entry)} aria-expanded={isOpen}>
+              <div className="flex w-full items-center gap-4 p-3">
                 <span className="w-6 text-right text-smoke">{i + 1}</span>
-                <span className="card w-[4.2rem] shrink-0">
+                <Link href={pageHref} className="card relative w-[4.2rem] shrink-0" aria-label={`${entry.commander.name}: commander page`} tabIndex={-1}>
                   <CardImage id={id} name={entry.commander.name} known />
                   {heldCommander && <span className="pointer-events-none absolute left-[3%] top-[2%] h-2.5 w-2.5 rounded-full bg-band-top ring-2 ring-soot" title="In your collection" data-testid="owned-dot" />}
-                </span>
+                </Link>
                 <span className="min-w-0 flex-1">
-                  <span className="display block truncate text-[1.15rem]">{entry.commander.name}</span>
+                  <Link href={pageHref} className="display block truncate text-[1.15rem] hover:underline" data-testid="discover-commander-link">{entry.commander.name}</Link>
                   {heldCommander && <span className="block text-[0.8rem] text-ember" data-testid="discover-held-note">Owned, but held by a box or a built deck</span>}
                   <span className="text-[0.8rem] text-smoke">
                     {entry.tiers.some((t) => t.kind)
-                      ? isOpen ? 'Pick a tier to see what to craft' : 'Click for the deck from the whole Arena pool'
-                      : isOpen ? 'Pick a tier to see what to buy' : 'Click for the 5, 10, 15 and 20-buy tiers'}
+                      ? isOpen ? 'Pick a tier to see what to craft' : 'Expand for the deck from the whole Arena pool'
+                      : isOpen ? 'Pick a tier to see what to buy' : 'Expand for the 5, 10, 15 and 20-buy tiers'}
                   </span>
                 </span>
-                {[entry.tiers[0], entry.tiers[1]].map((t) => (
-                  <span key={tierKey(t)} className="w-[10.5rem] shrink-0 rounded-md border border-slag bg-soot px-3 py-1.5">
-                    <span className="block text-[0.75rem] text-ash">{tierLabel(t)}</span>
-                    <span className="display text-[1.35rem] font-bold leading-none" style={{ color: BAND_VAR[bandOf(t.rating)] }}>{t.rating}</span>
-                    <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length ? `${t.buys.length} to ${t.kind ? 'craft' : 'buy'}` : t.kind ? 'nothing to craft' : 'no buys'}</span>
-                    <span className="mt-0.5 block text-[0.7rem] text-smoke" data-testid="discover-basis">{entry.basis === 'edhrec' ? 'Scored with EDHREC data' : 'Scored from card text'}</span>
-                  </span>
-                ))}
-              </button>
-              <div className="pb-2 pl-[7.3rem]">
-                <Link
-                  href={`${commanderHref(entry.commander)}?owned=1${freeOnly ? '&free=1' : ''}`}
-                  className="text-[0.8rem] text-ash hover:text-bone hover:underline"
-                  data-testid="discover-commander-link"
-                >
-                  Commander page
-                </Link>
+                <button type="button" className="flex items-center gap-4 text-left" onClick={() => expand(entry)} aria-expanded={isOpen} aria-label={`${isOpen ? 'Collapse' : 'Expand'} the tiers for ${entry.commander.name}`} data-testid="discover-expand">
+                  {[entry.tiers[0], entry.tiers[1]].map((t) => (
+                    <span key={tierKey(t)} className="w-[10.5rem] shrink-0 rounded-md border border-slag bg-soot px-3 py-1.5">
+                      <span className="block text-[0.75rem] text-ash">{tierLabel(t)}</span>
+                      <span className="display text-[1.35rem] font-bold leading-none" style={{ color: BAND_VAR[bandOf(t.rating)] }}>{t.rating}</span>
+                      <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length ? `${t.buys.length} to ${t.kind ? 'craft' : 'buy'}` : t.kind ? 'nothing to craft' : 'no buys'}</span>
+                      <span className="mt-0.5 block text-[0.7rem] text-smoke" data-testid="discover-basis">{entry.basis === 'edhrec' ? 'Scored with EDHREC data' : 'Scored from card text'}</span>
+                    </span>
+                  ))}
+                </button>
               </div>
 
               {isOpen && (
