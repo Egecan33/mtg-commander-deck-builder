@@ -4,6 +4,7 @@ import { isCommanderEligible } from '@/engine/rules';
 import { exportArenaDecklist, exportDecklist, parseDecklist } from '@/engine/text';
 import type { Bracket, Deck } from '@/engine/types';
 import { cardLookup } from './cards';
+import { deckFormat, ownedSet } from './collection';
 import { MAX_NAME } from './decks';
 import { HttpError, type Body } from './http';
 import { getCardDb } from './store';
@@ -38,9 +39,24 @@ export function exportText(deck: Deck): string {
   return exportDecklist(deck, getCardDb());
 }
 
-/** POST /api/export with `format: 'arena'`: the text Arena's deck import reads, and the cards Arena does not have. */
+/**
+ * POST /api/export with `format: 'arena'`: the text Arena's deck import reads, and the cards Arena
+ * does not have. For a Brawl deck the cards not owned carry the cheapest Arena printing's set and
+ * number, so Arena crafts that printing; without a local Arena install the cards missing from Arena
+ * come from the card data.
+ */
 export function exportArena(deck: Deck): ExportResponse {
-  const text = exportArenaDecklist(deck, getCardDb());
-  const names = text.split('\n').map((l) => /^\d+ (.+)$/.exec(l)?.[1]).filter((n): n is string => !!n);
-  return { text, notOnArena: notOnArena(names) };
+  const brawl = deckFormat(deck) === 'brawl';
+  const db = getCardDb(brawl ? 'brawl' : 'commander');
+  const text = exportArenaDecklist(deck, db, brawl ? { owned: ownedSet() } : {});
+  const names = text
+    .split('\n')
+    .map((l) => /^\d+ (.+?)(?: \([A-Z0-9]+\) \S+)?$/.exec(l)?.[1])
+    .filter((n): n is string => !!n);
+  let missing = notOnArena(names);
+  if (missing === null && brawl) {
+    const ids = [...deck.commanders, deck.companion, ...deck.main.map((e) => e.oracleId)];
+    missing = [...new Set(ids.map((id) => (id ? db.get(id) : undefined)).filter((c) => !!c && (c.arenaRarity ?? null) === null).map((c) => c!.name))].sort();
+  }
+  return { text, notOnArena: missing };
 }
