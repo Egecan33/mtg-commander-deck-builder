@@ -475,6 +475,20 @@ describe('POST /api/build', () => {
     for (const p of r.proposals) { expect(p.in).toBe(id); expect(r.cards[id]).toBeDefined(); }
   });
 
+  it("mode 'fix' with an unknown only is a 400; a known one returns the fixed deck and its changes", async () => {
+    const deck = await imported('precon');
+    expect((await request('POST', '/api/build', { deck, mode: 'fix', options: { only: 'vibes' } })).status).toBe(400);
+    expect((await request('POST', '/api/build', { deck, mode: 'fix', options: { only: 3 } })).status).toBe(400);
+    const r = await call<api.FixResponse>('POST', '/api/build', { deck, mode: 'fix', options: { seed: 1, only: 'wincons' } });
+    expect(r.deck.commanders).toEqual(deck.commanders);
+    expect(Array.isArray(r.changes)).toBe(true);
+    expect(typeof r.ratingBefore).toBe('number');
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+    expect(r.note === null || typeof r.note === 'string').toBe(true);
+    expect(r.heldBy).toBeDefined();
+    for (const c of r.changes) for (const id of [c.out, c.in]) if (id !== '') expect(r.cards[id]).toBeDefined();
+  });
+
   it('answers 400 for a bad mode, bad options or no commander', async () => {
     const deck = shell(['Krenko, Mob Boss']);
     expect((await request('POST', '/api/build', { deck, mode: 'explode' })).status).toBe(400);

@@ -44,7 +44,19 @@
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
  * POST /api/build       BuildRequest    -> BuildResponse
- *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' -> { proposals, cards, heldBy }.
+ *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
+ *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
+ *        'fix' (Fix deck) makes the deck legal and 100 cards (cards that break a rule are replaced by the best
+ *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
+ *        filled), then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
+ *        the engine objects to are skipped; it stops before one that would lower the rating). Every change
+ *        is in `changes` ({ out, in, reason }; `out` '' for an add, `in` '' for a cut). The result never
+ *        rates below the start: if it would, the deck comes back unchanged with `note` saying why. `note`
+ *        also explains an empty result and what still blocks an illegal deck (a locked card, a commander);
+ *        commanders and locked cards are never cut. `options.only` (a rating part: mana, roles, synergy,
+ *        quality, curve, interaction, wincons, consistency, bracket; anything else is a 400) fixes that
+ *        part alone; the legality and size step still runs when the deck needs it. `heldBy` covers the
+ *        cards the fix brought in, counted as in a built deck; `cards` covers the deck and every change.
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        'swapin' takes `options.in` (a card not in the deck; 400 without it), `count` 1-10, and returns the deck cards it could replace,
  *        best rating after first; a deck under 100 cards gets the plain add (`out` '') first; an illegal card gives no proposals.
@@ -175,11 +187,12 @@
  *        (browsers still draw it in an <img>); a malformed name answers 400.
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
+import type { RatingKey } from '@/engine/rating';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, ImproveGoals, Role, SwapProposal, Targets,
+  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
-export type { ConflictReport, ImproveGoals };
+export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -335,7 +348,7 @@ export interface CardsResponse {
   heldBy: HeldBy;
 }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
@@ -353,6 +366,8 @@ export interface BuildRequestOptions {
   out?: string;
   /** 'swapin' only (required there): oracleId of a card not in the deck; the proposals say which deck card it could replace. */
   in?: string;
+  /** 'fix' only: fix this one part of the rating (a key of the rating's sub-scores); omit to fix them all. */
+  only?: RatingKey | null;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -365,7 +380,14 @@ export interface BuildProposalsResponse {
   /** The proposals' `in` cards that would take a held copy when added to the deck. */
   heldBy: HeldBy;
 }
-export type BuildResponse = BuildDeckResponse | BuildProposalsResponse;
+/** Mode 'fix': the fixed deck, every change made, the ratings before and after, and a note when nothing changed or something still blocks the deck. */
+export interface FixResponse extends FixResult {
+  /** The cards the fix brought in that take a held copy in the fixed deck (as `AnalyzeResponse.conflicts.cards`). */
+  heldBy: HeldBy;
+  /** Every card of the fixed deck and of `changes` (cut cards included). */
+  cards: CardLookup;
+}
+export type BuildResponse = BuildDeckResponse | BuildProposalsResponse | FixResponse;
 
 // ---------------------------------------------------------------------------------------------
 // Import, export, collection, EDHREC
@@ -595,6 +617,7 @@ export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
 export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace' | 'swapin', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
+export function buildDeck(deck: Deck, mode: 'fix', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }

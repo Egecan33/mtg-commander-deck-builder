@@ -159,4 +159,13 @@ export interface SwapProposal {
   objection?: string;
 }
 
+/** One card change `fixDeck` made: `out` is '' for a plain add, `in` is '' for a plain cut. */
+export interface FixChange { out: string; in: string; reason: string }
+/**
+ * What `fixDeck` did: the deck after the fix, every change in the order it was made, the ratings
+ * before and after (unrounded, to one decimal, as in `SwapProposal`), and a plain-English note when
+ * nothing was changed or something still blocks the deck (null otherwise).
+ */
+export interface FixResult { deck: Deck; changes: FixChange[]; ratingBefore: number; ratingAfter: number; note: string | null }
+
 export interface EngineContext { db: CardDb; edhrec: EdhrecData | null; mldOverrides: Record<string, boolean>; extraTurnOverrides: Record<string, boolean> }

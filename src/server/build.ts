@@ -1,5 +1,6 @@
-import type { BuildMode, BuildResponse } from '@/app/lib/api';
-import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, replaceCard, swapIn, autoBuild, fillRest, improveDeck, suggestSwaps } from '@/engine/builder';
+import type { BuildMode, BuildResponse, HeldBy } from '@/app/lib/api';
+import { ADD_ONE_ROLES, MAX_GOAL_SWAPS, addOne, replaceCard, swapIn, autoBuild, fillRest, fixDeck, improveDeck, isRatingKey, suggestSwaps } from '@/engine/builder';
+import { RATING_WEIGHTS } from '@/engine/rating';
 import { ROLE_LABEL } from '@/engine/targets';
 import type { Bracket, BuildOptions, Deck, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { cardLookup } from './cards';
@@ -8,7 +9,7 @@ import { engineContext } from './context';
 import { deckConflicts, freeOwnedSet, heldByFor, selfHolders } from './holders';
 import { HttpError, intParam, isObject } from './http';
 
-const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace', 'swapin'];
+const MODES: readonly BuildMode[] = ['auto', 'fill', 'swaps', 'improve', 'add', 'replace', 'swapin', 'fix'];
 export const MAX_PROPOSAL_COUNT = 30;
 
 /** `options.goals` of an 'improve' request, checked. Unknown roles are a 400; unknown axes are simply not in the deck. */
@@ -74,6 +75,17 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
     if (typeof o.out !== 'string' || !deck.main.some((e) => e.oracleId === o.out)) throw new HttpError(400, 'options.out must be the oracleId of a card in the deck (not a commander).');
     const proposals = replaceCard(deck, ctx, options, o.out, intParam(o.count, 6, 1, 12));
     return { proposals, cards: cardLookup([o.out, ...proposals.map((p) => p.in)]), heldBy: held(proposals) };
+  }
+  if (mode === 'fix') {
+    const only = o.only;
+    if (only !== undefined && only !== null && !isRatingKey(only)) throw new HttpError(400, `options.only must be one of: ${Object.keys(RATING_WEIGHTS).join(', ')}.`);
+    const r = fixDeck(deck, ctx, options, only ?? null);
+    const out: Deck = { ...r.deck, id: deck.id, name: deck.name };
+    // "!" for the cards the fix brought in, counted as in a built deck (the copies the fixed deck has).
+    const ins = new Set(r.changes.map((c) => c.in).filter((id) => id !== ''));
+    const heldBy: HeldBy = Object.fromEntries(Object.entries(deckConflicts(out).cards).filter(([id]) => ins.has(id)));
+    const ids = [...out.commanders, out.companion, ...out.main.map((e) => e.oracleId), ...r.changes.flatMap((c) => [c.out, c.in])].filter((id) => id !== '');
+    return { deck: out, changes: r.changes, ratingBefore: r.ratingBefore, ratingAfter: r.ratingAfter, note: r.note, heldBy, cards: cardLookup(ids) };
   }
   if (mode === 'swapin') {
     if (typeof o.in !== 'string' || o.in === '') throw new HttpError(400, 'options.in must be the oracleId of the card to bring in.');

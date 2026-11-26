@@ -120,7 +120,7 @@ export const isGraveyardHate = (oracleText: string): boolean => GRAVEYARD_HATE.t
 /** Cards that win on a condition of their own (Laboratory Maniac, Approach of the Second Sun). */
 const ALT_WIN = /\byou win the game\b/i;
 
-export function matches(c: Candidate, filter: Filter): boolean {
+export function matches(c: Pick<Candidate, 'card' | 'f' | 'land'>, filter: Filter): boolean {
   const { f, card, land } = c;
   if (filter.role === 'graveyard-hate' && !GRAVEYARD_HATE.test(card.oracleText)) return false;
   if (filter.land && !land) return false;

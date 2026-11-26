@@ -1,0 +1,296 @@
+import { describe, expect, it } from 'vitest';
+import { fixDeck } from '@/engine/builder';
+import { shownRating } from '@/engine/builder/improve';
+import { rateDeck } from '@/engine/rating';
+import { isBasicLand, validateDeck } from '@/engine/rules';
+import { parseDecklist } from '@/engine/text';
+import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
+import { card, deckText, fixtureDb } from '../helpers/fixture-db';
+
+const db = fixtureDb();
+const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
+const opts = (over: Partial<BuildOptions> = {}): BuildOptions => ({ ownedOnly: false, owned: null, maxPriceUsd: null, seed: 1, ...over });
+
+function fixtureDeck(name: 'precon' | 'upgraded' | 'cedh', target: Bracket): Deck {
+  const p = parseDecklist(deckText(name), db);
+  return { id: null, name, commanders: p.commanders, companion: p.companion, chosenColor: null, main: p.main, targetBracket: target, themeWeights: null };
+}
+const size = (d: Deck) => d.commanders.length + d.main.reduce((n, e) => n + e.qty, 0);
+const isLand = (id: string) => (db.features(id)?.landWeight ?? 0) >= 1;
+const hasRole = (id: string, role: Role) => db.features(id)?.roles.includes(role) === true;
+const roleCount = (d: Deck, role: Role) => d.main.reduce((n, e) => n + (hasRole(e.oracleId, role) && !isLand(e.oracleId) ? e.qty : 0), 0);
+const qty = (d: Deck, id: string) => d.main.reduce((n, e) => n + (e.oracleId === id ? e.qty : 0), 0);
+/** The deck's main cards as a sorted list, one id per copy. */
+const cards = (d: Deck) => d.main.flatMap((e) => Array<string>(e.qty).fill(e.oracleId)).sort();
+/** One listed change applied by hand: `out` loses an unlocked copy, `in` gains one. */
+function replay(d: Deck, c: FixChange): Deck {
+  const main = d.main.map((e) => ({ ...e }));
+  if (c.out !== '') {
+    const i = main.findIndex((e) => e.oracleId === c.out && !e.locked && e.qty >= 1);
+    expect(i, `cut ${c.out} is in the deck and unlocked`).toBeGreaterThanOrEqual(0);
+    main[i].qty--;
+    if (main[i].qty === 0) main.splice(i, 1);
+  }
+  if (c.in !== '') {
+    const i = main.findIndex((e) => e.oracleId === c.in && !e.locked);
+    if (i >= 0) main[i].qty++;
+    else main.push({ oracleId: c.in, qty: 1, locked: false });
+  }
+  return { ...d, main };
+}
+
+/** Cards no deck wants: in the commander's colours, rarely played, no role, no combo, four mana or more. */
+function junkFor(deck: Deck, n: number): string[] {
+  const have = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+  const identity = new Set(deck.commanders.flatMap((id) => db.get(id)!.colorIdentity));
+  const junk = db.all()
+    .filter((c) => !have.has(c.oracleId) && !isLand(c.oracleId) && c.colorIdentity.every((k) => identity.has(k))
+      && (c.edhrecRank ?? 99999) > 4000 && !c.gameChanger && c.cmc >= 4 && (db.features(c.oracleId)?.roles.length ?? 0) === 0
+      && db.combosFor(c.oracleId).length === 0)
+    .slice(0, n).map((c) => c.oracleId);
+  expect(junk.length).toBe(n);
+  return junk;
+}
+
+/** The deck with its first `n` single nonland, unlocked entries (that `pick` accepts) replaced by `ids`. */
+function swapInto(deck: Deck, ids: string[], pick: (id: string) => boolean = () => true): Deck {
+  const main = deck.main.map((e) => ({ ...e }));
+  let k = 0;
+  for (let i = 0; i < main.length && k < ids.length; i++) {
+    if (isLand(main[i].oracleId) || main[i].qty !== 1 || main[i].locked || !pick(main[i].oracleId)) continue;
+    main[i] = { oracleId: ids[k++], qty: 1, locked: false };
+  }
+  expect(k).toBe(ids.length);
+  return { ...deck, main };
+}
+
+describe('fixDeck', () => {
+  const precon = fixtureDeck('precon', 2);
+  const upgraded = fixtureDeck('upgraded', 3);
+  const swords = card('Swords to Plowshares').oracleId;
+
+  it('an illegal deck becomes legal', () => {
+    const offenders = [swords, card('Dockside Extortionist').oracleId];
+    const base = swapInto(precon, offenders);
+    // ...and a second copy of a singleton, in place of a basic, so the deck stays at 100.
+    const signet = base.main.find((e) => !isLand(e.oracleId) && e.qty === 1 && !offenders.includes(e.oracleId))!.oracleId;
+    const basic = base.main.findIndex((e) => isBasicLand(db.get(e.oracleId)!) && e.qty > 1);
+    const main = base.main.map((e, i) => (i === basic ? { ...e, qty: e.qty - 1 } : e.oracleId === signet ? { ...e, qty: 2 } : e));
+    const deck: Deck = { ...base, main };
+    expect(size(deck)).toBe(100);
+    expect(new Set(validateDeck(deck, db).map((v) => v.code))).toEqual(new Set(['identity', 'banned', 'copies']));
+
+    const r = fixDeck(deck, ctx, opts());
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(size(r.deck)).toBe(100);
+    for (const id of offenders) {
+      expect(qty(r.deck, id)).toBe(0);
+      expect(r.changes.some((c) => c.out === id)).toBe(true);
+    }
+    expect(qty(r.deck, signet)).toBeLessThanOrEqual(1);
+    expect(r.changes.find((c) => c.out === offenders[1])?.reason).toMatch(/banned/i);
+    for (const c of r.changes) expect(c.reason.length).toBeGreaterThan(0);
+    expect(r.ratingBefore).toBeLessThanOrEqual(40);
+    expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+    expect(r.note).toBeNull();
+    expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+  });
+
+  it('101 cards become 100 and the weakest unlocked card goes', () => {
+    const [junk] = junkFor(upgraded, 1);
+    const deck: Deck = { ...upgraded, main: [...upgraded.main, { oracleId: junk, qty: 1, locked: false }] };
+    expect(size(deck)).toBe(101);
+    const r = fixDeck(deck, ctx, opts());
+    expect(size(r.deck)).toBe(100);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(qty(r.deck, junk)).toBe(0);
+    expect(r.changes[0]).toMatchObject({ out: junk, in: '' });
+
+    // Locked, the junk stays and the deck's weakest unlocked card goes in its place.
+    const locked: Deck = { ...deck, main: deck.main.map((e) => (e.oracleId === junk ? { ...e, locked: true } : e)) };
+    const l = fixDeck(locked, ctx, opts());
+    expect(size(l.deck)).toBe(100);
+    expect(l.deck.main.find((e) => e.oracleId === junk)).toEqual({ oracleId: junk, qty: 1, locked: true });
+    expect(l.changes[0].in).toBe('');
+    expect(l.changes[0].out).not.toBe(junk);
+    expect(l.ratingAfter).toBeGreaterThan(l.ratingBefore);
+    for (const [d, x] of [[deck, r], [locked, l]] as const) expect(cards(x.changes.reduce(replay, d))).toEqual(cards(x.deck));
+  });
+
+  it('an 80-card deck is filled to 100', () => {
+    const deck: Deck = { ...precon, main: [] };
+    for (const e of precon.main) {
+      const left = 80 - size(deck);
+      if (left <= 0) break;
+      deck.main.push({ ...e, qty: Math.min(e.qty, left) });
+    }
+    expect(size(deck)).toBe(80);
+    const r = fixDeck(deck, ctx, opts());
+    expect(size(r.deck)).toBe(100);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    const fills = r.changes.filter((c) => c.out === '');
+    expect(fills.length).toBeGreaterThanOrEqual(20);
+    for (const c of fills) expect(c.reason).toMatch(/Fills the deck to 100/);
+    expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+    expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+  });
+
+  it('a deck short of ramp gains ramp and the rating does not drop', () => {
+    const deck = swapInto(precon, junkFor(precon, 6), (id) => hasRole(id, 'ramp'));
+    expect(size(deck)).toBe(100);
+    expect(validateDeck(deck, db)).toEqual([]);
+    expect(rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes).some((f) => f.filter?.role === 'ramp')).toBe(true);
+    const r = fixDeck(deck, ctx, opts());
+    expect(roleCount(r.deck, 'ramp')).toBeGreaterThan(roleCount(deck, 'ramp'));
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+    expect(rateDeck(r.deck, ctx).rating).toBeGreaterThanOrEqual(rateDeck(deck, ctx).rating);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(size(r.deck)).toBe(100);
+  });
+
+  it('fixDeck leaves a deck it cannot improve untouched', () => {
+    // Owned-only with nothing owned: only basic lands may come in, and the deck's mana is already sound.
+    const r = fixDeck(upgraded, ctx, opts({ ownedOnly: true, owned: new Set() }));
+    expect(r.deck).toEqual(upgraded);
+    expect(r.changes).toEqual([]);
+    expect(r.ratingAfter).toBe(r.ratingBefore);
+    expect(r.note).toMatch(/Nothing to fix with the cards allowed/);
+  });
+
+  it('locked cards and commanders are never cut', () => {
+    // Half the deck locked, one off-colour card free to go: the fix runs and the locks hold.
+    const deck0 = swapInto(precon, [swords]);
+    const lockedIds = deck0.main.filter((e) => e.oracleId !== swords).slice(0, 40).map((e) => e.oracleId);
+    const deck: Deck = { ...deck0, main: deck0.main.map((e) => ({ ...e, locked: lockedIds.includes(e.oracleId) })) };
+    const r = fixDeck(deck, ctx, opts());
+    expect(r.changes.length).toBeGreaterThan(1);
+    for (const c of r.changes) {
+      expect(lockedIds).not.toContain(c.out);
+      expect(deck.commanders).not.toContain(c.out);
+    }
+    for (const e of deck.main.filter((x) => x.locked)) expect(r.deck.main).toContainEqual(e);
+    expect(r.deck.commanders).toEqual(deck.commanders);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+
+    // A locked illegal card stays, and the note says what still blocks the deck.
+    const stuck: Deck = { ...deck0, main: deck0.main.map((e) => (e.oracleId === swords ? { ...e, locked: true } : e)) };
+    const s = fixDeck(stuck, ctx, opts());
+    expect(s.deck.main).toContainEqual({ oracleId: swords, qty: 1, locked: true });
+    expect(s.changes.some((c) => c.out === swords)).toBe(false);
+    expect(s.note).toMatch(/Swords to Plowshares/);
+    expect(s.ratingAfter).toBeGreaterThanOrEqual(s.ratingBefore);
+
+    // An illegal commander is never changed: the deck comes back as it was, with a note.
+    const badCommander: Deck = { ...precon, commanders: [card('Llanowar Elves').oracleId] };
+    const b = fixDeck(badCommander, ctx, opts());
+    expect(b.deck).toEqual(badCommander);
+    expect(b.changes).toEqual([]);
+    expect(b.note).toMatch(/commander/i);
+  });
+
+  it('owned-only fix uses owned cards only', () => {
+    const owned = new Set(db.all().filter((_, i) => i % 3 === 0).map((c) => c.oracleId));
+    const deck = swapInto(precon, [swords]);
+    const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned }));
+    expect(r.changes.length).toBeGreaterThan(0);
+    const before = new Set(deck.main.map((e) => e.oracleId));
+    for (const c of r.changes.filter((x) => x.in !== '')) {
+      const into = db.get(c.in)!;
+      expect(isBasicLand(into) || owned.has(c.in), into.name).toBe(true);
+    }
+    for (const e of r.deck.main) {
+      if (before.has(e.oracleId)) continue;
+      const into = db.get(e.oracleId)!;
+      expect(isBasicLand(into) || owned.has(e.oracleId), into.name).toBe(true);
+    }
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+  });
+
+  it('owned-only fix removes an illegal card it cannot replace', () => {
+    const deck = swapInto(precon, [swords]);
+    const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned: new Set() }));
+    expect(qty(r.deck, swords)).toBe(0);
+    expect(r.changes[0]).toMatchObject({ out: swords, in: '' });
+    expect(r.changes[0].reason).toMatch(/Removes/);
+    const fill = r.changes.find((c) => c.out === '');
+    expect(fill?.reason).toMatch(/Fills the deck to 100/);
+    expect(isBasicLand(db.get(fill!.in)!)).toBe(true);
+    expect(size(r.deck)).toBe(100);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+  });
+
+  it("only='wincons' adds win conditions and nothing for other parts (beyond the legality step)", () => {
+    const deck = swapInto(precon, [swords], (id) => !hasRole(id, 'win-condition'));
+    const r = fixDeck(deck, ctx, opts(), 'wincons');
+    // The legality step still runs.
+    expect(qty(r.deck, swords)).toBe(0);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    const rest = r.changes.filter((c) => c.out !== swords);
+    expect(rest.length).toBeGreaterThan(0);
+    for (const c of rest) expect(hasRole(c.in, 'win-condition'), db.get(c.in)?.name).toBe(true);
+    expect(roleCount(r.deck, 'win-condition')).toBeGreaterThan(roleCount(deck, 'win-condition'));
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+  });
+
+  it('every change is listed, and none the engine objects to lowers the rating', () => {
+    for (const deck of [precon, upgraded, fixtureDeck('cedh', 5)]) {
+      const r = fixDeck(deck, ctx, opts());
+      expect(r.changes.length).toBeGreaterThan(0);
+      let d = deck;
+      let prev = shownRating(rateDeck(d, ctx));
+      expect(prev).toBe(r.ratingBefore);
+      for (const c of r.changes) {
+        d = replay(d, c);
+        const now = shownRating(rateDeck(d, ctx));
+        expect(now, `${db.get(c.out)?.name} -> ${db.get(c.in)?.name}`).toBeGreaterThanOrEqual(prev);
+        prev = now;
+      }
+      expect(cards(d)).toEqual(cards(r.deck));
+      expect(prev).toBe(r.ratingAfter);
+    }
+  });
+
+  it('a part fixed alone takes only its own kind of card', () => {
+    // Mana asks for lands; curve asks for cheap spells, never a land, even where a land would raise the rating.
+    const mana = fixDeck(precon, ctx, opts(), 'mana');
+    expect(mana.changes.length).toBeGreaterThan(0);
+    for (const c of mana.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(true);
+    const curve = fixDeck(fixtureDeck('cedh', 5), ctx, opts(), 'curve');
+    expect(curve.changes.length).toBeGreaterThan(0);
+    for (const c of curve.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(false);
+    for (const r of [mana, curve]) expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
+  });
+
+  it('a fix that would lower the rating changes nothing and says why', () => {
+    // A pile of Mountains whose one removal spell is off-colour: with nothing owned it can only be
+    // removed for another Mountain, which rates lower than the illegal deck did.
+    const krenko = card('Krenko, Mob Boss').oracleId;
+    const deck: Deck = {
+      id: null, name: 'mountains', commanders: [krenko], companion: null, chosenColor: null, targetBracket: 3, themeWeights: null,
+      main: [{ oracleId: card('Mountain').oracleId, qty: 98, locked: false }, { oracleId: swords, qty: 1, locked: false }],
+    };
+    expect(size(deck)).toBe(100);
+    const r = fixDeck(deck, ctx, opts({ ownedOnly: true, owned: new Set() }));
+    expect(r.deck).toEqual(deck);
+    expect(r.changes).toEqual([]);
+    expect(r.ratingAfter).toBe(r.ratingBefore);
+    expect(r.note).toMatch(/would lower the rating/);
+    expect(r.note).toMatch(/Swords to Plowshares/);
+  });
+
+  it('an unknown part of the rating changes nothing', () => {
+    const r = fixDeck(precon, ctx, opts(), 'vibes');
+    expect(r.deck).toEqual(precon);
+    expect(r.changes).toEqual([]);
+    expect(r.note).toBeTruthy();
+  });
+
+  it('times one call on a fixture deck', () => {
+    const t = performance.now();
+    fixDeck(precon, ctx, opts());
+    console.log(`fixDeck ms (precon): ${Math.round(performance.now() - t)}`);
+  });
+});
