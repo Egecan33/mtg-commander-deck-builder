@@ -169,10 +169,12 @@ export function RatingPanel({
   onWanted: (role: Role, n: number | null) => void;
 }) {
   const { rating, summary, targets } = analysis;
+  const std = analysis.format === 'standardbrawl';
+  const size = std ? 60 : 100;
   const defaults = analysis.defaultTargets ?? targets;
   const defaultOf = (role: Role): number => (role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0));
   const anyWanted = Object.keys(deck.roleTargets ?? {}).length > 0;
-  const broken = brokenRules(rating, summary.cardCount);
+  const broken = brokenRules(rating, summary.cardCount, size);
   const curveMax = Math.max(1, ...summary.curve);
   const sources = (['W', 'U', 'B', 'R', 'G', 'C'] as const).filter((c) => (summary.sources[c] ?? 0) > 0);
   const sourceMax = Math.max(1, ...sources.map((c) => summary.sources[c]));
@@ -180,17 +182,20 @@ export function RatingPanel({
 
   return (
     <div data-testid="panel-rating">
-      <Section title={rating.complete ? 'Deck rating' : 'Deck rating so far'} aside={`${summary.cardCount} of 100 cards`}>
+      <Section title={rating.complete ? 'Deck rating' : 'Deck rating so far'} aside={`${summary.cardCount} of ${size} cards`}>
         <div className="flex items-center gap-4">
           <Gauge value={rating.rating} partial={!rating.complete} legal={broken.length === 0} size={128} />
           <p className="text-[0.86rem] text-ash">
             {broken.length
               ? 'The deck breaks a rule, so the rating is capped at 40 until that is fixed.'
               : rating.complete
-                ? 'Nine things a deck needs, weighed together. Click a fix to see cards that solve it.'
+                ? `${std ? 'Eight' : 'Nine'} things a deck needs, weighed together. Click a fix to see cards that solve it.`
                 : 'The deck is not full yet, so each part is judged against a deck of this size.'}
           </p>
         </div>
+        {rating.notes?.map((note) => (
+          <p key={note} className="mt-2 text-[0.8rem] text-smoke" data-testid="rating-note">{note}</p>
+        ))}
         {rating.violations.length > 0 && (
           <ul className="mt-3 grid gap-1.5" data-testid="violations">
             {rating.violations.map((v, i) => (
@@ -207,7 +212,7 @@ export function RatingPanel({
         )}
       </Section>
 
-      <Section title="The nine parts">
+      <Section title="The parts">
         <ul className="grid gap-3.5">
           {rating.subscores.map((s) => {
             const pct = Math.round(s.value * 100);
@@ -305,7 +310,7 @@ export function RatingPanel({
         </ul>
       </Section>
 
-      <Section title="Wanted counts" aside={anyWanted ? 'set by you' : `defaults for Bracket ${deck.targetBracket}`}>
+      <Section title="Wanted counts" aside={anyWanted ? 'set by you' : std ? 'defaults for Standard Brawl' : `defaults for Bracket ${deck.targetBracket}`}>
         <p className="mb-2.5 text-[0.84rem] text-ash">How many of each this deck should run. The rating, the card scores and the builder all aim for your number.</p>
         <ul className="grid gap-1.5" data-testid="wanted-counts">
           {WANTED.map(({ role, label }) => {
@@ -326,7 +331,7 @@ export function RatingPanel({
         </ul>
       </Section>
 
-      <Section title="Roles against the plan for this bracket">
+      <Section title={std ? 'Roles against the plan for Standard Brawl' : 'Roles against the plan for this bracket'}>
         <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]">
           {roles.map(([role, band]) => {
             const have = summary.roleCounts[role] ?? 0;
@@ -340,6 +345,11 @@ export function RatingPanel({
             );
           })}
         </ul>
+        {targets.notes && (
+          <ul className="mt-3 grid gap-1 text-[0.8rem] text-smoke" data-testid="targets-notes">
+            {targets.notes.map((n) => <li key={n}>{n}</li>)}
+          </ul>
+        )}
       </Section>
     </div>
   );
@@ -400,11 +410,13 @@ const SWAPIN_SHOWN = 5;
  * anyway". When the list is empty it says why.
  */
 export function PutItIn({
-  card, count, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
+  card, count, size = 100, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
 }: {
   card: ClientCard;
   /** Cards in the deck now. */
   count: number;
+  /** Cards in a full deck of this format (60 in Standard Brawl). */
+  size?: number;
   /** A basic land already in the deck: the section offers one more copy. */
   another: boolean;
   /** The suggestions for this card; `list` is null while they load. */
@@ -427,7 +439,7 @@ export function PutItIn({
   const loading = list === null && !state?.error;
   const swaps = (list ?? []).filter((p) => p.out !== '' && p.out !== p.in).slice(0, SWAPIN_SHOWN);
   const plain = list?.find((p) => p.out === '');
-  const open = count < 100;
+  const open = count < size;
   const inHeld = state?.heldBy[card.oracleId];
   const best = open ? -1 : swaps.findIndex((p) => p.agrees !== false);
   const reason = why ?? NO_ROOM;
@@ -739,9 +751,11 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, showPrice = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, showPrice = true, showBracket = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
+  /** False for Standard Brawl: no brackets, so there is no bracket to aim for. */
+  showBracket?: boolean;
   /** False for an MTG Arena deck: its budget is the wildcards ("Only what I can craft"), not a price. */
   showPrice?: boolean;
   /** Name of the active collection, for the owned-only box. */
@@ -803,18 +817,20 @@ export function ImprovePanel({
             />
             <span>cards</span>
           </label>
+          {showBracket && (
           <label className="flex items-center gap-2">
-            <span className="shrink-0">Aim for bracket</span>
-            <select
-              className="field w-0 min-w-0 flex-1"
-              value={options.bracket}
-              onChange={(e) => setOptions({ ...options, bracket: e.target.value === 'keep' ? 'keep' : (Number(e.target.value) as Bracket) })}
-              data-testid="improve-bracket"
-            >
-              <option value="keep">{deck.targetBracket}, {bracketName(deck.targetBracket)} (the deck&rsquo;s)</option>
-              {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>{b.n}, {b.name}</option>)}
-            </select>
-          </label>
+              <span className="shrink-0">Aim for bracket</span>
+              <select
+                className="field w-0 min-w-0 flex-1"
+                value={options.bracket}
+                onChange={(e) => setOptions({ ...options, bracket: e.target.value === 'keep' ? 'keep' : (Number(e.target.value) as Bracket) })}
+                data-testid="improve-bracket"
+              >
+                <option value="keep">{deck.targetBracket}, {bracketName(deck.targetBracket)} (the deck&rsquo;s)</option>
+                {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>{b.n}, {b.name}</option>)}
+              </select>
+            </label>
+          )}
           <div>
             <div className="mb-1 text-[0.8rem] text-ash">Goals (pick any)</div>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Goals for this run">

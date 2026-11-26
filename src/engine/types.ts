@@ -1,7 +1,10 @@
 export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 export type Bracket = 1 | 2 | 3 | 4 | 5;
-/** Which rules a deck is checked and built under: paper Commander, or MTG Arena's 100-card Brawl. */
-export type Format = 'commander' | 'brawl';
+/**
+ * Which rules a deck is checked and built under: paper Commander, MTG Arena's 100-card Brawl, or
+ * MTG Arena's 60-card Standard Brawl.
+ */
+export type Format = 'commander' | 'brawl' | 'standardbrawl';
 /** The rarities MTG Arena has wildcards for. */
 export type ArenaRarity = 'common' | 'uncommon' | 'rare' | 'mythic';
 /** Wildcards per rarity: what the player has, or what a deck needs. */
@@ -45,6 +48,8 @@ export interface Card {
   arenaPrinting?: { set: string; number: string } | null;
   /** Scryfall's `legalities.brawl` (MTG Arena's 100-card Brawl). Absent on older data (read as 'not_legal'). */
   brawlLegality?: 'legal' | 'banned' | 'not_legal';
+  /** Scryfall's `legalities.standardbrawl` (MTG Arena's 60-card Standard Brawl). Absent on older data (read as 'not_legal'). */
+  standardBrawlLegality?: 'legal' | 'banned' | 'not_legal';
 }
 
 export type Role =
@@ -111,6 +116,11 @@ export interface Deck {
    * server picks the format from the collection's kind. Absent on decks from before collections owned decks.
    */
   collectionId?: string;
+  /**
+   * The rules an MTG Arena deck is checked under: 100-card Brawl or 60-card Standard Brawl. Missing
+   * means 'brawl'. Ignored for decks of other collections (they are Commander decks).
+   */
+  arenaFormat?: 'brawl' | 'standardbrawl';
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -135,6 +145,8 @@ export interface Targets {
   avgMv: RoleBand;
   themeCards: number;
   taplandCap: number;
+  /** Why the numbers are what they are, for formats tuned apart from Commander (Standard Brawl); absent otherwise. */
+  notes?: string[];
 }
 
 export interface FoundCombo { combo: Combo; missing: string[]; twoCard: boolean; early: boolean; relevant: boolean }
@@ -167,7 +179,11 @@ export interface Fix {
    */
   actionable?: boolean;
 }
-export interface DeckRating { rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[] }
+export interface DeckRating {
+  rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[];
+  /** Said next to the rating when the format changes how it is made (Standard Brawl has no bracket part); absent otherwise. */
+  notes?: string[];
+}
 
 /** What a directed improve run is asked to do (all optional; see `improveDeck`). */
 export interface ImproveGoals {

@@ -1,4 +1,5 @@
 import { analyzeBracket, findCombos } from '../brackets';
+import { deckSizeFor, gateBracketOf } from '../format';
 import { karstenSources } from '../mana';
 import { rateDeck } from '../rating';
 import { copyLimit, isBasicLand, validateDeck } from '../rules';
@@ -205,7 +206,7 @@ export function nextOffender(deck: Deck, ctx: EngineContext, keep: Set<string>):
     if (id) return { id, violation: v };
   }
   const report = analyzeBracket(deck, ctx);
-  const target = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)));
+  const target = gateBracketOf(deck, ctx.db);
   const allowed = target <= 2 ? 2 : Math.min(4, target);
   const lists: Violation[] = [
     ...report.violationsOfTarget,
@@ -315,7 +316,7 @@ export function colourBalance(deck: Deck, ctx: EngineContext): Record<Color, { n
       out[c].have += (features.sources[c] ?? 0) * qty;
       if (isLandCard(features)) continue;
       const p = features.pips[c] ?? 0;
-      if (p > 0) out[c].need = Math.max(out[c].need, karstenSources(p, card.cmc));
+      if (p > 0) out[c].need = Math.max(out[c].need, karstenSources(p, card.cmc, deckSizeFor(ctx.db)));
     }
   }
   return out;
@@ -360,7 +361,7 @@ export function cuttable(deck: Deck, ctx: EngineContext, pool: Pool, keep: Set<s
     outs.push({ ...o, themed: false });
   }
   const summary = summarizeDeck(deck, db);
-  const want = scaleTargets(targetsFor(deck, ctx, summary), summary.cardCount).themeCards;
+  const want = scaleTargets(targetsFor(deck, ctx, summary), summary.cardCount, deckSizeFor(ctx.db)).themeCards;
   let spare = Math.max(0, onTheme - want - THEME_SURPLUS);
   guarded.sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : 1));
   for (const o of guarded) {
@@ -402,7 +403,7 @@ export function climb(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<str
   /** Lands over the deck's land target (negative when short). */
   const landSurplus = (d: Deck): number => {
     const summary = summarizeDeck(d, db);
-    return summary.landsEffective - scaleTargets(targetsFor(d, ctx, summary), summary.cardCount).lands;
+    return summary.landsEffective - scaleTargets(targetsFor(d, ctx, summary), summary.cardCount, deckSizeFor(ctx.db)).lands;
   };
   const wantsLand = (filter: Filter): boolean => filter.land === true || filter.color !== undefined || filter.role === 'land';
   const makesColour = (id: string, color: Color): boolean => (db.features(id)?.sources[color] ?? 0) > 0;

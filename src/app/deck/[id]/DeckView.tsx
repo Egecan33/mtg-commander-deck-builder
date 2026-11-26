@@ -76,7 +76,7 @@ export function DeckView({
       if (ids.length) out.push({ label, rows: ids.map((id) => ({ entry: { oracleId: id, qty: 1, locked: true }, card: lookup[id], zone: z })) });
     };
     zone(deck.commanders, deck.commanders.length > 1 ? 'Commanders' : 'Commander', 'commander');
-    zone(deck.companion ? [deck.companion] : [], 'Companion (outside the 100)', 'companion');
+    zone(deck.companion ? [deck.companion] : [], 'Companion (outside the deck)', 'companion');
     for (const label of order) {
       const rows = by.get(label);
       if (!rows) continue;
@@ -231,7 +231,7 @@ export function DeckView({
             {empty && (
               <EmptyState
                 className="mb-4 mt-2"
-                title="The 99 are empty"
+                title="The main deck is empty"
                 message="Add cards from the card search on the left with the + on each card, or use Build, Auto-build above for a full deck."
                 testId="deck-empty"
               />

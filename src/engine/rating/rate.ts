@@ -1,5 +1,6 @@
 import { analyzeBracket } from '../brackets';
 import { axisLabel } from '../features';
+import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
 import { karstenSources, pAtLeast } from '../mana';
 import { commanderCards, deckSize, isBasicLand, rulebreakersOf, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
@@ -8,7 +9,7 @@ import type { DeckCard } from '../summary';
 import { roleNeeds, scaleTargets, targetsFor } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
-  AxisId, Bracket, BracketReport, Color, Deck, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
+  AxisId, Bracket, BracketReport, Color, Deck, Format, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
 } from '../types';
 
 /** Sub-score weights (spec §11, plus card quality); they sum to 100. */
@@ -16,6 +17,15 @@ export const RATING_WEIGHTS = {
   mana: 16, roles: 14, synergy: 14, curve: 9, interaction: 9, wincons: 9, consistency: 9, bracket: 8, quality: 12,
 } as const;
 export type RatingKey = keyof typeof RATING_WEIGHTS;
+/**
+ * The weights a format rates by. Standard Brawl has no brackets, so the Bracket fit part is dropped
+ * and its weight spread over the other parts in proportion (whole numbers, still summing to 100).
+ */
+export function ratingWeights(format: Format): Record<RatingKey, number> {
+  return format === 'standardbrawl' ? spreadWeights<RatingKey>(RATING_WEIGHTS, 'bracket') : { ...RATING_WEIGHTS };
+}
+/** Said on a Standard Brawl rating in place of the Bracket fit part. */
+export const STANDARD_BRAWL_RATING_NOTE = 'Bracket fit does not apply to Standard Brawl; its points are spread over the other parts.';
 /**
  * A deck that breaks a rule never rates above this. Being short of 100 cards is the one exception:
  * an unfinished deck is not capped, it is rated "so far" (see `rateDeck`).
@@ -64,6 +74,8 @@ const EARLY_PLAYS: PerBracket<number> = [18, 18, 18, 25, 25];
 /** Earliest turn a table of this bracket expects a win (§7), and the turn past which a deck is too slow for it. */
 const WIN_TURN_FLOOR: PerBracket<number> = [9, 8, 6, 4, 0];
 const WIN_TURN_LIMIT: PerBracket<number> = [12, 10.5, 9, 8, 6.5];
+/** Standard Brawl: no floor, and the turn past which a one-on-one deck is too slow. */
+const STD_WIN_TURN_LIMIT = 8;
 /** Tutors plus a third of the draw a full deck needs to find its plan reliably. */
 const REDUNDANCY_NEED: PerBracket<number> = [3, 4, 5, 7, 10];
 /** Karsten's optimal curves by commander mana value 2..6: cards at MV 1,2,3,4,5,6 (§2.4). */
@@ -148,7 +160,13 @@ interface Facts {
   fullTargets: Targets;   // what the finished deck should hold
   needs: Map<Role, RoleNeed>; // role counts against the scaled bands (`roleNeeds`, shared with the scorer)
   castable: number;       // how much of the deck its mana can cast (0..1): the lower of colour sources and land count
-  filled: number;         // cardCount / 100, at most 1
+  filled: number;         // cardCount / the format's deck size, at most 1
+  /** `filled` times the share of a 100-card deck's counts this format's deck holds (59/99 in Standard Brawl): scales the counts below. */
+  countScale: number;
+  size: number;           // cards in a finished deck
+  std: boolean;           // Standard Brawl: one-on-one, no brackets
+  tag: string;            // 'Bracket 3', or 'Standard Brawl'
+  at: string;             // 'at Bracket 3', or 'in Standard Brawl'
   bi: number;             // bracket index 0..4
   bracket: Bracket;
   report: BracketReport;
@@ -166,7 +184,7 @@ const nonland = (c: DeckCard): boolean => !isLandCard(c.features);
  * mana value ≤ 2 ×2, with the worst shortfall per colour.
  */
 function colourSources(
-  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>, offIdentity?: Set<string>,
+  cards: DeckCard[], s: DeckSummary, filled: number, commanderIds: Set<string>, offIdentity?: Set<string>, size = 100,
 ): { share: number; weightSum: number; worst: Map<Color, { name: string; have: number; need: number; lost: number }> } {
   let weightSum = 0;
   let credit = 0;
@@ -180,7 +198,7 @@ function colourSources(
       const pips = finite(c.features.pips[color]);
       if (pips <= 0) continue;
       coloured = true;
-      const need = karstenSources(pips, c.card.cmc);
+      const need = karstenSources(pips, c.card.cmc, size);
       const have = filled > 0 ? s.sources[color] / filled : 0; // a partial deck's sources, as a full deck would have them
       const got = need > 0 ? sourceCredit(have / need) : 1;
       cardCredit = Math.min(cardCredit, got);
@@ -211,12 +229,12 @@ function manaPart(f: Facts): Part {
   const landGap = Math.round(t.lands - s.landsEffective);
   if (landScore < 1 && landGap > 0) {
     issues.push({
-      text: `Add ${plural(landGap, 'land')}: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} at Bracket ${f.bracket}.`,
+      text: `Add ${plural(landGap, 'land')}: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} ${f.at}.`,
       filter: { land: true }, actionable: true, loss: 0.6 * (1 - landScore),
     });
   } else if (landScore < 1 && landGap < 0) {
     issues.push({
-      text: `Cut ${plural(-landGap, 'land')} for spells: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} at Bracket ${f.bracket}.`,
+      text: `Cut ${plural(-landGap, 'land')} for spells: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} ${f.at}.`,
       filter: null, actionable: true, loss: 0.6 * (1 - landScore),
     });
   }
@@ -226,7 +244,7 @@ function manaPart(f: Facts): Part {
   const tapScore = 1 - clamp01((s.taplands - cap) / cap);
   if (tapScore < 1) {
     issues.push({
-      text: `${r1(s.taplands)} lands enter tapped; a Bracket ${f.bracket} deck wants at most ${cap}. Swap some for untapped lands.`,
+      text: `${r1(s.taplands)} lands enter tapped; a ${f.tag} deck wants at most ${cap}. Swap some for untapped lands.`,
       filter: { land: true }, actionable: true, loss: 0.25 * (1 - tapScore),
     });
   }
@@ -235,7 +253,7 @@ function manaPart(f: Facts): Part {
   const isUtility = (c: DeckCard) =>
     isLandCard(c.features) && !isBasicLand(c.card)
     && (c.features.roles.some((r) => r !== 'land') || Object.values(c.features.axes).some((a) => finite(a?.e) >= AXIS_MEMBER || finite(a?.p) >= AXIS_MEMBER));
-  const utilityWant = Math.max(1, Math.round(5 * f.filled));
+  const utilityWant = Math.max(1, Math.round(5 * f.countScale));
   let utility = clamp01(f.count(isUtility) / utilityWant);
   const deckColors = COLORS.filter((c) => cards.some((x) => finite(x.features.pips[c]) > 0));
   const colourless = f.count((c) => isLandCard(c.features) && COLORS.every((k) => finite(c.features.sources[k]) <= 0));
@@ -249,7 +267,7 @@ function manaPart(f: Facts): Part {
   const structure = 0.6 * landScore + 0.25 * tapScore + 0.15 * utility;
 
   // Coloured sources multiply the rest: lands that cannot cast the deck's spells are not a mana base.
-  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds, f.offIdentity);
+  const { share, weightSum, worst } = colourSources(cards, s, f.filled, f.commanderIds, f.offIdentity, f.size);
   const colourFactor = share ** CASTABLE_POWER;
   for (const [color, e] of worst) {
     const short = Math.ceil(e.need - e.have);
@@ -369,7 +387,7 @@ function synergyPart(f: Facts): Part {
   const e = primary === GENERIC_TYPAL ? Math.max(p, finite(f.summary.axisTotals[primary]?.e)) : finite(f.summary.axisTotals[primary]?.e);
   const lo = Math.min(e, p);
   const hi = Math.max(e, p);
-  const enough = Math.max(1, Math.round(8 * f.filled));
+  const enough = Math.max(1, Math.round(8 * f.countScale));
   const balance = hi > 0 ? Math.max(lo / hi, clamp01(lo / enough)) : 0;
   if (balance < 1 && hi > 0) {
     const scarce = e < p ? 'enablers' : 'payoffs';
@@ -435,8 +453,8 @@ function qualityPart(f: Facts): Part {
     const [role, shared] = [...byRole].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0];
     issues.push({
       text: count > 0
-        ? `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} weak for Bracket ${f.bracket}. ${what}`
-        : `The deck's spells are a little weak for Bracket ${f.bracket}. ${what}`,
+        ? `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} weak for ${f.tag}. ${what}`
+        : `The deck's spells are a little weak for ${f.tag}. ${what}`,
       filter: role && shared * 2 > count ? { role } : null, actionable: true, loss: 1 - value,
     });
   }
@@ -452,17 +470,17 @@ function curvePart(f: Facts): Part {
   const mvScore = band(s.avgMv, t.avgMv.lo, t.avgMv.hi, 1.2, 0.8);
   if (s.avgMv > t.avgMv.hi) {
     issues.push({
-      text: `Average mana value is ${s.avgMv.toFixed(2)}; Bracket ${f.bracket} decks run ${t.avgMv.lo}-${t.avgMv.hi}. Swap expensive cards for cheaper ones.`,
+      text: `Average mana value is ${s.avgMv.toFixed(2)}; ${f.tag} decks run ${t.avgMv.lo}-${t.avgMv.hi}. Swap expensive cards for cheaper ones.`,
       filter: { maxMv: 3 }, actionable: true, loss: 0.5 * (1 - mvScore),
     });
   } else if (mvScore < 1) {
     issues.push({
-      text: `Average mana value is ${s.avgMv.toFixed(2)}, below the ${t.avgMv.lo}-${t.avgMv.hi} usual at Bracket ${f.bracket}: the deck may run out of things to do late.`,
+      text: `Average mana value is ${s.avgMv.toFixed(2)}, below the ${t.avgMv.lo}-${t.avgMv.hi} usual ${f.at}: the deck may run out of things to do late.`,
       filter: null, actionable: false, loss: 0.5 * (1 - mvScore),
     });
   }
 
-  const earlyWant = Math.max(1, Math.round(EARLY_PLAYS[f.bi] * f.filled));
+  const earlyWant = Math.max(1, Math.round(EARLY_PLAYS[f.bi] * f.countScale));
   const early = s.curve[0] + s.curve[1] + s.curve[2];
   const earlyScore = clamp01(early / earlyWant);
   if (early < earlyWant) {
@@ -522,10 +540,15 @@ function answers(c: DeckCard): { creature: boolean; artifact: boolean; enchantme
 function interactionPart(f: Facts): Part {
   const { summary: s } = f;
   const issues: Issue[] = [];
-  const [fullLo, fullHi] = INTERACTION_BAND[f.bi];
-  const lo = Math.round(fullLo * f.filled);
-  const hi = Math.max(lo, Math.ceil(fullHi * f.filled));
-  const countScore = s.interaction === 0 && fullLo > 0 ? 0 : band(s.interaction, lo, hi, Math.max(1, 5 * f.filled), 10);
+  // Standard Brawl: the band is the shared targets' spot removal + counterspells + wipes (the numbers the scorer rewards).
+  const shared = (['spot-removal', 'counterspell', 'wipe'] as const).map((r) => f.fullTargets.roles[r] ?? { lo: 0, hi: 0 });
+  const [fullLo, fullHi] = f.std
+    ? [shared.reduce((n, b) => n + b.lo, 0), shared.reduce((n, b) => n + b.hi, 0)]
+    : INTERACTION_BAND[f.bi];
+  const scale = f.std ? f.filled : f.countScale;
+  const lo = Math.round(fullLo * scale);
+  const hi = Math.max(lo, Math.ceil(fullHi * scale));
+  const countScore = s.interaction === 0 && fullLo > 0 ? 0 : band(s.interaction, lo, hi, Math.max(1, 5 * scale), 10);
   if (s.interaction < lo) {
     issues.push({
       text: `${lo - s.interaction} short on interaction: ${s.interaction} removal spells, counterspells and wipes, want ${lo}-${hi}.`,
@@ -538,7 +561,7 @@ function interactionPart(f: Facts): Part {
   const shareScore = s.interaction > 0 ? clamp01(share / shareWant) : 0;
   if (s.interaction > 0 && share < shareWant) {
     issues.push({
-      text: `Only ${pct(share)} of the interaction works at instant speed; Bracket ${f.bracket} decks want ${pct(shareWant)} or more.`,
+      text: `Only ${pct(share)} of the interaction works at instant speed; ${f.tag} decks want ${pct(shareWant)} or more.`,
       filter: { role: 'spot-removal' }, actionable: true, loss: 0.25 * (1 - shareScore),
     });
   }
@@ -606,18 +629,19 @@ function winconsPart(f: Facts): Part {
   }
 
   const turn = winTurn(f);
-  const floor = WIN_TURN_FLOOR[f.bi];
-  const limit = WIN_TURN_LIMIT[f.bi];
+  // Standard Brawl has no "too fast" floor; one-on-one at 25 life, a win past turn 8 is slow.
+  const floor = f.std ? 0 : WIN_TURN_FLOOR[f.bi];
+  const limit = f.std ? STD_WIN_TURN_LIMIT : WIN_TURN_LIMIT[f.bi];
   const speedFit = band(turn, floor, limit, 2);
   const about = Math.max(1, Math.round(turn));
   if (turn < floor) {
     issues.push({
-      text: `Can threaten a win around turn ${about}; Bracket ${f.bracket} tables expect games to reach turn ${floor}. Slow it down or raise the target bracket.`,
+      text: `Can threaten a win around turn ${about}; ${f.tag} tables expect games to reach turn ${floor}. Slow it down${f.std ? '' : ' or raise the target bracket'}.`,
       filter: null, actionable: false, loss: 0.4 * (1 - speedFit),
     });
   } else if (turn > limit) {
     issues.push({
-      text: `Likely to close games around turn ${about}, slow for Bracket ${f.bracket}. Lower the curve or add faster finishers.`,
+      text: `Likely to close games around turn ${about}, slow for ${f.tag}. Lower the curve or add faster finishers.`,
       filter: { role: 'win-condition' }, actionable: true, loss: 0.4 * (1 - speedFit),
     });
   }
@@ -640,7 +664,7 @@ function consistencyPart(f: Facts): Part {
 
   const once = pAtLeast(library, landish, hand, 2) - pAtLeast(library, landish, hand, 5);
   const keepable = clamp01(1 - (1 - once) ** 2); // one free mulligan
-  const full = s.cardCount >= 60;
+  const full = s.cardCount >= 0.6 * f.size;
   const wantLands = fastDeck ? 3 : 4;
   const seen = Math.min(library, 7 + wantLands); // a draw every turn, the first player included
   const drops = pAtLeast(library, landish, seen, wantLands);
@@ -668,7 +692,7 @@ function consistencyPart(f: Facts): Part {
     });
   }
 
-  const need = Math.max(1, REDUNDANCY_NEED[f.bi] * f.filled);
+  const need = Math.max(1, REDUNDANCY_NEED[f.bi] * f.countScale);
   const tutors = f.needs.get('tutor')?.count ?? s.roleCounts.tutor ?? 0;
   const draw = f.needs.get('draw')?.count ?? s.roleCounts.draw ?? 0;
   const redundancy = clamp01((tutors + draw / 3) / need);
@@ -724,10 +748,10 @@ const CAST_DEPENDENT: ReadonlySet<RatingKey> = new Set(['roles', 'synergy', 'cur
 
 /**
  * True when the deck's violations cap its rating at `ILLEGAL_CAP`: any rule broken other than
- * being short of 100 cards. A deck over 100 cards is capped like any other illegal deck.
+ * being short of 100 cards (60 in Standard Brawl). A deck over the size is capped like any other illegal deck.
  */
-export function ratingCapped(deck: Deck, violations: readonly Violation[]): boolean {
-  return violations.some((v) => v.code !== 'size' || deckSize(deck) > 100);
+export function ratingCapped(deck: Deck, violations: readonly Violation[], size = 100): boolean {
+  return violations.some((v) => v.code !== 'size' || deckSize(deck) > size);
 }
 
 /**
@@ -746,18 +770,24 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const violations = validateDeck(deck, db);
   const summary = summarizeDeck(deck, db);
   const { cards } = deckCards(deck, db);
-  const bracket = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3))) as Bracket;
+  const format = formatOf(db);
+  const size = deckSizeFor(db);
+  const std = format === 'standardbrawl';
+  const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3))) as Bracket;
   const fullTargets = targetsFor(deck, ctx, summary);
-  const filled = Math.min(1, Math.max(0, summary.cardCount) / 100);
+  const filled = Math.min(1, Math.max(0, summary.cardCount) / size);
   const commanderIds = new Set(deck.commanders);
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity,
+    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity, size, std,
+    countScale: filled * (std ? (size - 1) / 99 : 1),
+    tag: std ? 'Standard Brawl' : `Bracket ${bracket}`,
+    at: std ? 'in Standard Brawl' : `at Bracket ${bracket}`,
     bi: bracket - 1,
-    targets: scaleTargets(fullTargets, summary.cardCount),
+    targets: scaleTargets(fullTargets, summary.cardCount, size),
     needs: new Map(roleNeeds(deck, ctx, { summary, targets: fullTargets, scaled: true }).map((n) => [n.role, n])),
     castable: Math.min(
-      colourSources(cards, summary, filled, commanderIds, offIdentity).share,
+      colourSources(cards, summary, filled, commanderIds, offIdentity, size).share,
       band(summary.landsEffective, Math.round(fullTargets.lands * filled) - LAND_SLACK, Math.round(fullTargets.lands * filled) + LAND_SLACK, Math.max(4, LAND_BREAK * filled)),
     ),
     report: analyzeBracket(deck, ctx),
@@ -765,7 +795,8 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   };
   const uncastable = 1 - UNCASTABLE_COST * (1 - clamp01(facts.castable)) ** 2;
 
-  const subscores: SubScore[] = ORDER.map((key) => {
+  const weights = ratingWeights(format);
+  const subscores: SubScore[] = ORDER.filter((key) => !(std && key === 'bracket')).map((key) => {
     // An empty deck has nothing to rate: every band scaled to zero would otherwise read as met.
     const part = summary.cardCount > 0 ? PARTS[key](facts) : { value: 0, issues: [] };
     const fixes = part.issues
@@ -776,16 +807,17 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
     const value = clamp01(part.value) * (CAST_DEPENDENT.has(key) ? uncastable : 1) * filled;
     // A sub-score of 0 always says why (AGENTS rule 4); with nothing to swap yet it is advice.
     if (Math.round(clamp01(value) * 1000) === 0 && fixes.length === 0) fixes.push({ text: EMPTY_REASON[key], filter: null, actionable: false });
-    return { key, label: LABELS[key], weight: RATING_WEIGHTS[key], value: Math.round(clamp01(value) * 1000) / 1000, fixes };
+    return { key, label: LABELS[key], weight: weights[key], value: Math.round(clamp01(value) * 1000) / 1000, fixes };
   });
 
   const legal = violations.length === 0;
   const raw = Math.round(subscores.reduce((a, s) => a + s.weight * s.value, 0));
   const noMaxSize = rulebreakersOf(deck).some((r) => r.noMaxSize);
   return {
-    rating: ratingCapped(deck, violations) ? Math.min(ILLEGAL_CAP, raw) : raw,
+    rating: ratingCapped(deck, violations, size) ? Math.min(ILLEGAL_CAP, raw) : raw,
     legal,
-    complete: noMaxSize ? summary.cardCount >= 100 : summary.cardCount === 100,
+    complete: noMaxSize ? summary.cardCount >= size : summary.cardCount === size,
     subscores, violations,
+    ...(std ? { notes: [STANDARD_BRAWL_RATING_NOTE] } : {}),
   };
 }

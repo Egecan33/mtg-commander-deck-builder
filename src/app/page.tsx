@@ -106,7 +106,7 @@ export default function DecksPage() {
         <div className="mt-10 grid max-w-[46rem] gap-4 rounded-lg border border-slag bg-anvil p-8">
           <h2 className="text-[1.35rem]">Start with a commander, or bring a deck you already play</h2>
           <p className="text-ash">
-            Pick a commander and a bracket and Commander Forge builds a legal 100-card deck you can then change card by card. Or paste a list you already
+            Pick a commander and Commander Forge builds a legal deck (100 cards, or 60 in Standard Brawl) you can then change card by card. Or paste a list you already
             have: it is rated, and you get an ordered set of swaps that make it better.
           </p>
           <div className="flex gap-2">
@@ -118,7 +118,8 @@ export default function DecksPage() {
 
       <ul className="mt-7 grid grid-cols-[repeat(auto-fill,minmax(19rem,1fr))] gap-5">
         {decks?.map((d) => {
-          const broken = !d.legal && d.cardCount >= 100;
+          const size = d.format === 'standardbrawl' ? 60 : 100;
+          const broken = !d.legal && d.cardCount >= size;
           const band = broken ? 'low' : bandOf(d.rating);
           return (
             <li key={d.id} className="group overflow-hidden rounded-lg border border-slag bg-anvil" data-testid="deck-tile">
@@ -136,7 +137,7 @@ export default function DecksPage() {
                   <div
                     className="display absolute bottom-2 right-3 flex h-12 min-w-12 items-center justify-center rounded-md px-2 text-[1.6rem] font-bold text-[#15110a] shadow-lg"
                     style={{ background: BAND_VAR[band] }}
-                    title={broken ? 'Not legal: the rating is capped' : d.cardCount < 100 ? 'Rating so far, out of 100' : 'Deck rating out of 100'}
+                    title={broken ? 'Not legal: the rating is capped' : d.cardCount < size ? 'Rating so far, out of 100' : 'Deck rating out of 100'}
                   >
                     {Math.round(d.rating)}
                   </div>
@@ -145,11 +146,15 @@ export default function DecksPage() {
                   <h2 className="truncate text-[1.2rem] leading-snug">{d.name}</h2>
                   <p className="truncate text-ash">{d.commanders.map((c) => c.name).join(' and ') || 'Choose a commander in the builder'}</p>
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
-                    <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
+                    {d.format === 'standardbrawl' ? (
+                      <span className="chip text-bone" data-testid="tile-format">Standard Brawl</span>
+                    ) : (
+                      <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
+                    )}
+                    <span className={`chip ${d.cardCount === size ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / {size}</span>
                     {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
                     {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
-                    {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
+                    {d.format !== 'standardbrawl' && d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
                     {d.combos > 0 && <span className="chip" data-testid="tile-combos">{d.combos} {d.combos === 1 ? 'combo' : 'combos'}</span>}
                   </div>
                 </div>

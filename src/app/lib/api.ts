@@ -56,8 +56,8 @@
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
- *        'fix' (Fix deck) makes the deck legal and 100 cards (cards that break a rule are replaced by the best
- *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
+ *        'fix' (Fix deck) makes the deck legal and full (100 cards, 60 in Standard Brawl) (cards that break a rule are replaced by the best
+ *        swap the engine agrees with, or removed; over the size the weakest unlocked cards go; under it it is
  *        filled), then (full fix only) brings a deck that breaks its own target bracket's rules (Game
  *        Changers at Bracket 2 and the like) inside it with the same routine as `only: 'bracket'`, and
  *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
@@ -65,7 +65,7 @@
  *        highest rating is kept, when that is above the rating the steps before it left, else none of it).
  *        Every change is in `changes` ({ out, in, reason, summary }; `out` '' for an add, `in` '' for a cut;
  *        `summary` one short line such as "Ramp 6 → 7 of 10–13", `reason` the full sentence).
- *        Making the deck legal and 100 cards always stands, even when it costs rating points (a deck that
+ *        Making the deck legal and full always stands, even when it costs rating points (a deck that
  *        breaks a rule is capped at 40 and cannot be played; `note` then says what it cost), so
  *        `ratingAfter` can be below `ratingBefore` only for that reason; the improve part never ends below
  *        the rating the steps before it left. `note` also explains an empty result (what
@@ -82,7 +82,7 @@
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        'swapin' takes `options.in` (a card not in the deck, or a basic land already in it for one more copy;
  *        400 without it), `count` 1-10, and returns the deck cards it could replace, best rating after
- *        first; a deck under 100 cards gets the plain add (`out` '') first. It returns [] for an illegal
+ *        first; a deck under its size gets the plain add (`out` '') first. It returns [] for an illegal
  *        or gated card, a card the options rule out, or a non-basic card already in the deck.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
@@ -96,7 +96,7 @@
  *        'add' takes `options.role` ('land' or a role with a band: ramp, draw, spot-removal,
  *        counterspell, wipe, protection, recursion, tutor, win-condition, graveyard-hate) and returns
  *        up to `count` (default 5, max 10) ways to add one such card: `in` with the card to cut as
- *        `out`, or `out: ''` (a plain add) while the deck is under 100 cards.
+ *        `out`, or `out: ''` (a plain add) while the deck is under its size.
  *        The engine dissents instead of refusing: a proposal it thinks is not an improvement still
  *        comes back, with `agrees: false` and an `objection` in plain words. Illegal cards are never
  *        proposed.
@@ -224,6 +224,9 @@ import type {
   SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
+/** The two MTG Arena formats a deck of an Arena collection can be in (`Deck.arenaFormat`; missing is 'brawl'). */
+export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
+
 export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, Wildcards };
 
 // ---------------------------------------------------------------------------------------------
@@ -277,6 +280,8 @@ export interface StatusResponse {
     collection: number; decks: number;
     /** Cards on MTG Arena and legal in Brawl: 0 until `pnpm sync cards` has run with Arena data. */
     brawl: number;
+    /** Cards on MTG Arena and legal in Standard Brawl: 0 until the cards sync has run with Standard Brawl data. */
+    standardBrawl: number;
   };
   /** ISO date of the last cards sync, null when never synced. */
   cardsSyncedAt: string | null;
@@ -308,7 +313,8 @@ export interface CommanderCard extends ClientCard {
   /** The deck is illegal until a colour is chosen. */
   requiresColorChoice: boolean;
 }
-export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number }
+/** `arenaFormat` picks Brawl or Standard Brawl while an MTG Arena collection is active (default 'brawl'). */
+export interface CommandersQuery { q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number; arenaFormat?: ArenaFormat }
 export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderCard[] }
 export interface PartnersResponse { commander: CommanderCard; partners: CommanderCard[] }
 
@@ -333,7 +339,7 @@ export interface DeckTile {
 export interface DecksResponse { decks: DeckTile[] }
 export interface DeckResponse {
   deck: Deck; updatedAt: string; cards: CardLookup;
-  /** The deck's format, from its collection: MTG Arena decks are Brawl decks. */
+  /** The deck's format: Commander for a Physical deck; an MTG Arena deck is Brawl, or Standard Brawl when `deck.arenaFormat` says so. */
   format: Format;
 }
 
@@ -343,7 +349,7 @@ export interface DeckResponse {
 export type EdhrecStatus = 'off' | 'loading' | 'ready' | 'none';
 
 export interface AnalyzeResponse {
-  /** The rules the deck was checked under: 'brawl' for a deck of an MTG Arena collection (Arena cards only, Brawl legality). */
+  /** The rules the deck was checked under: 'brawl' or 'standardbrawl' for a deck of an MTG Arena collection (Arena cards only, that format's legality). */
   format: Format;
   rating: DeckRating;
   bracket: BracketReport;
@@ -465,7 +471,7 @@ export type BuildResponse = BuildDeckResponse | BuildProposalsResponse | FixResp
 // Import, export, collection, EDHREC
 
 export interface TextLine { line: number; text: string }
-export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket }
+export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket; arenaFormat?: ArenaFormat }
 export interface ImportResponse { deck: Deck; unresolved: TextLine[]; ignored: TextLine[]; cards: CardLookup }
 export interface ExportResponse {
   text: string;
@@ -682,7 +688,7 @@ export const startSync = (step: SyncStep | 'all') => call<SyncState>('POST', '/a
 export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal) =>
   call<CommandersResponse>(
     'GET',
-    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize })}`,
+    `/api/commanders${query({ q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize, arenaFormat: params.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`,
     undefined,
     signal,
   );
@@ -745,15 +751,15 @@ export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
-export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly });
-export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal) =>
-  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined })}`, undefined, signal);
-export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly });
+export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly, arenaFormat });
+export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined, arenaFormat })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly, arenaFormat });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);
 
-export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal) =>
-  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket }, signal);
+export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal, format?: Format) =>
+  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket, format }, signal);

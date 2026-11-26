@@ -1,4 +1,5 @@
 import { bracketGate } from '../brackets';
+import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
 import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
@@ -499,11 +500,14 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
     fitText = `stronger than Bracket ${bracket} tables expect`;
   }
 
+  // Standard Brawl has no bracket: nothing here is a fit, a penalty or a reason.
+  if (weights.bracket === 0) { fitPts = 0; fitText = ''; fitSpeed = false; }
+
   const pipReq: [Color, number][] = [];
   if (f && !land) {
     for (const c of COLORS) {
       const pips = finite(f.pips[c]);
-      if (pips > 0) pipReq.push([c, karstenSources(pips, mv)]);
+      if (pips > 0) pipReq.push([c, karstenSources(pips, mv, deckSizeFor(ctx.db))]);
     }
   }
   const coreRoles = bracket >= 4 ? CORE_ROLES_HIGH : CORE_ROLES;
@@ -552,6 +556,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
   const { ctx, bracket } = s;
   const summary: DeckSummary = summarizeDeck(deck, ctx.db);
   const targets: Targets = targetsFor(deck, ctx, summary);
+  const size = deckSizeFor(ctx.db);
 
   const roleNeed: State['roleNeed'] = {};
   const roleText: State['roleText'] = {};
@@ -581,7 +586,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
   const sources = {} as Record<Color, number>;
   for (const c of COLORS) sources[c] = finite(summary.sources[c]) + (s.hasCommander && !s.identity.has(c) ? 0 : prior);
 
-  const slots = Math.max(1, 100 - targets.lands);
+  const slots = Math.max(1, size - targets.lands);
   const curveFit = CURVE_SHAPE[bracket - 1].map((share, i) => {
     const ratio = finite(summary.curve[i]) / Math.max(0.5, share * slots);
     return ratio <= 0.8 ? 1 : ratio >= 1.3 ? 0.2 : 1 - ((ratio - 0.8) / 0.5) * 0.8;
@@ -598,7 +603,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
     counts: deckCounts(deck),
     roleNeed, roleText, roleBand, landNeed, landText, themeNeed, themeText, sources, curveFit, scarce,
     taplandsOver: finite(summary.taplands) >= targets.taplandCap,
-    landLight: summary.cardCount >= 60 && finite(summary.landsEffective) < targets.lands * (summary.cardCount / 100) - 3,
+    landLight: summary.cardCount >= 60 * (size / 100) && finite(summary.landsEffective) < targets.lands * (summary.cardCount / size) - 3,
   };
 }
 
@@ -660,10 +665,11 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   quality(card: Card): number | null;
 } {
   const { db } = ctx;
-  const bracket = (Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)))) as Bracket;
+  const bracket = (Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3)))) as Bracket;
   const theme = resolveThemeWeights(deck, ctx) ?? {};
   const commanders = commanderCards(deck, db);
-  const weights: Weights = ctx.edhrec ? { ...WEIGHTS_EDHREC } : { ...WEIGHTS_PLAIN };
+  const noBracket = formatOf(db) === 'standardbrawl';
+  const weights: Weights = noBracket ? spreadWeights<PartKey>(ctx.edhrec ? WEIGHTS_EDHREC : WEIGHTS_PLAIN, 'bracket') : ctx.edhrec ? { ...WEIGHTS_EDHREC } : { ...WEIGHTS_PLAIN };
   // Theme weights are resolved once and pinned, so every leave-one-out deck reads the same ones.
   const pinned: Deck = { ...deck, targetBracket: bracket, themeWeights: theme };
   const pull: Record<AxisId, number> = {};

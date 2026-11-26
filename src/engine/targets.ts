@@ -1,3 +1,4 @@
+import { bracketOf, deckSizeFor, formatOf } from './format';
 import { landTarget } from './mana';
 import { allowedIdentity, commanderCards } from './rules';
 import { deckCards, isLandCard, resolveThemeWeights, summarizeDeck } from './summary';
@@ -40,6 +41,27 @@ const TAPLAND_CAP: PerBracket<number> = [12, 10, 6, 3, 1];
 const LAND_BAND: PerBracket<Band> = [[36, 40], [36, 39], [35, 38], [31, 36], [26, 30]];
 const LAND_MIN = 24;
 const LAND_MAX = 44;
+
+/**
+ * Standard Brawl (60 cards, one opponent, 25 life), designer's calls from the Standard Brawl spec:
+ * lands = round(22 + 0.8 x average mana value of the spells) held to 22-26; each Commander role
+ * band scales by 59/99; removal then x1.2, protection x0.8, board wipes 0-1.
+ */
+const STD_LAND_BASE = 22;
+const STD_LAND_PER_MV = 0.8;
+const STD_LAND_BAND: Band = [22, 26];
+const STD_LAND_USER: Band = [16, 30];
+const STD_ROLE_SHARE = 59 / 99;
+const STD_REMOVAL = 1.2;
+const STD_PROTECTION = 0.8;
+const STD_NOTES = {
+  lands: '60-card Brawl decks have no fast mana and need to hit land drops on a 1v1 clock.',
+  roles: 'Role counts are the 99-card ones scaled to 59 cards.',
+  removal: 'Single-target removal counts 1.2 times: answers matter more against one opponent.',
+  wipe: 'Board wipes: at most one; a 1v1 game rarely needs more.',
+  protection: 'Protection counts 0.8 times: there is one opponent to protect against.',
+  bracket: 'Standard Brawl has no brackets or Game Changer limits.',
+} as const;
 
 /** `roles` moves a band, `hi` only raises its top (more of the role is welcome, none is owed). */
 interface Delta { lands?: number; roles?: Partial<Record<Role, number>>; hi?: Partial<Record<Role, number>>; avgMvHi?: number }
@@ -92,10 +114,12 @@ export function deckArchetypes(weights: Record<AxisId, number>): AxisId[] {
 /**
  * What a deck of this bracket and theme should hold when complete: §2.3 bands, shifted by the §3
  * deltas of the theme axes weighted ≥ 0.6, and the land target of §4.1 from the deck's own curve.
- * Use `scaleTargets` for a deck that is not yet 100 cards.
+ * Use `scaleTargets` for a deck that is not yet full (100 cards, 60 in Standard Brawl).
  */
 export function targetsFor(deck: Deck, ctx: EngineContext, summary: DeckSummary): Targets {
-  const i = bracketIndex(deck.targetBracket);
+  const std = formatOf(ctx.db) === 'standardbrawl';
+  const size = deckSizeFor(ctx.db);
+  const i = bracketIndex(bracketOf(deck, ctx.db));
   const bracket = (i + 1) as Bracket;
   const blue = commanderCards(deck, ctx.db).length > 0 && allowedIdentity(deck, ctx.db).has('U');
 
@@ -118,14 +142,16 @@ export function targetsFor(deck: Deck, ctx: EngineContext, summary: DeckSummary)
     if (features.roles.includes('ramp') || features.roles.includes('draw')) cheap += qty;
   }
   // Scale a partial deck's cheap-card count up to a full deck, or the discount lags the build.
-  const filled = Math.min(1, Math.max(0, summary.cardCount) / 100);
+  const filled = Math.min(1, Math.max(0, summary.cardCount) / size);
   if (filled > 0 && filled < 1) cheap = Math.min(cheap / filled, 30);
-  let lands = Math.min(LAND_BAND[i][1], Math.max(LAND_BAND[i][0], landTarget(mv, cheap, bracket)));
+  let lands = std
+    ? STD_LAND_BASE + STD_LAND_PER_MV * mv
+    : Math.min(LAND_BAND[i][1], Math.max(LAND_BAND[i][0], landTarget(mv, cheap, bracket)));
 
   const archetypes = deckArchetypes(resolveThemeWeights(deck, ctx));
   for (const key of archetypes) {
     const d = ARCHETYPE[key];
-    lands += d.lands ?? 0;
+    lands += (d.lands ?? 0) * (std ? STD_ROLE_SHARE : 1);
     for (const [role, shift] of Object.entries(d.roles ?? {}) as [Role, number][]) {
       const band = roles[role];
       if (!band) continue;
@@ -147,28 +173,44 @@ export function targetsFor(deck: Deck, ctx: EngineContext, summary: DeckSummary)
   }
   avgMv.lo = Math.min(avgMv.lo, Math.round((avgMv.hi - 0.4) * 10) / 10);
 
+  const notes: string[] = [];
+  if (std) {
+    for (const [role, band] of Object.entries(roles) as [Role, RoleBand][]) {
+      const k = role === 'spot-removal' ? STD_REMOVAL : role === 'protection' ? STD_PROTECTION : 1;
+      band.lo = Math.round(band.lo * STD_ROLE_SHARE * k);
+      band.hi = Math.max(band.lo, Math.round(band.hi * STD_ROLE_SHARE * k));
+    }
+    roles.wipe = { lo: 0, hi: 1 };
+    notes.push(STD_NOTES.lands, STD_NOTES.roles, STD_NOTES.removal, STD_NOTES.wipe, STD_NOTES.protection, STD_NOTES.bracket);
+  }
+  let userLands = false;
+
   // Counts the user asked for on this deck win over everything above.
   for (const [role, raw] of Object.entries(deck.roleTargets ?? {}) as [Role, unknown][]) {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) continue;
     const n = Math.min(ROLE_TARGET_MAX, Math.max(0, Math.round(raw)));
-    if (role === 'land') lands = Math.min(LAND_MAX, Math.max(LAND_MIN, n));
-    else if (ROLE_LABEL[role] !== undefined && (roles[role] || role !== 'counterspell')) roles[role] = { lo: n, hi: n + ROLE_TARGET_SPAN };
+    if (role === 'land') {
+      lands = Math.min(std ? STD_LAND_USER[1] : LAND_MAX, Math.max(std ? STD_LAND_USER[0] : LAND_MIN, n));
+      userLands = true;
+    } else if (ROLE_LABEL[role] !== undefined && (roles[role] || role !== 'counterspell')) roles[role] = { lo: n, hi: n + ROLE_TARGET_SPAN };
   }
 
+  const [landLo, landHi] = std ? (userLands ? STD_LAND_USER : STD_LAND_BAND) : [LAND_MIN, LAND_MAX];
   return {
-    lands: Math.min(LAND_MAX, Math.max(LAND_MIN, Math.round(lands))),
+    lands: Math.min(landHi, Math.max(landLo, Math.round(lands))),
     roles, avgMv,
-    themeCards: THEME_CARDS[i],
-    taplandCap: TAPLAND_CAP[i],
+    themeCards: std ? Math.round(THEME_CARDS[i] * STD_ROLE_SHARE) : THEME_CARDS[i],
+    taplandCap: std ? Math.ceil(TAPLAND_CAP[i] * STD_ROLE_SHARE) : TAPLAND_CAP[i],
+    ...(std ? { notes } : {}),
   };
 }
 
 /**
- * Targets for a deck of `cardCount` cards: counts shrink linearly with cardCount / 100, never
- * grow past the full-deck values, and average mana value stays as it is.
+ * Targets for a deck of `cardCount` cards: counts shrink linearly with cardCount / `size` (100, or
+ * 60 in Standard Brawl), never grow past the full-deck values, and average mana value stays as it is.
  */
-export function scaleTargets(t: Targets, cardCount: number): Targets {
-  const f = Number.isFinite(cardCount) ? Math.min(1, Math.max(0, cardCount) / 100) : 0;
+export function scaleTargets(t: Targets, cardCount: number, size = 100): Targets {
+  const f = Number.isFinite(cardCount) ? Math.min(1, Math.max(0, cardCount) / size) : 0;
   const roles: Partial<Record<Role, RoleBand>> = {};
   for (const [role, band] of Object.entries(t.roles) as [Role, RoleBand][]) {
     const lo = Math.round(band.lo * f);
@@ -180,6 +222,7 @@ export function scaleTargets(t: Targets, cardCount: number): Targets {
     avgMv: { ...t.avgMv },
     themeCards: Math.round(t.themeCards * f),
     taplandCap: Math.ceil(t.taplandCap * f),
+    ...(t.notes ? { notes: t.notes } : {}),
   };
 }
 
@@ -257,10 +300,10 @@ export interface RoleNeedOptions {
  * deck, in the order of `ROLE_LABEL`.
  */
 export function roleNeeds(deck: Deck, ctx: EngineContext, opts: RoleNeedOptions = {}): RoleNeed[] {
-  const bracket = bracketIndex(deck.targetBracket) + 1;
+  const bracket = bracketIndex(bracketOf(deck, ctx.db)) + 1;
   const summary = opts.summary ?? summarizeDeck(deck, ctx.db);
   const full = opts.targets ?? targetsFor(deck, ctx, summary);
-  const targets = opts.scaled ? scaleTargets(full, summary.cardCount) : full;
+  const targets = opts.scaled ? scaleTargets(full, summary.cardCount, deckSizeFor(ctx.db)) : full;
   const counts: Partial<Record<Role, number>> = {};
   for (const { card, features, qty } of deckCards(deck, ctx.db).cards) {
     for (const role of bandRoles(card, features, bracket)) counts[role] = (counts[role] ?? 0) + qty;

@@ -37,8 +37,19 @@ export function collectionKind(id: string): 'manual' | 'arena' | null {
   return row ? (row.kind === 'arena' ? 'arena' : 'manual') : null;
 }
 
-/** The format a collection's decks are built in: MTG Arena's Brawl for an Arena collection, else Commander. */
-export const collectionFormat = (id: string): Format => (collectionKind(id) === 'arena' ? 'brawl' : 'commander');
+export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
+
+/** `arenaFormat` from a request or a stored deck: 'standardbrawl', else 'brawl' (what a missing one means). */
+export const readArenaFormat = (value: unknown): ArenaFormat => (value === 'standardbrawl' ? 'standardbrawl' : 'brawl');
+
+/**
+ * The format a collection's decks are built in: for an Arena collection MTG Arena's Brawl, or
+ * Standard Brawl when `arena` says so; else Commander.
+ */
+export const collectionFormat = (id: string, arena?: unknown): Format => (collectionKind(id) === 'arena' ? readArenaFormat(arena) : 'commander');
+
+/** The format for what is built while the active collection is active: `arena` is the Brawl or Standard Brawl choice made in the app. */
+export const activeFormat = (arena?: unknown): Format => collectionFormat(activeCollectionId(), arena);
 
 /**
  * The collection a deck belongs to: its own `collectionId`, else the active collection (a deck
@@ -46,8 +57,11 @@ export const collectionFormat = (id: string): Format => (collectionKind(id) === 
  */
 export const deckCollection = (deck: Deck): string => deck.collectionId ?? activeCollectionId();
 
-/** The format a deck is checked and built in: MTG Arena's Brawl for a deck of an Arena collection, else Commander. */
-export const deckFormat = (deck: Deck): Format => collectionFormat(deckCollection(deck));
+/**
+ * The format a deck is checked and built in: for a deck of an Arena collection its `arenaFormat`
+ * (Brawl when missing), else Commander.
+ */
+export const deckFormat = (deck: Deck): Format => collectionFormat(deckCollection(deck), deck.arenaFormat);
 
 /** Makes another collection the active one. */
 export function setActiveCollection(id: string): void {

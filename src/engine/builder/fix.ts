@@ -1,5 +1,5 @@
 import { analyzeBracket } from '../brackets';
-import { formatOf } from '../format';
+import { deckSizeFor, formatLabel, formatOf, isBrawlFormat } from '../format';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
@@ -13,7 +13,6 @@ import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from
 import { buildPool, deckCount, qtyOf, removeCard } from './pool';
 import type { Pool } from './pool';
 
-const DECK_SIZE = 100;
 /** Swaps the improve step asks for. */
 const FIX_SWAPS = 15;
 /** Replacements rated for each card that breaks a rule. */
@@ -115,8 +114,9 @@ function repairRules(start: Deck, ctx: EngineContext, pool: () => Pool, changes:
   let deck = start;
   // A Brawl deck has no sideboard, so no companion: its violation names only the companion, which
   // is not a main-deck card to cut, so it is dropped here.
-  if (deck.companion && formatOf(ctx.db) === 'brawl') {
-    changes.push({ out: deck.companion, in: '', reason: 'Drops the companion: Brawl decks have no sideboard.', summary: 'Legal: drops the companion (Brawl has no sideboard)' });
+  if (deck.companion && isBrawlFormat(formatOf(ctx.db))) {
+    const label = formatLabel(formatOf(ctx.db));
+    changes.push({ out: deck.companion, in: '', reason: `Drops the companion: ${label} decks have no sideboard.`, summary: `Legal: drops the companion (${label} has no sideboard)` });
     deck = { ...deck, companion: null };
   }
   for (let n = 0; n < MAX_REPAIRS; n++) {
@@ -160,13 +160,13 @@ function trim(start: Deck, ctx: EngineContext, pool: Pool, changes: FixChange[])
     .filter((id) => !taken.has(id))
     .sort((a, b) => scoreOf(a) - scoreOf(b) || (a < b ? -1 : 1));
   const order = [...first, ...rest];
-  while (deckCount(deck) > DECK_SIZE) {
+  while (deckCount(deck) > deckSizeFor(ctx.db)) {
     const before = deckCount(deck);
     for (const id of order) {
-      if (deckCount(deck) <= DECK_SIZE) break;
+      if (deckCount(deck) <= deckSizeFor(ctx.db)) break;
       if (!removable(deck, id)) continue;
       deck = removeCard(deck, id);
-      changes.push({ out: id, in: '', reason: 'Cuts one of the weakest cards to bring the deck down to 100.', summary: 'Cuts the deck down to 100' });
+      changes.push({ out: id, in: '', reason: `Cuts one of the weakest cards to bring the deck down to ${deckSizeFor(ctx.db)}.`, summary: `Cuts the deck down to ${deckSizeFor(ctx.db)}` });
     }
     if (deckCount(deck) === before) break; // what is left over is locked
   }
@@ -179,12 +179,12 @@ function fill(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixC
   const before = counts(start);
   const after = counts(built);
   for (const [id, n] of before) {
-    for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: 'Makes room while filling the deck to 100.', summary: 'Makes room to fill the deck to 100' });
+    for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: `Makes room while filling the deck to ${deckSizeFor(ctx.db)}.`, summary: `Makes room to fill the deck to ${deckSizeFor(ctx.db)}` });
   }
   if (start.companion && built.companion !== start.companion) {
     changes.push({ out: start.companion, in: '', reason: notes.find((x) => /companion/.test(x)) ?? 'Drops the companion: the deck cannot meet its condition.', summary: 'Drops the companion' });
   }
-  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: 'Fills the deck to 100.', summary: 'Fills the deck to 100' });
+  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: `Fills the deck to ${deckSizeFor(ctx.db)}.`, summary: `Fills the deck to ${deckSizeFor(ctx.db)}` });
   return built;
 }
 
@@ -217,7 +217,7 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
   const none = (why: string): Stage => ({ deck: start, rating: startRating, changes: [], why });
   const fixes = part ? part.fixes : startRating.subscores.flatMap((s) => s.fixes);
   if (fixes.length === 0) return none(`the rating lists no problems${part ? ` with ${part.label}` : ''}`);
-  if (ratingCapped(start, startRating.violations)) return none('a deck that breaks a rule is capped, so no swap can raise its rating');
+  if (ratingCapped(start, startRating.violations, deckSizeFor(ctx.db))) return none('a deck that breaks a rule is capped, so no swap can raise its rating');
 
   const roles = unique(fixes.map((f) => f.filter?.role).filter((r): r is Role => r !== undefined && ROLE_LABEL[r] !== undefined));
   const axes = unique(fixes.map((f) => f.filter?.axis).filter((a): a is AxisId => typeof a === 'string' && a.length > 0));
@@ -298,9 +298,8 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
  *
  * 1. Legal and complete first. Every card that breaks a rule (banned, outside the colour identity,
  *    over the copy limit, unknown) is replaced by the best `replaceCard` proposal the engine agrees
- *    with, or removed when there is none. Over 100 cards, the weakest unlocked cards are cut; under
- *    100, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not 100
- *    cards, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
+ *    with, or removed when there is none. Over the deck size (100, or 60 in Standard Brawl), the weakest unlocked cards are cut; under
+ *    it, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not full, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
  *    is capped at 40 and cannot be played (`note` then says what it cost). One card pool serves
  *    every replacement of the call.
  * 2. A deck that breaks its own target bracket's rules (the bracket report's violations of the
@@ -339,12 +338,12 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   let pool: Pool | null = null;
   const poolOf = (): Pool => (pool ??= buildPool(deck, ctx, plain));
 
-  // 1. Legal, then 100 cards.
+  // 1. Legal, then a full deck.
   if (start.violations.length > 0) {
     current = repairRules(current, ctx, poolOf, changes);
     if (validateDeck(current, ctx.db).some((v) => v.code === 'size')) {
-      if (deckCount(current) > DECK_SIZE) current = trim(current, ctx, poolOf(), changes);
-      else if (deckCount(current) < DECK_SIZE) current = fill(current, ctx, plain, changes);
+      if (deckCount(current) > deckSizeFor(ctx.db)) current = trim(current, ctx, poolOf(), changes);
+      else if (deckCount(current) < deckSizeFor(ctx.db)) current = fill(current, ctx, plain, changes);
     }
   }
   const legalChanges = changes.length;
@@ -354,7 +353,7 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   // over its run (bracket fit stays 0 until the last offender goes).
   const outsideBracket = (d: Deck): boolean => analyzeBracket(d, ctx).violationsOfTarget.length > 0;
   let bracketStage: Stage | null = null;
-  if (!only && !ratingCapped(current, mid.violations) && outsideBracket(current)) {
+  if (!only && !ratingCapped(current, mid.violations, deckSizeFor(ctx.db)) && outsideBracket(current)) {
     bracketStage = improveStage(current, mid, ctx, opts, mid.subscores.find((s) => s.key === 'bracket') ?? null);
     current = bracketStage.deck;
     changes.push(...bracketStage.changes);
@@ -372,9 +371,9 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
 
   const notes: string[] = [];
   if (ratingAfter < ratingBefore) {
-    notes.push(ratingCapped(deck, start.violations)
+    notes.push(ratingCapped(deck, start.violations, deckSizeFor(ctx.db))
       ? `Making the deck legal cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck that breaks a rule is capped at ${ILLEGAL_CAP} and cannot be played as it was.`
-      : `Filling the deck to 100 cards cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck under 100 cards cannot be played as it was.`);
+      : `Filling the deck to ${deckSizeFor(ctx.db)} cards cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck under ${deckSizeFor(ctx.db)} cards cannot be played as it was.`);
   }
   if (rating.violations.length > 0) {
     const lockedBlock = rating.violations.some((v) => v.oracleIds.some((id) => current.main.some((e) => e.oracleId === id && e.locked)));

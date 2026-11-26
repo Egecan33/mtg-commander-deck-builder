@@ -1,3 +1,4 @@
+import { bracketOf, deckSizeFor, formatOf } from '../format';
 import { hasType, isEveryCreatureType } from '../rules';
 import { AXIS_MEMBER, deckCards, resolveThemeWeights } from '../summary';
 import type { Bracket, Card, CardFeatures, Deck, EngineContext } from '../types';
@@ -61,7 +62,7 @@ export interface Kind { member: boolean; generic: boolean; spell: boolean; creat
 export interface Tally { tribe: number; generic: number; spells: number; creatures: number; fast: number; tutors: number }
 
 export function makePlan(deck: Deck, ctx: EngineContext): Plan {
-  const bracket = Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3))) as Bracket;
+  const bracket = Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, ctx.db)) || 3))) as Bracket;
   const weights = resolveThemeWeights(deck, ctx) ?? {};
   let tribe: string | null = null;
   let top = 0;
@@ -71,15 +72,18 @@ export function makePlan(deck: Deck, ctx: EngineContext): Plan {
     tribe = axis.slice('typal:'.length);
   }
   const spellslinger = (weights.spellslinger ?? 0) >= SPELL_WEIGHT;
+  // The counts above are for 99 cards besides the commander; Standard Brawl has 59.
+  const share = formatOf(ctx.db) === 'standardbrawl' ? (deckSizeFor(ctx.db) - 1) / 99 : 1;
+  const scaled = (n: number): number => (share === 1 ? n : n > 0 ? Math.max(1, Math.round(n * share)) : 0);
   return {
     bracket, tribe,
-    tribeTarget: tribe ? TRIBE_TARGET[bracket - 1] : 0,
-    genericTypalCap: tribe ? GENERIC_TYPAL_CAP[bracket - 1] : 0,
-    spellTarget: spellslinger ? SPELL_TARGET[bracket - 1] : 0,
-    creatureTarget: tribe || spellslinger ? 0 : CREATURE_TARGET[bracket - 1],
-    fastTarget: FAST_TARGET[bracket - 1],
-    tutorCap: TUTOR_CAP[bracket - 1],
-    packSize: PACK_SIZE[bracket - 1],
+    tribeTarget: tribe ? scaled(TRIBE_TARGET[bracket - 1]!) : 0,
+    genericTypalCap: tribe ? scaled(GENERIC_TYPAL_CAP[bracket - 1]!) : 0,
+    spellTarget: spellslinger ? scaled(SPELL_TARGET[bracket - 1]!) : 0,
+    creatureTarget: tribe || spellslinger ? 0 : scaled(CREATURE_TARGET[bracket - 1]!),
+    fastTarget: scaled(FAST_TARGET[bracket - 1]!),
+    tutorCap: TUTOR_CAP[bracket - 1]!,
+    packSize: scaled(PACK_SIZE[bracket - 1]!),
   };
 }
 

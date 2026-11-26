@@ -1,4 +1,5 @@
 import { analyzeBracket } from '../brackets';
+import { deckSizeFor, formatOf } from '../format';
 import { karstenSources } from '../mana';
 import { rateDeck } from '../rating';
 import { companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
@@ -11,7 +12,6 @@ import { COLORS, RELIABLE_SOURCE, addCard, buildPool, deckCount, isCore, isStapl
 import type { Candidate, Pool } from './pool';
 import { planBonus, tallyDeck } from './plan';
 
-const DECK_SIZE = 100;
 /** Roles the fill keeps at or under the top of their band. */
 const CAPPED_ROLES: readonly Role[] = [
   'ramp', 'draw', 'wipe', 'tutor', 'counterspell', 'spot-removal', 'graveyard-hate', 'protection', 'recursion',
@@ -52,7 +52,7 @@ const finite = (n: unknown): number => (typeof n === 'number' && Number.isFinite
 
 /** Targets of the finished deck: the deck padded to 100 with basics, so nothing is scaled. */
 function finalTargets(deck: Deck, ctx: EngineContext, pool: Pool): Targets {
-  const pad = DECK_SIZE - deckCount(deck);
+  const pad = deckSizeFor(ctx.db) - deckCount(deck);
   const basic = Object.values(pool.basics)[0];
   const padded = pad > 0 && basic ? addCard(deck, basic.oracleId, pad) : deck;
   return targetsFor(padded, ctx, summarizeDeck(padded, ctx.db));
@@ -60,7 +60,7 @@ function finalTargets(deck: Deck, ctx: EngineContext, pool: Pool): Targets {
 
 /** Land slots still to fill: the finished deck's land target minus the lands (MDFC-weighted) it has. */
 function landSlots(deck: Deck, ctx: EngineContext, pool: Pool): number {
-  const free = DECK_SIZE - deckCount(deck);
+  const free = deckSizeFor(ctx.db) - deckCount(deck);
   if (free <= 0) return 0;
   const have = summarizeDeck(deck, ctx.db).landsEffective;
   return Math.min(free, Math.max(0, Math.round(finalTargets(deck, ctx, pool).lands - have)));
@@ -199,7 +199,7 @@ function colourDemand(deck: Deck, ctx: EngineContext): { demand: Record<Color, n
       const p = finite(features.pips[c]);
       if (p <= 0) continue;
       pips[c] += p * qty;
-      demand[c] = Math.max(demand[c], karstenSources(p, card.cmc));
+      demand[c] = Math.max(demand[c], karstenSources(p, card.cmc, deckSizeFor(ctx.db)));
     }
   }
   return { demand, pips };
@@ -233,13 +233,17 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   const colors = pool.identity.filter((c) => pool.basics[c]);
   const nColors = pool.identity.length;
   const ci = Math.min(5, nColors);
+  // The land caps are for a 100-card deck; Standard Brawl plays 59 cards and about 24 lands.
+  const landShare = formatOf(ctx.db) === 'standardbrawl' ? (deckSizeFor(ctx.db) - 1) / 99 : 1;
+  const nonbasicCap = landShare === 1 ? NONBASIC_CAP[ci]! : Math.round(NONBASIC_CAP[ci]! * landShare);
+  const utilityCap = landShare === 1 ? UTILITY_CAP[ci]! : Math.max(UTILITY_CAP[ci]! > 0 ? 1 : 0, Math.round(UTILITY_CAP[ci]! * landShare));
   const used = new Set(deckCounts(deck).keys());
   const fixerIds = new Set(pool.fixers.map((c) => c.card.oracleId));
   let cands = pool.lands.filter((c) => !used.has(c.card.oracleId) && !fixerIds.has(c.card.oracleId));
   const basicCards: Card[] = nColors === 0 ? (pool.basics.C ? [pool.basics.C] : []) : colors.map((c) => pool.basics[c] as Card);
   // Every colour keeps at least a couple of basics, for the cards that fetch them.
   const reserve = basicCards.length === 0 ? 0 : nColors === 0 ? 4 : Math.min(slots, nColors >= 4 ? nColors : nColors * 2);
-  const cap = basicCards.length === 0 ? slots : Math.min(NONBASIC_CAP[ci], slots - reserve);
+  const cap = basicCards.length === 0 ? slots : Math.min(nonbasicCap, slots - reserve);
   const makes = (c: Candidate) => pool.identity.filter((col) => finite(c.f.sources[col]) >= RELIABLE_SOURCE).length;
   const anyColours = (c: Candidate) => COLORS.filter((col) => finite(c.f.sources[col]) > 0).length;
   const tapCap = finalTargets(deck, ctx, pool).taplandCap;
@@ -264,7 +268,7 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   // Fixers: lands that make two or more of the deck's colours.
   if (nColors >= 2) {
     const scorer = createScorer(deck, ctx);
-    const room = cap - Math.max(0, UTILITY_CAP[ci] - utility);
+    const room = cap - Math.max(0, utilityCap - utility);
     for (const c of pool.fixers) {
       if (picked >= room) break;
       if (used.has(c.card.oracleId)) continue;
@@ -276,7 +280,7 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   }
 
   // Utility lands, by score, while one is worth more than a basic.
-  while (picked < cap && utility < UTILITY_CAP[ci] && cands.length > 0) {
+  while (picked < cap && utility < utilityCap && cands.length > 0) {
     const scorer = createScorer(deck, ctx);
     let basicScore = 0;
     for (const b of basicCards) basicScore = Math.max(basicScore, scorer.score(b).score);
@@ -372,7 +376,7 @@ function addBasics(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
 /** Fills every open slot: spells up to the land target, then the mana base. */
 function fillOpen(start: Deck, ctx: EngineContext, pool: Pool): Deck {
   let deck = start;
-  const free = () => DECK_SIZE - deckCount(deck);
+  const free = () => deckSizeFor(ctx.db) - deckCount(deck);
   if (free() <= 0) return deck;
   deck = seedCore(deck, ctx, pool, Math.max(0, free() - landSlots(deck, ctx, pool)));
   deck = seedPacks(deck, ctx, pool, Math.max(0, free() - landSlots(deck, ctx, pool)));
@@ -397,9 +401,9 @@ function repair(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>):
     const into = bestReplacement(without, ctx, pool, { card: ctx.db.get(off.id), f: ctx.db.features(off.id) });
     deck = into ? addCard(without, into.card.oracleId) : without;
   }
-  if (deckCount(deck) < DECK_SIZE) deck = fillOpen(deck, ctx, pool);
+  if (deckCount(deck) < deckSizeFor(ctx.db)) deck = fillOpen(deck, ctx, pool);
   // Over 100 (too many locked or kept cards plus fills): the weakest free cards go.
-  while (deckCount(deck) > DECK_SIZE) {
+  while (deckCount(deck) > deckSizeFor(ctx.db)) {
     const scorer = createScorer(deck, ctx);
     let worst: string | null = null;
     let worstScore = Infinity;
@@ -426,6 +430,7 @@ function repair(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>):
  */
 function tunePower(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>): Deck {
   const { db } = ctx;
+  if (formatOf(db) === 'standardbrawl') return start; // no brackets there: "plays like" is not a target
   const target = pool.plan.bracket;
   const gapOf = (d: Deck): number => {
     const plays = analyzeBracket(d, ctx).playsLike;
@@ -575,12 +580,13 @@ function ensureWinConditions(start: Deck, ctx: EngineContext, pool: Pool, keep: 
     }
     if (!out) break;
     // Never at the price of legality or of the bracket the deck plays at.
-    const plays = analyzeBracket(deck, ctx).playsLike;
+    const std = formatOf(ctx.db) === 'standardbrawl';
+    const plays = std ? 0 : analyzeBracket(deck, ctx).playsLike;
     let next: Deck | null = null;
     for (const { c } of ins.slice(0, 4)) {
       const trial = addCard(removeCard(deck, out), c.card.oracleId);
       if (nextOffender(trial, ctx, keep)) continue;
-      if (analyzeBracket(trial, ctx).playsLike > Math.max(plays, pool.plan.bracket)) continue;
+      if (!std && analyzeBracket(trial, ctx).playsLike > Math.max(plays, pool.plan.bracket)) continue;
       next = trial;
       break;
     }
