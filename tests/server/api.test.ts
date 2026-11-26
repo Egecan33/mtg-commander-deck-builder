@@ -462,6 +462,19 @@ describe('POST /api/build', () => {
     expect((await request('POST', '/api/build', { deck, mode: 'add', options: { role: 'stax' } })).status).toBe(400);
   });
 
+  it("mode 'swapin' needs options.in and returns proposals for a card outside the deck", async () => {
+    const deck = await imported('precon');
+    expect((await request('POST', '/api/build', { deck, mode: 'swapin', options: {} })).status).toBe(400);
+    const cdb = getCardDb();
+    const have = new Set([...deck.commanders, ...deck.main.map((e: { oracleId: string }) => e.oracleId)]);
+    const id = ['Sol Ring', 'Arcane Signet', 'Mind Stone', 'Fellwar Stone', 'Thought Vessel', 'Wayfarer\'s Bauble', 'Commander\'s Sphere', 'Talisman of Dominance'].map((n) => cdb.byName(n)?.oracleId).find((x) => x && !have.has(x) && cdb.get(x)!.colorIdentity.length === 0)!;
+    expect(id).toBeDefined();
+    const r = await call<api.BuildProposalsResponse>('POST', '/api/build', { deck, mode: 'swapin', options: { seed: 1, in: id, count: 3 } });
+    expect(r.proposals.length).toBeGreaterThan(0);
+    expect(r.proposals.length).toBeLessThanOrEqual(3);
+    for (const p of r.proposals) { expect(p.in).toBe(id); expect(r.cards[id]).toBeDefined(); }
+  });
+
   it('answers 400 for a bad mode, bad options or no commander', async () => {
     const deck = shell(['Krenko, Mob Boss']);
     expect((await request('POST', '/api/build', { deck, mode: 'explode' })).status).toBe(400);

@@ -1,6 +1,6 @@
 import { analyzeBracket } from '../brackets';
 import { rateDeck } from '../rating';
-import { validateDeck } from '../rules';
+import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
 import { ROLE_LABEL, ROLE_TARGET_MAX, roleNeeds, scaleTargets, targetsFor } from '../targets';
@@ -405,6 +405,13 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
   return proposals;
 }
 
+/** One swap proposal; the engine's dissent (`agrees: false` and an objection) when the rating falls by more than DISSENT. */
+function swapProposal(outId: string, outName: string, inName: string, inId: string, reason: string, before: number, after: number): SwapProposal {
+  const p: SwapProposal = { out: outId, in: inId, reason, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
+  if (!p.agrees) p.objection = `Swapping out ${outName} for ${inName} drops the rating ${before} -> ${after}; the engine thinks ${outName} is the better fit here.`;
+  return p;
+}
+
 /**
  * Replacements for one chosen card in the deck: up to `count` swaps, ranked by the rating after.
  * Same-role cards come first (a land is replaced by lands); a few best-overall cards follow.
@@ -446,9 +453,67 @@ export function replaceCard(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     const lead = same && roleText
       ? `${c.card.name} (${score}) does the same job (${roleText}) as ${outName} (${outScore}).`
       : `${c.card.name} (${score}) is one of the strongest cards for this deck that is not in it; it does a different job than ${outName} (${outScore}).`;
-    const p: SwapProposal = { out: outId, in: id, reason: lead, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
-    if (!p.agrees) p.objection = `Swapping out ${outName} for ${c.card.name} drops the rating ${before} -> ${after}; the engine thinks ${outName} is the better fit here.`;
-    proposals.push(p);
+    proposals.push(swapProposal(outId, outName, c.card.name, id, lead, before, after));
   }
   return proposals.sort((a, b) => b.ratingAfter - a.ratingAfter).slice(0, n);
+}
+
+/** Cuts rated per call: the weakest of the same role first, then the weakest overall. */
+const SWAPIN_RATED = 8;
+
+/**
+ * The mirror of `replaceCard`: "put this card in instead of ...". For a card that is not in the
+ * deck, up to `count` ways to bring it in, best rating after first (a cut of the same role wins a
+ * tie). A deck under 100 cards gets the plain add (`out` is '') first. The cuts are the deck's
+ * cuttable cards (never a commander, the companion, a locked or kept card, a combo piece or a
+ * strong on-theme card); a basic land only while the deck holds more lands than its land target.
+ * Only the weakest few cuts are rated, same role first. An illegal, banned, off-identity or
+ * gated card, one the options rule out, or one the deck already holds, gives `[]`.
+ */
+export function swapIn(deck: Deck, ctx: EngineContext, opts: BuildOptions, inId: string, count = 5): SwapProposal[] {
+  const n = Math.min(10, Math.max(1, Math.floor(Number.isFinite(count) ? count : 5)));
+  const { db } = ctx;
+  const inCard = db.get(inId);
+  if (!inCard || (idsOf(deck).has(inId) && !isBasicLand(inCard))) return [];
+  const pool = buildPool(deck, ctx, { ...opts, goals: null });
+  const c = pool.allowed(inCard) ? pool.candidateOf(inId) : null;
+  if (!c) return [];
+  const scorer = createScorer(deck, ctx);
+  const inScore = scorer.score(inCard);
+  if (inScore.gate) return [];
+
+  const open = deckCount(deck) < DECK_SIZE;
+  const summary = summarizeDeck(deck, db);
+  const landsOver = summary.landsEffective > targetsFor(deck, ctx, summary).lands;
+  const roles: Role[] = c.f.roles.filter((r) => r !== 'land' && r !== 'game-changer' && r !== 'mass-land-denial' && r !== 'extra-turn');
+  const sameRole = (id: string): boolean => {
+    const f = db.features(id);
+    return !f ? false : c.land ? isLandCard(f) : f.roles.some((r) => roles.includes(r));
+  };
+  const outs = cuttable(deck, ctx, pool, lockedOf(deck), comboPieces(deck, ctx), scorer)
+    .filter((o) => !o.basic || landsOver)
+    .map((o) => ({ o, same: sameRole(o.id) }));
+  const ranked = [...outs.filter((x) => x.same), ...outs.filter((x) => !x.same)].slice(0, SWAPIN_RATED); // each group already weakest first
+
+  const before = shownRating(rateDeck(deck, ctx));
+  const score = Math.round(inScore.score);
+  const roleText = roles.length > 0 ? roles.map((r) => ROLE_LABEL[r] ?? r).join(' / ') : c.land ? 'land' : null;
+  const made: { p: SwapProposal; same: boolean; cut: number }[] = [];
+  if (open) {
+    const after = shownRating(rateDeck(addCard(deck, inId), ctx));
+    const p: SwapProposal = { out: '', in: inId, reason: `${inCard.name} (${score}) fits in an open slot; the deck is under 100 cards, so nothing is cut.`, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
+    if (!p.agrees) p.objection = `Adding ${inCard.name} drops the rating ${before} -> ${after}.`;
+    made.push({ p, same: true, cut: -Infinity });
+  }
+  for (const { o, same } of ranked) {
+    const after = shownRating(rateDeck(swapOne(deck, o.id, inId), ctx));
+    const outScore = Math.max(0, Math.round(o.score));
+    const lead = same && roleText
+      ? `${inCard.name} (${score}) does the same job (${roleText}) as ${o.name} (${outScore}).`
+      : `${inCard.name} (${score}) does a different job than ${o.name} (${outScore}), the weakest card of its kind the deck can give up.`;
+    made.push({ p: swapProposal(o.id, o.name, inCard.name, inId, lead, before, after), same, cut: o.score });
+  }
+  const plain = made.filter((x) => x.p.out === '');
+  const swaps = made.filter((x) => x.p.out !== '').sort((a, b) => b.p.ratingAfter - a.p.ratingAfter || Number(b.same) - Number(a.same) || a.cut - b.cut);
+  return [...plain, ...swaps].slice(0, n).map((x) => x.p);
 }

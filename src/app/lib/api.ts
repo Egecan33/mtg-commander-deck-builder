@@ -46,6 +46,8 @@
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' -> { proposals, cards, heldBy }.
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
+ *        'swapin' takes `options.in` (a card not in the deck; 400 without it), `count` 1-10, and returns the deck cards it could replace,
+ *        best rating after first; a deck under 100 cards gets the plain add (`out` '') first; an illegal card gives no proposals.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
  *        `options.freeOnly` (with `ownedOnly`; alone it does nothing): only cards with a free copy for
@@ -333,7 +335,7 @@ export interface CardsResponse {
   heldBy: HeldBy;
 }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
@@ -349,6 +351,8 @@ export interface BuildRequestOptions {
   role?: Role;
   /** 'replace' only (required there): oracleId of the deck card to find swaps for. */
   out?: string;
+  /** 'swapin' only (required there): oracleId of a card not in the deck; the proposals say which deck card it could replace. */
+  in?: string;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -590,7 +594,7 @@ export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeRes
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
-export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
+export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace' | 'swapin', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }
