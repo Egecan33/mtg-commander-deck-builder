@@ -8,6 +8,8 @@ The owner builds with the "8×8" (Tavern) theory: 8 packages of 8 cards plus 35 
 
 Owner's words: "I want to see my best packages in my collection for each colour, shown in a fun way. And while building a deck manually, hand-picking cards, I can build off these and also put a package in: let's do a ramp package…"
 
+**Owner's correction (same day): "Not all decks need all packages or that many lands; those are specific — find them."** So 8×8 + 35 is the starting picture, not a rule: the app works out each deck's own plan (which packages, how big, how many lands) and says why. See "The deck's own plan" below; it overrides any fixed 8 / 35 elsewhere in this document.
+
 ## Goals
 
 1. **Packages page** (`/packages`, in the top navigation after Collection): pick a colour (W, U, B, R, G, colourless, or several for a colour pair or more) and see, from the active collection, your best 8-card packages for that colour: the four core packages, then up to four theme packages the collection can actually fill. Fun: each package is a fanned hand of 8 cards that spreads on hover, with the odds of drawing one ("45% in your opening hand, 72% by your seventh draw").
@@ -38,6 +40,19 @@ Owner's words: "I want to see my best packages in my collection for each colour,
 - Packages page (no deck): owned cards whose colour identity fits inside the chosen colours, ranked by a deck-free quality: the scorer's base quality (EDHREC rank curve, overcost penalty for the role) through a shared pure function exported from `src/engine/scoring` (no copy). Theme packages rank by quality times how strongly the card serves that axis.
 - Deck builder: ranked by the deck's own card scores (the scorer the browser already uses), so the picks fit the commander.
 - Held copies (boxes, built decks) show "!" as everywhere else; with "Use free copies only" on they are ranked after free cards and excluded from Complete package.
+
+### The deck's own plan (replaces fixed 8 × 8 + 35)
+- Pure engine function `packagePlan(deck, ctx): { packages: { id, name, target, reason }[]; lands: { target, reason } }`, shared by the Packages tab, Complete package, the builder and the rating (AGENTS rule 6: one set of numbers). It extends the existing role bands (`targetsFor` / `roleNeeds` in `src/engine/targets.ts`) instead of adding a second set.
+- **Core packages** start from the bracket's band for the role and move with the commander and the plan, each move with its reason:
+  - the commander itself draws cards → Card draw −3 (minimum 4): "Mr. Spock already doubles your draws";
+  - the commander makes mana or cheats costs → Ramp −2;
+  - the commander protects itself (hexproof, indestructible, ward ≥ 2) → Protection −2; a Voltron / equipment / aura plan → Protection +3;
+  - commander mana value 6 or more → Ramp +2; average mana value of the plan ≤ 2.5 → Ramp −2;
+  - a stax or control plan → Removal +2.
+  A core package that falls below 4 cards is dropped from the plan ("not every deck needs all packages").
+- **Lands** from the plan's average mana value, the commander's mana value, cheap ramp and cheap card selection, landfall and MDFCs: base `31 + 2.4 × average mana value`, −1 per 3 cheap ramp pieces beyond 6, −1 per 4 cheap cantrips, +3 for a landfall / lands-matter plan, MDFCs count as ¾ of a land; clamped to 28–40; calibrated so the reference decks land where players run them (precon ~37, upgraded ~36, cEDH ~29–31). The rating's mana part and the builder use this same number (the bracket default stays as the fallback when the plan has no cards yet).
+- **Theme packages**: the deck's focused themes (the top one to three axes after the network design's focus rule), sized from the slots left after lands and core packages, split by axis weight; a theme package under 6 cards is dropped.
+- The Packages tab shows the plan with each reason; the owner can pin a package size (stored in the deck's existing `roleTargets`), which then wins over the computed one.
 
 ### Clarity bar
 Same UI direction as the deck page design (`2026-11-26-deck-page-fix-deck-design.md`, "UI direction"): EDHREC-level clarity, titled sections with counts, a sticky jump bar, one caption line under each card (odds, "!"), nothing over the card name or mana cost. The "fun" is in the fanned hands and the odds bars, never at the cost of reading.
