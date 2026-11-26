@@ -287,6 +287,8 @@ export function Shell({ children }: { children: ReactNode }) {
     setPendingSwitch(null);
     void collectionsValue.switchTo(pendingSwitch);
   }, [pendingSwitch, pathname, collectionsValue]);
+  // How current the card data is: in the collection switcher's tooltip while collections are shown, else a short note of its own.
+  const syncNote = status?.ready ? `${status.counts.legal.toLocaleString('en-US')} cards, synced ${fmtDate(status.cardsSyncedAt)}` : status ? 'No card data yet' : '';
   const showStale = status?.ready && status.stale && !staleHidden && pathname !== '/data';
 
   return (
@@ -295,11 +297,11 @@ export function Shell({ children }: { children: ReactNode }) {
        <ProxyContext.Provider value={proxyValue}>
        <CollectionsContext.Provider value={collectionsValue}>
         <div className="app-shell flex h-screen min-w-[1180px] flex-col">
-          <header className="no-print flex h-11 shrink-0 items-center gap-7 border-b border-slag bg-anvil px-5">
-            <Link href="/" className="display text-[1.15rem] leading-none text-bone">
+          <header className="no-print flex h-11 shrink-0 items-center gap-5 whitespace-nowrap border-b border-slag bg-anvil px-5">
+            <Link href="/" className="display shrink-0 text-[1.15rem] leading-none text-bone">
               Commander Forge
             </Link>
-            <nav className="flex h-full items-stretch gap-1" aria-label="Main">
+            <nav className="flex h-full min-w-0 items-stretch" aria-label="Main">
               {NAV.map((n) => {
                 const on = n.href === '/' ? pathname === '/' || pathname.startsWith('/deck/') : n.href === '/commanders' ? /^\/(commander|theme)/.test(pathname) : pathname.startsWith(n.href);
                 return (
@@ -307,7 +309,7 @@ export function Shell({ children }: { children: ReactNode }) {
                     key={n.href}
                     href={n.href}
                     aria-current={on ? 'page' : undefined}
-                    className={`flex items-center border-b-2 px-2.5 text-[0.875rem] ${on ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                    className={`flex shrink-0 items-center border-b-2 px-2 text-[0.85rem] ${on ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                   >
                     {n.label}
                     {n.href === '/proxies' && (proxyValue.total ?? 0) > 0 && (
@@ -320,8 +322,8 @@ export function Shell({ children }: { children: ReactNode }) {
               })}
             </nav>
             {collections.length > 0 && (
-              <div className="ml-auto flex items-center gap-2">
-              <label className="flex items-center gap-2 text-[0.82rem] text-ash" title="Which collection counts as “owned”: green dots, owned filters, owned-only builds and Best from collection all follow it.">
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+              <label className="flex items-center gap-2 text-[0.82rem] text-ash" title={`Which collection counts as “owned”: green dots, owned filters, owned-only builds and Best from collection all follow it.${syncNote ? `\nCard data: ${syncNote}.` : ''}`}>
                 Collection
                 <select
                   className="field h-7 py-0 text-[0.82rem]"
@@ -364,9 +366,7 @@ export function Shell({ children }: { children: ReactNode }) {
               )}
               </div>
             )}
-            <div className={`${collections.length > 0 ? '' : 'ml-auto '}text-[0.78rem] text-smoke`}>
-              {status?.ready ? `${status.counts.legal.toLocaleString('en-US')} cards, synced ${fmtDate(status.cardsSyncedAt)}` : status ? 'No card data yet' : ''}
-            </div>
+            {collections.length === 0 && <div className="ml-auto shrink-0 text-[0.78rem] text-smoke">{syncNote}</div>}
           </header>
 
           {status?.error && (
