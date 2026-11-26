@@ -139,6 +139,27 @@ describe('Arena decks on the server', () => {
     expect(swaps.proposals.filter((p) => unownedMythics({ ...shell(), commanders: [], main: [{ oracleId: p.in, qty: 1, locked: false }] }).length > 0)).toEqual([]);
   }, 60_000);
 
+  it('counts what the Arena collection owns for an Arena deck, whichever collection is active', async () => {
+    useArena();
+    setWildcards({ common: 99, uncommon: 99, rare: 99, mythic: 0 }, 'hand');
+    const arenaOwned = new Set(ownedSet());
+    // Physical holds every mythic of the deck's colours; the Arena collection holds none.
+    setActiveCollection('physical');
+    const mythics = bg().filter((c) => c.arenaRarity === 'mythic');
+    replaceCollection(mythics.map((c) => `1 ${c.name}`).join('\n'));
+    const physicalOnly = (deck: Deck) => ids(deck).filter((id) => mythics.some((m) => m.oracleId === id) && !arenaOwned.has(id));
+    const built = await ok<BuildDeckResponse>(send(buildRoute.POST, 'POST', '/api/build', { deck: shell(), mode: 'auto', options: { seed: 3 } }));
+    expect(physicalOnly(built.deck)).toEqual([]);
+    const owned = await ok<BuildDeckResponse>(send(buildRoute.POST, 'POST', '/api/build', { deck: shell(), mode: 'auto', options: { seed: 3, ownedOnly: true } }));
+    expect(physicalOnly(owned.deck)).toEqual([]);
+    const withMythic: Deck = { ...shell(), main: [{ oracleId: mythics[0].oracleId, qty: 1, locked: false }] };
+    const r = await ok<AnalyzeResponse>(send(analyzeRoute.POST, 'POST', '/api/analyze', { deck: withMythic }));
+    expect(r.arena!.needed.mythic).toBe(1);
+    const out = await ok<ExportResponse>(send(exportRoute.POST, 'POST', '/api/export', { deck: withMythic, format: 'arena' }));
+    expect(out.text).toContain(`(${mythics[0].arenaPrinting!.set}) ${mythics[0].arenaPrinting!.number}`);
+    replaceCollection('');
+  }, 60_000);
+
   it('says how many wildcards an Arena deck needs, against the ones there are, with the printing to craft', async () => {
     useArena();
     setWildcards({ common: 12, uncommon: 12, rare: 1, mythic: 0 }, 'log');

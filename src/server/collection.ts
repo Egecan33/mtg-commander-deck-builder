@@ -99,6 +99,14 @@ export function ownedSet(): Set<string> {
   return cacheSlot('collection-set', () => new Set(ownedQuantities().keys()));
 }
 
+/**
+ * The owned oracle ids of one collection, active or not. An Arena deck's wildcards and "owned" count
+ * against its own collection (`deckCollection`), whichever collection is active.
+ */
+export function ownedSetOf(id: string): Set<string> {
+  return id === activeCollectionId() ? ownedSet() : new Set(quantitiesOf(id).keys());
+}
+
 function totals(): { count: number; totalQty: number } {
   let totalQty = 0;
   for (const q of ownedQuantities().values()) totalQty += q;

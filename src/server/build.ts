@@ -4,7 +4,7 @@ import { RATING_WEIGHTS } from '@/engine/rating';
 import { ROLE_LABEL } from '@/engine/targets';
 import type { Bracket, BuildOptions, Deck, ImproveGoals, Role, SwapProposal } from '@/engine/types';
 import { cardLookup } from './cards';
-import { deckCollection, deckFormat, ownedSet } from './collection';
+import { deckCollection, deckFormat, ownedSet, ownedSetOf } from './collection';
 import { engineContext } from './context';
 import { deckConflicts, freeOwnedSet, heldByFor, selfHolders } from './holders';
 import { HttpError, intParam, isObject } from './http';
@@ -56,10 +56,11 @@ export function runBuild(deck: Deck, mode: unknown, rawOptions: unknown): BuildR
   const seed = typeof o.seed === 'number' && Number.isFinite(o.seed) ? Math.floor(o.seed) >>> 0 : Math.floor(Math.random() * 0x7fffffff);
   const goals = mode === 'improve' ? readGoals(o.goals) : null;
   const ownedOnly = o.ownedOnly === true;
-  const owned = ownedOnly && o.freeOnly === true ? freeOwnedSet(selfHolders(deck)) : ownedSet();
-  // A Brawl deck: "Only what I can craft" (on unless `craftableOnly: false`) caps the cards not owned
-  // per rarity by the collection's wildcards, in place of the dollar cap.
+  // A Brawl deck: "owned" is its own (Arena) collection's cards, whichever collection is active, and
+  // "Only what I can craft" (on unless `craftableOnly: false`) caps the cards not owned per rarity by
+  // that collection's wildcards, in place of the dollar cap. Arena collections have no boxes or built decks.
   const brawl = deckFormat(deck) === 'brawl';
+  const owned = brawl ? ownedSetOf(deckCollection(deck)) : ownedOnly && o.freeOnly === true ? freeOwnedSet(selfHolders(deck)) : ownedSet();
   const wildcards = brawl && o.craftableOnly !== false ? getWildcards(deckCollection(deck)).wildcards : null;
   const maxPriceUsd = brawl ? null : ((price as number | null | undefined) ?? null);
   const options: BuildOptions = { ownedOnly, owned, maxPriceUsd, seed, goals, wildcards };

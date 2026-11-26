@@ -9,7 +9,7 @@ import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, Eng
 import { overBudget, toCraft, wildcardsNeeded } from '@/engine/wildcards';
 import type { ServerCardDb } from './carddb';
 import { cardLookup, poolIndex } from './cards';
-import { deckCollection, deckFormat, ownedSet } from './collection';
+import { deckCollection, deckFormat, ownedSetOf } from './collection';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
 import { getSettings } from './settings';
@@ -170,7 +170,7 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
  */
 export function arenaReport(deck: Deck, ctx: EngineContext): ArenaReport | null {
   if (deckFormat(deck) !== 'brawl') return null;
-  const owned = ownedSet();
+  const owned = ownedSetOf(deckCollection(deck));
   const needed = wildcardsNeeded(deck, ctx.db, owned);
   const have = getWildcards(deckCollection(deck)).wildcards;
   return { needed, have, over: overBudget(needed, have), toCraft: toCraft(deck, ctx.db, owned), noData: ctx.db.all().length === 0 };

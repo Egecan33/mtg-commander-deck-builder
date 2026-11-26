@@ -431,6 +431,8 @@ export interface BuildRequestOptions {
   /**
    * Brawl decks only: "Only what I can craft" (default true). Cards not owned stay within the MTG Arena
    * collection's wildcards per rarity, counting the ones the deck already needs; `maxPriceUsd` is ignored.
+   * For a Brawl deck "owned" (here, in `ownedOnly`, in `AnalyzeResponse.arena` and in the Arena export)
+   * is always the deck's own collection, whichever collection is active.
    */
   craftableOnly?: boolean;
 }

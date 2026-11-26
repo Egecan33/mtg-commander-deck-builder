@@ -4,7 +4,7 @@ import { isCommanderEligible } from '@/engine/rules';
 import { exportArenaDecklist, exportDecklist, parseDecklist } from '@/engine/text';
 import type { Bracket, Deck } from '@/engine/types';
 import { cardLookup } from './cards';
-import { deckFormat, ownedSet } from './collection';
+import { deckCollection, deckFormat, ownedSetOf } from './collection';
 import { MAX_NAME } from './decks';
 import { HttpError, type Body } from './http';
 import { getCardDb } from './store';
@@ -48,7 +48,7 @@ export function exportText(deck: Deck): string {
 export function exportArena(deck: Deck): ExportResponse {
   const brawl = deckFormat(deck) === 'brawl';
   const db = getCardDb(brawl ? 'brawl' : 'commander');
-  const text = exportArenaDecklist(deck, db, brawl ? { owned: ownedSet() } : {});
+  const text = exportArenaDecklist(deck, db, brawl ? { owned: ownedSetOf(deckCollection(deck)) } : {});
   const names = text
     .split('\n')
     .map((l) => /^\d+ (.+?)(?: \([A-Z0-9]+\) \S+)?$/.exec(l)?.[1])
