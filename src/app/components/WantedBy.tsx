@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { Bracket } from '@/engine/types';
 import { getWantedBy, type WantedByResponse } from '../lib/api';
 import { useFilters } from '../lib/filters';
+import { useBuildFormat } from './Shell';
 import { isAbort } from '../lib/ui';
 import { CommanderTileView } from './CommanderTileView';
 
@@ -11,6 +12,7 @@ import { CommanderTileView } from './CommanderTileView';
 export function WantedBy({ oracleId, bracket }: { oracleId: string; bracket?: Bracket }) {
   const shared = useFilters().bracket;
   const b = bracket ?? shared;
+  const format = useBuildFormat();
   const [data, setData] = useState<WantedByResponse | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -18,10 +20,10 @@ export function WantedBy({ oracleId, bracket }: { oracleId: string; bracket?: Br
     setFailed(false);
     const ctrl = new AbortController();
     const t = setTimeout(() => {
-      getWantedBy(oracleId, b, ctrl.signal).then(setData, (e) => { if (!isAbort(e)) setFailed(true); });
+      getWantedBy(oracleId, b, ctrl.signal, format).then(setData, (e) => { if (!isAbort(e)) setFailed(true); });
     }, 300);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [oracleId, b]);
+  }, [oracleId, b, format]);
 
   return (
     <section className="mt-5 border-t border-slag pt-4" data-testid="wanted-by">

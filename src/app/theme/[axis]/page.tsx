@@ -11,7 +11,7 @@ import { CommanderTileView } from '../../components/CommanderTileView';
 import { EmptyState } from '../../components/EmptyState';
 import { FilterBar } from '../../components/FilterBar';
 import { Section } from '../../components/Section';
-import { useNotify } from '../../components/Shell';
+import { useBuildFormat, useNotify } from '../../components/Shell';
 import { ApiError, getTheme, type ColorLetter, type ThemeResponse } from '../../lib/api';
 import { useFilters } from '../../lib/filters';
 import { safeDecode } from '../../lib/links';
@@ -21,6 +21,7 @@ export default function ThemePage() {
   const { axis } = useParams<{ axis: string }>();
   const notify = useNotify();
   const { bracket, size, ready } = useFilters();
+  const format = useBuildFormat();
   const [colors, setColors] = useState<ColorLetter[]>([]);
   const [data, setData] = useState<ThemeResponse | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -28,12 +29,12 @@ export default function ThemePage() {
   useEffect(() => {
     if (!ready) return;
     const ctrl = new AbortController();
-    getTheme(safeDecode(axis), { colors: colors.length ? colors : undefined, bracket }, ctrl.signal).then(
+    getTheme(safeDecode(axis), { colors: colors.length ? colors : undefined, bracket, arenaFormat: format }, ctrl.signal).then(
       (r) => { setData(r); setMissing(null); },
       (e) => { if (isAbort(e)) return; if (e instanceof ApiError && e.status === 404) setMissing(e.message); else notify.error(e); },
     );
     return () => ctrl.abort();
-  }, [ready, axis, colors, bracket, notify]);
+  }, [ready, axis, colors, bracket, format, notify]);
 
   if (missing) {
     return (

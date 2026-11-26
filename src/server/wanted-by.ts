@@ -1,6 +1,7 @@
 import type { WantedByResponse } from '@/app/lib/api';
 import { createScorer } from '@/engine/scoring';
-import type { AxisId, Bracket, CardFeatures } from '@/engine/types';
+import { legalityViolation } from '@/engine/format';
+import type { AxisId, Bracket, CardFeatures, Format } from '@/engine/types';
 import { commanderIndex, commanderShell, toCommanderTile } from './commander-index';
 import { ownedSet } from './collection';
 import { engineContext } from './context';
@@ -22,19 +23,19 @@ export function themeFit(weights: Record<AxisId, number>, f: CardFeatures | unde
 
 const rankOf = (c: { edhrecRank: number | null }) => (typeof c.edhrecRank === 'number' && c.edhrecRank > 0 ? c.edhrecRank : Number.MAX_SAFE_INTEGER);
 
-/** The commanders whose decks want a card most. Cached per card, bracket and EDHREC setting. */
-export function commandersWanting(oracleId: string, bracket: Bracket): WantedByResponse {
-  const db = getCardDb();
+/** The commanders whose decks want a card most. Cached per card, bracket, format and EDHREC setting. */
+export function commandersWanting(oracleId: string, bracket: Bracket, format: Format = 'commander'): WantedByResponse {
+  const db = getCardDb(format);
   const card = db.get(oracleId);
   if (!card) throw new HttpError(404, 'Unknown card.');
-  if (card.legality !== 'legal') return { oracleId, bracket, considered: 0, commanders: [], note: `${card.name} is banned in Commander.` };
+  if (card.legality !== 'legal') return { oracleId, bracket, considered: 0, commanders: [], note: legalityViolation(card, db).message };
   const memo = cacheSlot('wanted-by', () => new Map<string, WantedByResponse>());
-  const key = `${oracleId}|${bracket}|${getSettings().edhrecEnabled}`;
+  const key = `${oracleId}|${bracket}|${format}|${getSettings().edhrecEnabled}`;
   const hit = memo.get(key);
   if (hit) return hit;
 
   const features = db.features(oracleId);
-  const candidates = commanderIndex().entries
+  const candidates = commanderIndex(format).entries
     .filter((e) => e.card.oracleId !== oracleId && card.colorIdentity.every((c) => e.card.colorIdentity.includes(c)))
     .map((e) => ({ e, fit: themeFit(e.weights, features) }))
     .sort((a, b) => b.fit - a.fit || rankOf(a.e.card) - rankOf(b.e.card) || (a.e.card.name < b.e.card.name ? -1 : 1))
@@ -42,11 +43,11 @@ export function commandersWanting(oracleId: string, bracket: Bracket): WantedByR
   const owned = ownedSet();
   const scored: { fit: number; rank: number; score: number; synergy: number; tile: ReturnType<typeof toCommanderTile> }[] = [];
   for (const { e, fit } of candidates) {
-    const shell = commanderShell([e.card.oracleId], bracket);
+    const shell = commanderShell([e.card.oracleId], bracket, null, format);
     const s = createScorer(shell, engineContext(shell).ctx).score(card);
     if (s.gate) continue;
     const syn = s.parts.find((p) => p.key === 'synergy');
-    scored.push({ fit, rank: rankOf(e.card), score: s.score, synergy: syn && syn.max > 0 ? Math.round((100 * syn.points) / syn.max) : 0, tile: toCommanderTile(e.card, owned) });
+    scored.push({ fit, rank: rankOf(e.card), score: s.score, synergy: syn && syn.max > 0 ? Math.round((100 * syn.points) / syn.max) : 0, tile: toCommanderTile(e.card, owned, format) });
   }
   scored.sort((a, b) => b.score - a.score || b.fit - a.fit || a.rank - b.rank);
   const out: WantedByResponse = {

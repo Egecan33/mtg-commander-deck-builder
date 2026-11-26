@@ -22,7 +22,7 @@
  *        `best` puts the commanders of a finished Best from collection run (`bracket`, `free` as for /api/discover)
  *        first, by their owned-only rating (`best`), the rest by popularity; `bestReady` says whether a finished run
  *        exists, and without one `best` is the popularity order.
- * GET  /api/themes                      -> ThemesResponse   every theme (axis) with the number of commanders that lead it, most first.
+ * GET  /api/themes[?arenaFormat]       -> ThemesResponse   every theme (axis) with the number of commanders that lead it, most first.
  * GET  /api/themes/:axis?colors&bracket -> ThemeResponse    :axis is the slug ("typal-elf", "tokens"; 404 when not listed). The commanders
  *        that lead the theme (inside `colors` when given, most played first) and up to 60 cards that serve it best, scored
  *        as in a deck of that theme alone at `bracket`. Text only: no EDHREC data.
@@ -52,7 +52,7 @@
  *        Oddball and Core 2, Exhibition 1), its other cards are in the collection (`owned=1`) and cost at most
  *        the budget. `total` counts them all, `combos` lists the first 100, `withCommander` is how many of
  *        them use the commander.
- * GET  /api/cards/:id/commanders?bracket -> WantedByResponse
+ * GET  /api/cards/:id/commanders?bracket[&arenaFormat] -> WantedByResponse
  *        Commanders that want a card: of the 40 commanders whose theme fits the card best (colour identity
  *        containing the card's), the up-to-12 whose own deck scores it highest at `bracket`. Cached EDHREC data
  *        only, never a request. A banned card gets none and `note` says why. 404 unknown card, 400 bad bracket.
@@ -920,11 +920,12 @@ export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string 
     undefined,
     signal,
   );
-export const getThemes = (signal?: AbortSignal) => call<ThemesResponse>('GET', '/api/themes', undefined, signal);
-export const getTheme = (slug: string, o: { colors?: ColorLetter[]; bracket: Bracket }, signal?: AbortSignal) =>
-  call<ThemeResponse>('GET', `/api/themes/${encodeURIComponent(slug)}${query({ colors: o.colors?.join(''), bracket: o.bracket })}`, undefined, signal);
-export const getWantedBy = (oracleId: string, bracket: Bracket, signal?: AbortSignal) =>
-  call<WantedByResponse>('GET', `/api/cards/${encodeURIComponent(oracleId)}/commanders${query({ bracket })}`, undefined, signal);
+export const getThemes = (signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<ThemesResponse>('GET', `/api/themes${query({ arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getTheme = (slug: string, o: { colors?: ColorLetter[]; bracket: Bracket; arenaFormat?: ArenaFormat | null }, signal?: AbortSignal) =>
+  call<ThemeResponse>('GET', `/api/themes/${encodeURIComponent(slug)}${query({ colors: o.colors?.join(''), bracket: o.bracket, arenaFormat: o.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
+export const getWantedBy = (oracleId: string, bracket: Bracket, signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<WantedByResponse>('GET', `/api/cards/${encodeURIComponent(oracleId)}/commanders${query({ bracket, arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getPartners = (oracleId: string, signal?: AbortSignal) =>
   call<PartnersResponse>('GET', `/api/partners${query({ id: oracleId })}`, undefined, signal);
 

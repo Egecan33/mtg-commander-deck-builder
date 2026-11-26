@@ -6,7 +6,10 @@ import * as combosRoute from '@/app/api/commander/[slug]/combos/route';
 import * as recsRoute from '@/app/api/commander/[slug]/recs/route';
 import * as similarRoute from '@/app/api/commander/[slug]/similar/route';
 import * as commandersRoute from '@/app/api/commanders/route';
-import type { AnalyzeResponse, CommanderPageResponse, CommanderRecsResponse, CommandersResponse, SimilarResponse } from '@/app/lib/api';
+import * as themesRoute from '@/app/api/themes/route';
+import * as themeRoute from '@/app/api/themes/[axis]/route';
+import * as wantedRoute from '@/app/api/cards/[id]/commanders/route';
+import type { AnalyzeResponse, CommanderPageResponse, ThemeResponse, ThemesResponse, WantedByResponse, CommanderRecsResponse, CommandersResponse, SimilarResponse } from '@/app/lib/api';
 import type { Deck } from '@/engine/types';
 import { setActiveCollection } from '@/server/collection';
 import { commanderShell } from '@/server/commander-index';
@@ -84,6 +87,22 @@ describe('commanders in Standard Brawl', () => {
     const brawl = getCardDb('brawl');
     for (const s of recs.sections) for (const c of s.cards) expect(brawl.get(c.oracleId)).toBeDefined();
     expect(recs.sections.some((s) => s.id === 'game-changers')).toBe(true);
+  });
+
+  it('themes and "Commanders that want this card" use the Standard Brawl card data', async () => {
+    const { one, brawlOnly } = await pickCommanders();
+    const themes = await json<ThemesResponse>(callRoute(themesRoute, `/api/themes${STD}`));
+    const all = await json<ThemesResponse>(callRoute(themesRoute, '/api/themes'));
+    expect(themes.themes.reduce((n, t) => n + t.commanders, 0)).toBeLessThan(all.themes.reduce((n, t) => n + t.commanders, 0));
+    const lead = themes.themes.find((t) => t.commanders > 0)!;
+    const page = await json<ThemeResponse>(callRoute(themeRoute, `/api/themes/${lead.slug}${STD}`, { axis: lead.slug }));
+    for (const c of page.commanders) expect(std().get(c.oracleId)?.standardBrawlLegality).toBe('legal');
+    for (const id of page.top) expect(std().get(id)?.standardBrawlLegality).toBe('legal');
+    const wanted = await json<WantedByResponse>(callRoute(wantedRoute, `/api/cards/${one.oracleId}/commanders${STD}`, { id: one.oracleId }));
+    for (const w of wanted.commanders) expect(std().get(w.commander.oracleId)?.standardBrawlLegality).toBe('legal');
+    const out = await json<WantedByResponse>(callRoute(wantedRoute, `/api/cards/${brawlOnly!.oracleId}/commanders${STD}`, { id: brawlOnly!.oracleId }));
+    expect(out.commanders).toEqual([]);
+    expect(out.note).toMatch(/Standard Brawl/);
   });
 
   it('the page asks nothing of EDHREC and shows no EDHREC data, even with it on and cached', async () => {

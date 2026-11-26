@@ -37,8 +37,8 @@ export default function CommandersPage() {
     return () => clearTimeout(t);
   }, [q]);
   useEffect(() => {
-    getThemes().then((r) => setThemes(r.themes), notify.error);
-  }, [notify.error]);
+    getThemes(undefined, buildFormat).then((r) => setThemes(r.themes), notify.error);
+  }, [notify.error, buildFormat]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;

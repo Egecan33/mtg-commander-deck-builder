@@ -2,16 +2,17 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useNotify } from '../components/Shell';
+import { useBuildFormat, useNotify } from '../components/Shell';
 import { getThemes, type ThemeInfo } from '../lib/api';
 import { themeHref } from '../lib/links';
 
 export default function ThemesPage() {
   const notify = useNotify();
+  const format = useBuildFormat();
   const [themes, setThemes] = useState<ThemeInfo[] | null>(null);
   useEffect(() => {
-    getThemes().then((r) => setThemes(r.themes), notify.error);
-  }, [notify.error]);
+    getThemes(undefined, format).then((r) => setThemes(r.themes), notify.error);
+  }, [notify.error, format]);
   return (
     <div className="mx-auto max-w-[1100px] px-8 py-7" data-testid="themes">
       <h1 className="text-[2rem] leading-none">Themes</h1>
