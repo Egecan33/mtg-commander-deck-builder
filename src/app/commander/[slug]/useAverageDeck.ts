@@ -23,7 +23,7 @@ export function useAverageDeck(commanders: string[], name: string, q: RecsQuery,
     const ctrl = new AbortController();
     (async () => {
       try {
-        const built = await buildDeck(shellDeck(commanders, q.bracket, name), 'auto', {
+        const built = await buildDeck(shellDeck(commanders, q.bracket, name, q.color ?? null), 'auto', {
           ownedOnly: q.ownedOnly, freeOnly: (q.ownedOnly && free) || undefined, maxPriceUsd: budgetMax(q.budget), seed: 1,
         }, ctrl.signal);
         const deck: Deck = { ...built.deck, id: null, name };

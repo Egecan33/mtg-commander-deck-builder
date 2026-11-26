@@ -8,12 +8,17 @@ import { Menu, type MenuItem } from '@/app/components/Menu';
 import { imageUrl, type CommanderCard, type CommanderPageResponse } from '@/app/lib/api';
 import { commanderHref, themeHref } from '@/app/lib/links';
 import { fmtPrice } from '@/app/lib/ui';
+import type { Color } from '@/engine/types';
+import { COLOR_NAME } from '@/app/lib/ui';
 import { joinNames } from './shell';
 
 /** The commander banner: the one bold moment on the page. */
 export function Banner({
-  page, partners, busy, onBuild, onBest, onOpenBuilder, onDecks,
+  page, partners, busy, onBuild, onBest, onOpenBuilder, onDecks, color, onColor,
 }: {
+  /** The colour chosen for a colour-choice commander. */
+  color: Color | null;
+  onColor: (c: Color) => void;
   page: CommanderPageResponse;
   partners: CommanderCard[];
   busy: string | null;
@@ -25,6 +30,7 @@ export function Banner({
   const router = useRouter();
   const [first, second] = page.commanders;
   const name = joinNames(page.commanders);
+  const chooses = page.commanders.some((c) => c.needsColorChoice);
   const owned = page.commanders.every((c) => c.owned);
   const heldNames = page.commanders.flatMap((c) => page.heldBy[c.oracleId] ?? []);
   const items: MenuItem[] = partners.slice(0, 30).map((p) => ({
@@ -59,6 +65,16 @@ export function Banner({
               {owned ? 'In your collection' : 'Not in your collection'}
               {heldNames.length > 0 && <HeldMark names={[...new Set(heldNames)]} small />}
             </span>
+            {chooses && (
+              <span className="flex items-center gap-1.5" role="group" aria-label="Chosen colour" data-testid="commander-color">
+                <span>{color ? 'Chosen colour' : 'Choose a colour'}</span>
+                {(['W', 'U', 'B', 'R', 'G'] as const).map((c) => (
+                  <button key={c} type="button" aria-pressed={color === c} title={COLOR_NAME[c]} className={`rounded-full p-0.5 ${color === c ? 'outline outline-2 outline-brass' : ''}`} onClick={() => onColor(c)} data-testid={`commander-color-${c}`}>
+                    <ColorPip color={c} size="1.3rem" dim={color !== null && color !== c} />
+                  </button>
+                ))}
+              </span>
+            )}
             <button type="button" className="underline-offset-2 hover:text-bone hover:underline" onClick={onDecks} data-testid="commander-decks-link">Your decks · {page.decks.length}</button>
           </div>
           {(page.themes.length > 0 || page.edhrecThemes) && (

@@ -1,8 +1,8 @@
-import type { Bracket, Deck } from '@/engine/types';
+import type { Bracket, Color, Deck } from '@/engine/types';
 
 /** A deck of just the commanders, the way the server scores a commander page. */
-export const shellDeck = (commanders: string[], bracket: Bracket, name = ''): Deck => ({
-  id: null, name, commanders, companion: null, chosenColor: null, main: [], targetBracket: bracket, themeWeights: null,
+export const shellDeck = (commanders: string[], bracket: Bracket, name = '', chosenColor: Color | null = null): Deck => ({
+  id: null, name, commanders, companion: null, chosenColor, main: [], targetBracket: bracket, themeWeights: null,
 });
 
 /** Front names joined with " and ". */

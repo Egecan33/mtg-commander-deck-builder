@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { Color } from '@/engine/types';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '@/app/components/EmptyState';
 import { FilterBar } from '@/app/components/FilterBar';
@@ -37,6 +38,8 @@ export function CommanderPage({ slug }: { slug: string }) {
   const filters = useFilters();
   const [freeOnly] = useFreeOnly();
   const withSlug = params.get('with') ?? undefined;
+  const colorParam = params.get('color');
+  const color = (['W', 'U', 'B', 'R', 'G'].includes(colorParam ?? '') ? colorParam : null) as Color | null;
   const tab = (TABS.find((t) => t.id === params.get('tab'))?.id ?? 'recs') as TabId;
   const [page, setPage] = useState<CommanderPageResponse | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -49,8 +52,8 @@ export function CommanderPage({ slug }: { slug: string }) {
   const ready = filters.ready && freeOnly !== null;
 
   const q: RecsQuery = useMemo(
-    () => ({ bracket: filters.bracket, budget: filters.budget, ownedOnly: filters.ownedOnly, freeOnly: filters.ownedOnly && freeOnly === true }),
-    [filters.bracket, filters.budget, filters.ownedOnly, freeOnly],
+    () => ({ bracket: filters.bracket, budget: filters.budget, ownedOnly: filters.ownedOnly, freeOnly: filters.ownedOnly && freeOnly === true, color }),
+    [filters.bracket, filters.budget, filters.ownedOnly, freeOnly, color],
   );
 
   // Arriving from Best from collection: tick Only my collection, then take the parameters out of the address.
@@ -65,6 +68,11 @@ export function CommanderPage({ slug }: { slug: string }) {
     router.replace(`/commander/${slug}${next.size ? `?${next}` : ''}`);
   }, [filters.ready, params, router, slug]);
 
+  const setColor = (c: Color) => {
+    const next = new URLSearchParams(params.toString());
+    next.set('color', c);
+    router.replace(`/commander/${slug}?${next}`, { scroll: false });
+  };
   const setTab = (id: TabId) => {
     const next = new URLSearchParams(params.toString());
     if (id === 'recs') next.delete('tab');
@@ -77,12 +85,12 @@ export function CommanderPage({ slug }: { slug: string }) {
   useEffect(() => {
     if (!ready) return;
     const ctrl = new AbortController();
-    getCommanderPage(slug, { with: withSlug, bracket: q.bracket }, ctrl.signal).then(
+    getCommanderPage(slug, { with: withSlug, bracket: q.bracket, color }, ctrl.signal).then(
       (p) => { setPage(p); setMissing(null); },
       (e) => { if (!isAbort(e)) { if (e instanceof ApiError && e.status === 404) setMissing(e.message); else notify.error(e); } },
     );
     return () => ctrl.abort();
-  }, [ready, slug, withSlug, q.bracket, tick, notify]);
+  }, [ready, slug, withSlug, q.bracket, color, tick, notify]);
 
   // Opening a commander page counts as picking the commander: one EDHREC read per page open (a no-op while EDHREC is off).
   const asked = useRef('');
@@ -135,7 +143,7 @@ export function CommanderPage({ slug }: { slug: string }) {
       const label = kind === 'best' ? `${name} (from my collection)` : name;
       setBusy(kind);
       try {
-        let deck = shellDeck(ids, q.bracket, label);
+        let deck = shellDeck(ids, q.bracket, label, color);
         if (kind !== 'empty') {
           const owned = kind === 'best' ? true : q.ownedOnly;
           const free = kind === 'best' ? freeOnly === true : q.ownedOnly && freeOnly === true;
@@ -150,7 +158,7 @@ export function CommanderPage({ slug }: { slug: string }) {
         setBusy(null);
       }
     },
-    [page, name, q, freeOnly, notify, router],
+    [page, name, q, color, freeOnly, notify, router],
   );
 
   if (missing) {
@@ -164,7 +172,7 @@ export function CommanderPage({ slug }: { slug: string }) {
 
   return (
     <div ref={root}>
-      <Banner page={page} partners={partners} busy={busy} onBuild={() => void create('build')} onBest={() => void create('best')} onOpenBuilder={() => void create('empty')} onDecks={() => setTab('decks')} />
+      <Banner page={page} partners={partners} busy={busy} onBuild={() => void create('build')} onBest={() => void create('best')} onOpenBuilder={() => void create('empty')} onDecks={() => setTab('decks')} color={color} onColor={setColor} />
       <div ref={bar} className="sticky top-0 z-20 border-b border-slag bg-soot/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-6 gap-y-2 px-8 py-2">
           <div className="seg" role="tablist" aria-label="Commander page">

@@ -3,7 +3,7 @@ import type { CommanderRecsResponse, RecCard, RecSection, RecSectionId, RecTypeI
 import { budgetMax, type Budget } from '@/app/lib/budget';
 import { isBasicLand } from '@/engine/rules';
 import { AXIS_MEMBER } from '@/engine/summary';
-import type { Card, CardFeatures, CardScore } from '@/engine/types';
+import type { Card, CardFeatures, CardScore, Color } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
 import { ownedSet } from './collection';
 import { getAnalysis } from './context';
@@ -24,7 +24,15 @@ export function readRecsQuery(params: URLSearchParams): RecsQuery {
   const budget = params.get('budget') ?? 'any';
   if (!BUDGETS.includes(budget as Budget)) throw new HttpError(400, 'budget must be any, under-5 or under-1.');
   const ownedOnly = params.get('owned') === '1';
-  return { bracket: readBracket(params.get('bracket') ?? 3), budget: budget as Budget, ownedOnly, freeOnly: ownedOnly && params.get('free') === '1' };
+  return { bracket: readBracket(params.get('bracket') ?? 3), budget: budget as Budget, ownedOnly, freeOnly: ownedOnly && params.get('free') === '1', color: readColor(params) };
+}
+
+/** `color=W|U|B|R|G`: the colour chosen for a colour-choice commander; absent is null, anything else a 400. */
+export function readColor(params: URLSearchParams): Color | null {
+  const c = params.get('color');
+  if (!c) return null;
+  if (!['W', 'U', 'B', 'R', 'G'].includes(c)) throw new HttpError(400, 'color must be W, U, B, R or G.');
+  return c as Color;
 }
 
 /** Cards the query counts as owned; null when it does not filter by collection. */
@@ -76,7 +84,7 @@ const nameOf = (cards: readonly Card[]): string => cards.map((c) => c.frontName)
 export function commanderRecs(commanders: string[], q: RecsQuery): CommanderRecsResponse {
   const db = getCardDb();
   const ids = [...commanders].sort();
-  const shell = commanderShell(commanders, q.bracket);
+  const shell = commanderShell(commanders, q.bracket, q.color ?? null);
   const analysis = getAnalysis(shell);
   const owned = ownedFor(q);
   const free = q.freeOnly && owned ? createHash('sha1').update([...owned].sort().join(',')).digest('hex') : '';

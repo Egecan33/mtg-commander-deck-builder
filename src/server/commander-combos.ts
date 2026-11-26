@@ -15,11 +15,11 @@ export const MAX_COMBOS = 100;
 export function commanderCombos(cards: Card[], q: RecsQuery): CommanderCombosResponse {
   const db = getCardDb();
   const ids = cards.map((c) => c.oracleId);
-  const key = [...ids].sort().join('+');
+  const key = `${[...ids].sort().join('+')}|${q.color ?? ''}`;
   const memo = cacheSlot('commander-combos', () => new Map<string, FoundCombo[]>());
   let all = memo.get(key);
   if (!all) {
-    all = identityCombos(commanderShell(ids, 3), db);
+    all = identityCombos(commanderShell(ids, 3, q.color ?? null), db);
     memo.set(key, all);
     while (memo.size > 24) memo.delete(memo.keys().next().value as string);
   }
@@ -45,6 +45,6 @@ export function commanderCombos(cards: Card[], q: RecsQuery): CommanderCombosRes
     withCommander: kept.filter((f) => f.combo.cards.some((p) => commanders.has(p.oracleId))).length,
     combos: listed,
     cards: cardLookup(pieceIds),
-    heldBy: heldByFor(commanderShell(ids, q.bracket), pieceIds),
+    heldBy: heldByFor(commanderShell(ids, q.bracket, q.color ?? null), pieceIds),
   };
 }

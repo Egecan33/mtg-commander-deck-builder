@@ -16,8 +16,8 @@ import { cacheSlot } from './state';
 import { getCardDb } from './store';
 
 /** A deck with the commanders and nothing else: one scoring pass per commander and bracket. */
-export function commanderShell(commanders: string[], bracket: Bracket): Deck {
-  return { id: null, name: '', commanders, companion: null, chosenColor: null, main: [], targetBracket: bracket, themeWeights: null };
+export function commanderShell(commanders: string[], bracket: Bracket, chosenColor: Color | null = null): Deck {
+  return { id: null, name: '', commanders, companion: null, chosenColor, main: [], targetBracket: bracket, themeWeights: null };
 }
 
 export interface CommanderEntry { card: Card; slug: string; weights: Record<AxisId, number>; lead: AxisId[] }
@@ -100,10 +100,10 @@ export function toCommanderTile(card: Card, owned: ReadonlySet<string>): Command
 const ORDER: Color[] = ['W', 'U', 'B', 'R', 'G'];
 
 /** The header of a commander page. Reads cached EDHREC data only. */
-export function commanderPage(cards: Card[], bracket: Bracket): CommanderPageResponse {
+export function commanderPage(cards: Card[], bracket: Bracket, color: Color | null = null): CommanderPageResponse {
   const db = getCardDb();
   const ids = cards.map((c) => c.oracleId);
-  const shell = commanderShell(ids, bracket);
+  const shell = commanderShell(ids, bracket, color);
   const owned = ownedSet();
   const { ctx, edhrec } = engineContext(shell);
   const identity = ORDER.filter((c) => allowedIdentity(shell, db).has(c));

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as pageRoute from '@/app/api/commander/[slug]/route';
+import * as recsRoute from '@/app/api/commander/[slug]/recs/route';
 import type { CommanderPageResponse } from '@/app/lib/api';
 import type { Card, Deck } from '@/engine/types';
 import { commanderIndex, slugIndex } from '@/server/commander-index';
@@ -107,5 +108,18 @@ describe('the commander header', () => {
     expect(await decks('krenko-mob-boss')).toEqual(['Krenko, Mob Boss']);
     expect(await decks('tymna-the-weaver', '?with=thrasios-triton-hero')).toEqual(['Tymna the Weaver + Thrasios, Triton Hero']);
     expect((await decks('tymna-the-weaver')).sort()).toEqual(['Tymna the Weaver', 'Tymna the Weaver + Thrasios, Triton Hero']);
+  });
+});
+
+describe('a colour-choice commander', () => {
+  it('uses the chosen colour for its identity and recs', async () => {
+    const none = (await (await page('clara-oswald')).json()) as CommanderPageResponse;
+    expect(none.identity).toEqual([]);
+    expect(none.commanders[0].needsColorChoice).toBe(true);
+    const red = (await (await page('clara-oswald', '?color=R')).json()) as CommanderPageResponse;
+    expect(red.identity).toEqual(['R']);
+    expect((await page('clara-oswald', '?color=X')).status).toBe(400);
+    const recs = (await (await callRoute(recsRoute, '/api/commander/clara-oswald/recs?color=R', { slug: 'clara-oswald' })).json()) as { cards: Record<string, { colorIdentity: string[] }> };
+    expect(Object.values(recs.cards).some((c) => c.colorIdentity.includes('R'))).toBe(true);
   });
 });

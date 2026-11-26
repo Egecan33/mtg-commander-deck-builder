@@ -25,12 +25,13 @@
  * GET  /api/themes/:axis?colors&bracket -> ThemeResponse    :axis is the slug ("typal-elf", "tokens"; 404 when not listed). The commanders
  *        that lead the theme (inside `colors` when given, most played first) and up to 60 cards that serve it best, scored
  *        as in a deck of that theme alone at `bracket`. Text only: no EDHREC data.
- * GET  /api/commander/:slug?with&bracket -> CommanderPageResponse
+ * GET  /api/commander/:slug?with&bracket&color -> CommanderPageResponse
  *        The header of a commander page. `slug` is EDHREC's URL form of the front name ("mr-spock-science-officer");
  *        the full-name form and any letter case also resolve, and two names that slug alike get "<slug>-<8 id characters>".
  *        `with` is a partner's slug (the page is then the pair's: identity is the union, `decks` only the decks with
  *        exactly these two). Unknown commander or partner: 404; the same commander twice or a pair that cannot be one:
- *        400. `bracket` 1-5 (default 3). Cached EDHREC data only (`peekEdhrec`): never a request, and the EDHREC fields
+ *        400. `bracket` 1-5 (default 3). `color` W|U|B|R|G is the colour chosen for a colour-choice commander (the
+ *        recs, combos and header then use it; every other commander ignores it, anything else is a 400). Cached EDHREC data only (`peekEdhrec`): never a request, and the EDHREC fields
  *        (`edhrecDecks`, `edhrecThemes`) are absent when nothing is cached.
  * GET  /api/commander/:slug/recs?with&bracket&budget&owned&free -> CommanderRecsResponse
  *        Card recommendations in EDHREC's sections, scored by the app's own scorer for a deck of just the commander(s)
@@ -363,7 +364,11 @@ export interface CommanderPageResponse {
   /** Saved decks with this commander among theirs; for a pair, exactly these two. */
   decks: DeckTile[];
 }
-export interface RecsQuery { bracket: Bracket; budget: Budget; ownedOnly: boolean; freeOnly: boolean }
+export interface RecsQuery {
+  bracket: Bracket; budget: Budget; ownedOnly: boolean; freeOnly: boolean;
+  /** The colour chosen for a colour-choice commander (Clara Oswald and the like). */
+  color?: Color | null;
+}
 export type RecTypeId = 'creatures' | 'instants' | 'sorceries' | 'utility-artifacts' | 'mana-artifacts' | 'enchantments' | 'planeswalkers' | 'utility-lands' | 'lands' | 'other';
 export type RecSectionId = 'new' | 'synergy' | 'top' | 'game-changers' | 'owned' | RecTypeId;
 export interface RecCard {
@@ -726,12 +731,12 @@ export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal
     undefined,
     signal,
   );
-export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket }, signal?: AbortSignal) =>
-  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query(o)}`, undefined, signal);
+export const getCommanderPage = (slug: string, o: { with?: string; bracket: Bracket; color?: Color | null }, signal?: AbortSignal) =>
+  call<CommanderPageResponse>('GET', `/api/commander/${encodeURIComponent(slug)}${query({ with: o.with, bracket: o.bracket, color: o.color ?? undefined })}`, undefined, signal);
 export const getCommanderRecs = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
   call<CommanderRecsResponse>(
     'GET',
-    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined })}`,
+    `/api/commander/${encodeURIComponent(slug)}/recs${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined })}`,
     undefined,
     signal,
   );
@@ -740,7 +745,7 @@ export const getSimilarCommanders = (slug: string, withSlug?: string, signal?: A
 export const getCommanderCombos = (slug: string, q: RecsQuery & { with?: string }, signal?: AbortSignal) =>
   call<CommanderCombosResponse>(
     'GET',
-    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined })}`,
+    `/api/commander/${encodeURIComponent(slug)}/combos${query({ with: q.with, bracket: q.bracket, budget: q.budget, owned: q.ownedOnly ? 1 : undefined, free: q.ownedOnly && q.freeOnly ? 1 : undefined, color: q.color ?? undefined })}`,
     undefined,
     signal,
   );
