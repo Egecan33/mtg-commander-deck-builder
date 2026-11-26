@@ -1,3 +1,4 @@
+import { commanderThemeWeights } from '../features';
 import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, namedTypes, resolveThemeWeights } from '../summary';
@@ -106,25 +107,54 @@ export function deckNetwork(deck: Deck, ctx: EngineContext, opts: { scorer?: Sco
     };
   });
 
-  // commander spokes
-  const first = deck.commanders.length > 0 ? db.get(deck.commanders[0]) : undefined;
+  // commander spokes: each card hangs off the commander it works with most (review M5): its strongest
+  // theme edge with one of them, else how well it fits that commander's own themes; the first on a tie
   const byId = new Map(links.map((l) => [l.card.oracleId, l.card]));
-  if (first && byId.has(first.oracleId)) {
+  const cmds = deck.commanders.map((id) => byId.get(id)).filter((c): c is NonNullable<typeof c> => !!c && commanderIds.has(c.oracleId));
+  const first = cmds[0];
+  if (first) {
+    const direct = new Map<string, number>(); // `${card}|${commander}` -> strongest theme edge
+    for (const e of all) {
+      for (const [x, y] of [[e.a, e.b], [e.b, e.a]] as const) {
+        if (!commanderIds.has(y) || commanderIds.has(x)) continue;
+        const key = `${x}|${y}`;
+        direct.set(key, Math.max(direct.get(key) ?? 0, e.weight));
+      }
+    }
+    const own = new Map(cmds.map((c) => [c.oracleId, commanderThemeWeights([c], ctx.edhrec?.themes)]));
+    const fit = (f: (typeof links)[number]['f'], cmd: string): number => {
+      const w = own.get(cmd) ?? {};
+      let best = 0;
+      for (const [axis, s] of Object.entries(f.axes)) best = Math.max(best, (w[axis] ?? 0) * Math.max(s?.e ?? 0, s?.p ?? 0));
+      return best;
+    };
+    const featuresOf = new Map(links.map((l) => [l.card.oracleId, l.f]));
     for (const n of nodes) {
       if (n.oracleId === first.oracleId) continue;
       const card = byId.get(n.oracleId)!;
-      const [a, b] = first.oracleId < n.oracleId ? [first, card] : [card, first];
       if (n.commander) {
+        const [a, b] = first.oracleId < n.oracleId ? [first, card] : [card, first];
         edges.push({ a: a.oracleId, b: b.oracleId, kind: 'commander', weight: 1, reasons: [`Commands the deck with ${shortName(b)}`, `Commands the deck with ${shortName(a)}`] });
         continue;
       }
       if (n.link <= 0) continue;
+      let hub = first;
+      if (cmds.length > 1) {
+        const f = featuresOf.get(n.oracleId)!;
+        const rank = (c: typeof first) => [direct.get(`${n.oracleId}|${c.oracleId}`) ?? 0, fit(f, c.oracleId)];
+        for (const c of cmds.slice(1)) {
+          const [d1, f1] = rank(hub);
+          const [d2, f2] = rank(c);
+          if (d2 > d1 + 1e-9 || (Math.abs(d2 - d1) <= 1e-9 && f2 > f1 + 1e-9)) hub = c;
+        }
+      }
+      const [a, b] = hub.oracleId < n.oracleId ? [hub, card] : [card, hub];
       const lifted = Number.isFinite(ctx.edhrec?.cards?.[n.oracleId]?.lift ?? NaN);
-      const cardSide = `${pct(n.link)} synergy with ${shortName(first)}${lifted ? ', played with it on EDHREC' : ''}`;
+      const cardSide = `${pct(n.link)} synergy with ${shortName(hub)}${lifted ? ', played with it on EDHREC' : ''}`;
       const cmdSide = `${pct(n.link)} synergy with ${shortName(card)}`;
       edges.push({
         a: a.oracleId, b: b.oracleId, kind: 'commander', weight: n.link,
-        reasons: a.oracleId === first.oracleId ? [cmdSide, cardSide] : [cardSide, cmdSide],
+        reasons: a.oracleId === hub.oracleId ? [cmdSide, cardSide] : [cardSide, cmdSide],
       });
     }
   }

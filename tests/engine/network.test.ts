@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findCombos } from '@/engine/brackets';
+import { autoBuild } from '@/engine/builder';
 import { axisLabel } from '@/engine/features';
 import { CLUSTER_MIN_EDGE, clusterNetwork, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
 import { packageCohesion } from '@/engine/packages';
@@ -284,6 +285,30 @@ describe('deckNetwork', () => {
     const many = odd.main[0].oracleId;
     expect(net.nodes.filter((n) => n.oracleId === many)).toHaveLength(1);
     expect(net.nodes.find((n) => n.oracleId === many)?.qty).toBe(30);
+  });
+});
+
+// Review M5: every spoke hung off the first partner.
+describe('partner commanders', () => {
+  it("a card's commander spoke goes to the partner it works with", () => {
+    const shell: Deck = {
+      id: null, name: 'partners', commanders: [card('Thrasios, Triton Hero').oracleId, card('Tymna the Weaver').oracleId], companion: null,
+      chosenColor: null, main: [], targetBracket: 3, themeWeights: null,
+    };
+    const deck = autoBuild(shell, ctx, { ownedOnly: false, owned: null, maxPriceUsd: null, seed: 1 });
+    const net = deckNetwork(deck, ctx);
+    const cmds = new Set(deck.commanders);
+    const themeWith = (id: string, cmd: string) => Math.max(0, ...net.edges.filter((e) => THEME.has(e.kind) && ((e.a === id && e.b === cmd) || (e.b === id && e.a === cmd))).map((e) => e.weight));
+    const seen = new Set<string>();
+    for (const e of net.edges) {
+      if (e.kind !== 'commander' || (cmds.has(e.a) && cmds.has(e.b))) continue;
+      const cmd = cmds.has(e.a) ? e.a : e.b;
+      const other = [...cmds].find((x) => x !== cmd)!;
+      const id = e.a === cmd ? e.b : e.a;
+      expect(themeWith(id, cmd), db.get(id)!.name).toBeGreaterThanOrEqual(themeWith(id, other));
+      seen.add(cmd);
+    }
+    expect(seen.size).toBe(2);
   });
 });
 
