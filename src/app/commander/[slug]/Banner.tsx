@@ -33,7 +33,7 @@ export function Banner({
   const chooses = page.commanders.some((c) => c.needsColorChoice);
   const owned = page.commanders.every((c) => c.owned);
   const heldNames = page.commanders.flatMap((c) => page.heldBy[c.oracleId] ?? []);
-  const items: MenuItem[] = partners.slice(0, 30).map((p) => ({
+  const items: MenuItem[] = partners.map((p) => ({
     label: p.frontName, description: p.typeLine, onSelect: () => router.push(commanderHref(first, p)),
   }));
   const hasPartnerKind = !second && first.partnerKinds.length > 0 && partners.length > 0;
@@ -102,7 +102,7 @@ export function Banner({
               {busy === 'best' ? 'Building…' : 'Best from my collection'}
             </button>
             <button type="button" className="btn" onClick={onOpenBuilder} disabled={busy !== null} data-testid="commander-open-builder">Open in builder</button>
-            {hasPartnerKind && <Menu label="Add a partner" items={items} testId="commander-partner" className="btn" />}
+            {hasPartnerKind && <Menu label="Add a partner" items={items} testId="commander-partner" className="btn" search={{ placeholder: `Search ${partners.length} partners` }} />}
             {second && <Link href={commanderHref(first)} className="btn btn-quiet" data-testid="commander-without">Without {second.frontName}</Link>}
           </div>
         </div>

@@ -18,9 +18,13 @@ export interface MenuItem {
  * Escape or a click outside closes it.
  */
 export function Menu({
-  label, items, testId, className = 'btn btn-sm', title, align = 'left',
+  label, items, testId, className = 'btn btn-sm', title, align = 'left', search, maxShown = 40,
 }: {
   label: string; items: MenuItem[]; testId?: string; className?: string; title?: string;
+  /** A search field above a long list: it filters the items by label and description. */
+  search?: { placeholder: string };
+  /** With a search field, how many matches are listed at once. */
+  maxShown?: number;
   /** Which edge of the button the list lines up with; 'right' for a menu near the right of the screen. */
   align?: 'left' | 'right';
 }) {
@@ -29,6 +33,12 @@ export function Menu({
   const button = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState('');
+  const needle = q.trim().toLowerCase();
+  const shown = search
+    ? items.filter((i) => !needle || i.label.toLowerCase().includes(needle) || (i.description ?? '').toLowerCase().includes(needle)).slice(0, maxShown)
+    : items;
 
   const itemEls = () => [...(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
   const focusItem = (i: number) => {
@@ -37,6 +47,7 @@ export function Menu({
   };
   const close = (refocus: boolean) => {
     setOpen(false);
+    setQ('');
     if (refocus) button.current?.focus();
   };
   // The item to focus once the list is on screen (0 first, -1 last).
@@ -47,7 +58,8 @@ export function Menu({
   };
   useLayoutEffect(() => {
     if (!open || focusOnOpen.current === null) return;
-    focusItem(focusOnOpen.current);
+    if (search && focusOnOpen.current === 0) input.current?.focus();
+    else focusItem(focusOnOpen.current);
     focusOnOpen.current = null;
   });
 
@@ -55,7 +67,10 @@ export function Menu({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+      if (root.current && !root.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQ('');
+      }
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -69,16 +84,21 @@ export function Menu({
   };
   const onListKey = (e: KeyboardEvent) => {
     const els = itemEls();
+    const typing = document.activeElement === input.current;
     const at = els.indexOf(document.activeElement as HTMLButtonElement);
+    if (typing && (e.key === 'Home' || e.key === 'End')) return;
     if (e.key === 'ArrowDown') focusItem(at + 1);
-    else if (e.key === 'ArrowUp') focusItem(at - 1);
-    else if (e.key === 'Home') focusItem(0);
+    else if (e.key === 'ArrowUp') {
+      if (at === 0 && search) input.current?.focus();
+      else focusItem(at - 1);
+    } else if (e.key === 'Home') focusItem(0);
     else if (e.key === 'End') focusItem(-1);
     else if (e.key === 'Escape') {
       e.stopPropagation();
       close(true);
     } else if (e.key === 'Tab') {
       setOpen(false);
+      setQ('');
       return;
     } else return;
     e.preventDefault();
@@ -94,7 +114,7 @@ export function Menu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         title={title}
-        onClick={() => (open ? setOpen(false) : openAt(0))}
+        onClick={() => (open ? close(false) : openAt(0))}
         onKeyDown={onButtonKey}
         data-testid={testId}
       >
@@ -113,7 +133,20 @@ export function Menu({
           onKeyDown={onListKey}
           data-testid={testId ? `${testId}-list` : undefined}
         >
-          {items.map((item) => (
+          {search && (
+            <input
+              ref={input}
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={search.placeholder}
+              aria-label={search.placeholder}
+              className="field mb-1 w-full"
+              data-testid={testId ? `${testId}-search` : undefined}
+            />
+          )}
+          {search && shown.length === 0 && <span className="px-2.5 py-1.5 text-[13px] text-ash">Nothing matches.</span>}
+          {shown.map((item) => (
             <button
               key={item.label}
               type="button"
