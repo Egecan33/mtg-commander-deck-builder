@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { Format } from '@/engine/types';
 import { invalidateCardDb, loadCardDb, type ServerCardDb } from './carddb';
 import { DATA_DIR, DEFAULT_DB_PATH, openDb, type Db } from './db';
 import { dropCaches, serverState } from './state';
@@ -17,9 +18,12 @@ export function getDb(): Db {
   return (s.db ??= openDb(dbPath()));
 }
 
-/** The in-memory card database (about 2 s to load for the full pool, then cached). */
-export function getCardDb(): ServerCardDb {
-  return loadCardDb(getDb());
+/**
+ * The in-memory card database (about 2 s to load for the full pool, then cached). `format: 'brawl'`
+ * is the same data as MTG Arena's Brawl sees it: the Arena pool and Brawl legality.
+ */
+export function getCardDb(format: Format = 'commander'): ServerCardDb {
+  return loadCardDb(getDb(), format);
 }
 
 /** Call after card data changed on disk (a sync step finished): everything derived is rebuilt on demand. */

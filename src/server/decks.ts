@@ -6,7 +6,9 @@ import { deckSize } from '@/engine/rules';
 import { ROLE_LABEL } from '@/engine/targets';
 import type { Bracket, Color, Deck, DeckEntry, Role } from '@/engine/types';
 import { cardLookup } from './cards';
+import { activeCollectionId, collectionKind, deckCollection, deckFormat } from './collection';
 import { deckKey, engineContext } from './context';
+import { PHYSICAL_COLLECTION } from './db';
 import { HttpError, isObject } from './http';
 import { cacheSlot } from './state';
 import { getDb } from './store';
@@ -79,12 +81,25 @@ export function sanitizeDeck(input: unknown): Deck {
     if (Object.keys(roleTargets).length > 0) deck.roleTargets = roleTargets;
   }
   if (input.built === true) deck.built = true;
+  if (typeof input.collectionId === 'string' && ID.test(input.collectionId)) deck.collectionId = input.collectionId;
   return deck;
 }
 
+export { deckCollection, deckFormat };
+
 interface Row { id: string; name: string; json: string; updated_at: string }
 
-const readRow = (row: Row): Deck => ({ ...sanitizeDeck(JSON.parse(row.json)), id: row.id, name: row.name });
+/** A stored deck. One saved before decks belonged to collections has no `collectionId`: it is a Physical deck. */
+const readRow = (row: Row): Deck => {
+  const deck = { ...sanitizeDeck(JSON.parse(row.json)), id: row.id, name: row.name };
+  return deck.collectionId ? deck : { ...deck, collectionId: PHYSICAL_COLLECTION };
+};
+
+/** `collectionId` checked against the collections there are (a move to an unknown one is a 400). */
+function requireCollection(id: string): string {
+  if (collectionKind(id) === null) throw new HttpError(400, `There is no collection "${id}".`);
+  return id;
+}
 
 export function getDeck(id: string): { deck: Deck; updatedAt: string } | null {
   const row = getDb().prepare('SELECT id, name, json, updated_at FROM decks WHERE id = ?').get(id) as Row | undefined;
@@ -96,16 +111,30 @@ export function getDeck(id: string): { deck: Deck; updatedAt: string } | null {
   }
 }
 
-/** Saves a deck: as a new one (fresh id) when `id` is omitted, else over the deck with that id. */
+/**
+ * Saves a deck: as a new one (fresh id) when `id` is omitted, else over the deck with that id.
+ * A new deck belongs to the collection it names, else to the active one. An existing deck keeps
+ * its collection unless `collectionId` names another (moving it: only `collectionId` changes).
+ */
 export function saveDeck(deck: Deck, id?: string): { deck: Deck; updatedAt: string } | null {
   const db = getDb();
   const updatedAt = new Date().toISOString();
   if (id === undefined) {
-    const saved: Deck = { ...deck, id: randomUUID() };
+    const collectionId = deck.collectionId ? requireCollection(deck.collectionId) : activeCollectionId();
+    const saved: Deck = { ...deck, id: randomUUID(), collectionId };
     db.prepare('INSERT INTO decks(id, name, json, updated_at) VALUES (?, ?, ?, ?)').run(saved.id, saved.name, JSON.stringify(saved), updatedAt);
     return { deck: saved, updatedAt };
   }
-  const saved: Deck = { ...deck, id };
+  const row = db.prepare('SELECT id, name, json, updated_at FROM decks WHERE id = ?').get(id) as Row | undefined;
+  if (!row) return null;
+  let stored: string = PHYSICAL_COLLECTION;
+  try {
+    stored = readRow(row).collectionId ?? PHYSICAL_COLLECTION;
+  } catch {
+    // a damaged row: the new body decides
+  }
+  const collectionId = deck.collectionId ? requireCollection(deck.collectionId) : stored;
+  const saved: Deck = { ...deck, id, collectionId };
   const res = db.prepare('UPDATE decks SET name = ?, json = ?, updated_at = ? WHERE id = ?').run(saved.name, JSON.stringify(saved), updatedAt, id);
   return res.changes > 0 ? { deck: saved, updatedAt } : null;
 }
@@ -116,8 +145,11 @@ export function deleteDeck(id: string): boolean {
 
 type TileNumbers = Pick<DeckTile, 'cardCount' | 'rating' | 'legal' | 'floor' | 'playsLike'>;
 
-/** Saved decks, newest first, with what a tile shows. Ratings are computed once per deck version. */
-export function listDecks(): DeckTile[] {
+/**
+ * Saved decks of one collection (the active one unless named), newest first, with what a tile
+ * shows. Ratings are computed once per deck version.
+ */
+export function listDecks(collectionId: string = activeCollectionId()): DeckTile[] {
   const rows = getDb().prepare('SELECT id, name, json, updated_at FROM decks ORDER BY updated_at DESC, id').all() as Row[];
   const numbers = cacheSlot('deck-tiles', () => new Map<string, TileNumbers>());
   const tiles: DeckTile[] = [];
@@ -129,9 +161,11 @@ export function listDecks(): DeckTile[] {
     } catch {
       continue; // a row that is not a deck is not listed
     }
+    if (deck.collectionId !== collectionId) continue;
     // Rated outside the analysis cache, so that listing decks never evicts the deck being edited.
     const { ctx } = engineContext(deck);
-    const key = `${deckKey(deck)}${ctx.edhrec ? ':edhrec' : ''}`;
+    const format = deckFormat(deck);
+    const key = `${deckKey(deck)}:${format}${ctx.edhrec ? ':edhrec' : ''}`;
     live.add(key);
     let n = numbers.get(key);
     if (!n) {
@@ -143,6 +177,7 @@ export function listDecks(): DeckTile[] {
     const lookup = cardLookup(deck.commanders);
     tiles.push({
       id: row.id, name: row.name, updatedAt: row.updated_at, targetBracket: deck.targetBracket, built: deck.built === true,
+      collectionId, format,
       commanders: deck.commanders.map((c) => lookup[c]).filter((c) => c !== undefined),
       ...n,
     });

@@ -1,6 +1,7 @@
 import type { BoxTake, CollectionAdjustResponse, CollectionInfo } from '@/app/lib/api';
 import { parseCollection } from '@/engine/text';
 import type { UnresolvedLine } from '@/engine/text';
+import type { Deck, Format } from '@/engine/types';
 import { PHYSICAL_COLLECTION } from './db';
 import { HttpError } from './http';
 import { findPrinting } from './printings';
@@ -29,6 +30,24 @@ export function activeCollectionId(): string {
     return typeof id === 'string' && db.prepare('SELECT 1 FROM collections WHERE id = ?').get(id) ? id : PHYSICAL_COLLECTION;
   });
 }
+
+/** A collection's kind ('manual' or 'arena'), or null when there is no such collection. */
+export function collectionKind(id: string): 'manual' | 'arena' | null {
+  const row = getDb().prepare('SELECT kind FROM collections WHERE id = ?').get(id) as { kind: string } | undefined;
+  return row ? (row.kind === 'arena' ? 'arena' : 'manual') : null;
+}
+
+/** The format a collection's decks are built in: MTG Arena's Brawl for an Arena collection, else Commander. */
+export const collectionFormat = (id: string): Format => (collectionKind(id) === 'arena' ? 'brawl' : 'commander');
+
+/**
+ * The collection a deck belongs to: its own `collectionId`, else the active collection (a deck
+ * that was never saved, like the one on the New deck page, is built for what is active).
+ */
+export const deckCollection = (deck: Deck): string => deck.collectionId ?? activeCollectionId();
+
+/** The format a deck is checked and built in: MTG Arena's Brawl for a deck of an Arena collection, else Commander. */
+export const deckFormat = (deck: Deck): Format => collectionFormat(deckCollection(deck));
 
 /** Makes another collection the active one. */
 export function setActiveCollection(id: string): void {

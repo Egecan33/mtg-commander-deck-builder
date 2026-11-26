@@ -243,7 +243,7 @@ describe('POST /api/cards', () => {
     expect(scoresDescending(open)).toBe(true);
     expect(r.cards.filter((c) => c.score.gate).every((c) => c.score.score === 0)).toBe(true);
     expect(Object.keys(r.cards[0]).sort()).toEqual(
-      ['cmc', 'colorIdentity', 'frontName', 'gameChanger', 'imageFaces', 'manaCost', 'name', 'oracleId', 'owned', 'priceUsd', 'roles', 'score', 'typeLine'].sort(),
+      ['arenaRarity', 'cmc', 'colorIdentity', 'frontName', 'gameChanger', 'imageFaces', 'manaCost', 'name', 'oracleId', 'owned', 'priceUsd', 'roles', 'score', 'typeLine'].sort(),
     );
   });
 
@@ -578,7 +578,7 @@ describe('import, export and saved decks', () => {
     expect(created.deck.id).toMatch(/^[0-9a-f-]{36}$/);
     const deckId = created.deck.id as string;
     const loaded = await call<DeckResponse>('GET', `/api/decks/${deckId}`);
-    expect(loaded.deck).toEqual({ ...deck, id: deckId });
+    expect(loaded.deck).toEqual({ ...deck, id: deckId, collectionId: 'physical' }); // a new deck joins the active collection
     expect(loaded.updatedAt).toBe(created.updatedAt);
     expect(Object.keys(loaded.cards).length).toBe(new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]).size);
 

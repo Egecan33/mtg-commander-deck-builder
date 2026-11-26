@@ -6,7 +6,8 @@ import { canPair } from '@/engine/rules';
 import { AXIS_MEMBER, ROLES } from '@/engine/summary';
 import type { Card, Color, Deck, Role } from '@/engine/types';
 import { poolIndex, toClientCard, toCommanderCard } from './cards';
-import { ownedSet } from './collection';
+import type { ServerCardDb } from './carddb';
+import { activeCollectionId, collectionFormat, ownedSet } from './collection';
 import { getAnalysis } from './context';
 import { heldByFor } from './holders';
 import { HttpError, intParam, isObject } from './http';
@@ -61,10 +62,12 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const f = (query.filters ?? {}) as CardFilters;
   if (f.role !== undefined && !ROLES.includes(f.role)) throw new HttpError(400, `Unknown role "${String(f.role)}".`);
 
-  const db = getCardDb();
+  // The deck's own format: an Arena deck browses the Brawl pool only.
+  const analysis = getAnalysis(deck);
+  const db = analysis.ctx.db as ServerCardDb;
   const index = poolIndex(db);
   const { cards, names, haystacks, typeLines, ranks } = index;
-  const pool = getAnalysis(deck).pool();
+  const pool = analysis.pool();
   const { scores } = pool;
 
   const byRank = (a: number, b: number) => ranks[a] - ranks[b] || (names[a] < names[b] ? -1 : names[a] > names[b] ? 1 : 0);
@@ -137,9 +140,15 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
 
-/** Eligible commanders, most popular first, filtered by name/text and colour identity. */
+/** The card data as the active collection builds: the Brawl view while an MTG Arena collection is active. */
+const activeDb = (): ServerCardDb => getCardDb(collectionFormat(activeCollectionId()));
+
+/**
+ * Eligible commanders, most popular first, filtered by name/text and colour identity. While an MTG
+ * Arena collection is active these are Brawl commanders: on Arena, planeswalkers included.
+ */
 export function browseCommanders(params: URLSearchParams): CommandersResponse {
-  const db = getCardDb();
+  const db = activeDb();
   const index = poolIndex(db);
   const owned = ownedSet();
   const pageSize = intParam(params.get('pageSize'), DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
@@ -168,7 +177,7 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
 
 /** Every card that may be the second commander next to `oracleId`, most popular first. */
 export function partnersOf(oracleId: string): PartnersResponse {
-  const db = getCardDb();
+  const db = activeDb();
   const commander = db.get(oracleId);
   if (!commander) throw new HttpError(404, 'Unknown card.');
   const owned = ownedSet();

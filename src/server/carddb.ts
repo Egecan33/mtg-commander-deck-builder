@@ -1,17 +1,19 @@
 import { createCardDb } from '@/engine/carddb';
-import type { Card, CardDb, CardFeatures, Combo } from '@/engine/types';
+import { formatCardDb } from '@/engine/format';
+import type { Card, CardDb, CardFeatures, Combo, Format } from '@/engine/types';
 import type { Db } from './db';
 
 export type ServerCardDb = CardDb & { tagSlugs(oracleId: string): string[] };
 
+interface Loaded { db: Db; value: ServerCardDb; cards: Card[]; brawl: ServerCardDb | null }
+
 // On globalThis so that separately bundled route handlers share one copy (see state.ts).
 const KEY = '__commanderForgeCardDb';
-const holder = globalThis as unknown as Record<string, { db: Db; value: ServerCardDb } | null | undefined>;
+const holder = globalThis as unknown as Record<string, Loaded | null | undefined>;
 
-/** Builds the in-memory CardDb from SQLite. Cached per database handle until `invalidateCardDb()`. */
-export function loadCardDb(db: Db): ServerCardDb {
+function load(db: Db): Loaded {
   const cache = holder[KEY];
-  if (cache && cache.db === db) return cache.value;
+  if (cache && cache.db === db) return cache;
 
   const cards = (db.prepare('SELECT json FROM cards').all() as { json: string }[]).map(
     (r) => JSON.parse(r.json) as Card,
@@ -37,8 +39,19 @@ export function loadCardDb(db: Db): ServerCardDb {
     ...createCardDb(cards, features, combos),
     tagSlugs: (oracleId) => slugs.get(oracleId) ?? [],
   };
-  holder[KEY] = { db, value };
-  return value;
+  const loaded: Loaded = { db, value, cards, brawl: null };
+  holder[KEY] = loaded;
+  return loaded;
+}
+
+/**
+ * Builds the in-memory CardDb from SQLite. Cached per database handle until `invalidateCardDb()`.
+ * `format: 'brawl'` is the Brawl view of the same data (`formatCardDb`), built once on first use.
+ */
+export function loadCardDb(db: Db, format: Format = 'commander'): ServerCardDb {
+  const loaded = load(db);
+  if (format === 'commander') return loaded.value;
+  return (loaded.brawl ??= formatCardDb(loaded.value, loaded.cards, 'brawl'));
 }
 
 export function invalidateCardDb(): void {

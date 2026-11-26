@@ -6,7 +6,9 @@ import { createScorer } from '@/engine/scoring';
 import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
 import { targetsFor } from '@/engine/targets';
 import type { BracketReport, Card, CardScore, Deck, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import type { ServerCardDb } from './carddb';
 import { cardLookup, poolIndex } from './cards';
+import { deckFormat } from './collection';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
 import { getSettings } from './settings';
@@ -21,7 +23,8 @@ export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecS
   const settings = getSettings();
   const { data, status } = peekEdhrec(deck.commanders, deck.targetBracket);
   return {
-    ctx: { db: getCardDb(), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
+    // An Arena deck is checked and built against the Brawl view of the card data.
+    ctx: { db: getCardDb(deckFormat(deck)), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
     edhrec: status,
   };
 }
@@ -93,7 +96,7 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
     },
     pool() {
       if (pool) return pool;
-      const cards: readonly Card[] = poolIndex().cards;
+      const cards: readonly Card[] = poolIndex(ctx.db as ServerCardDb).cards;
       const scores = cards.map((c) => scorer.score(c));
       const orders = new Map<string, Int32Array>();
       return (pool = {
@@ -153,5 +156,5 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
   }
   for (const reason of r.bracket.reasons) for (const id of reason.oracleIds) ids.add(id);
   for (const v of [...r.rating.violations, ...r.bracket.violationsOfTarget]) for (const id of v.oracleIds) ids.add(id);
-  return { ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
+  return { format: deckFormat(deck), ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
 }

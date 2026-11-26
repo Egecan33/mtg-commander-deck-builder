@@ -13,16 +13,25 @@
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active. 'all' runs
  *        the steps in that order, products last.
  * GET  /api/commanders?q&colors&mode&page&pageSize -> CommandersResponse
- *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
+ *        Eligible commanders, most popular first (while an MTG Arena collection is active: Brawl
+ *        commanders, the ones on Arena, planeswalkers included; /api/partners likewise). `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
  *        'within' (identity inside the chosen colours). page is 1-based, pageSize 1..200 (60).
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
- * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
- * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
+ * GET  /api/decks                       -> DecksResponse      saved decks of the ACTIVE collection, newest first.
+ * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201). It belongs to
+ *        `deck.collectionId` when that names a collection (400 when it names none), else to the active one.
  * GET  /api/decks/:id                   -> DeckResponse       404 when missing.
- * PUT  /api/decks/:id   {deck}          -> DeckResponse       replaces; 404 when missing.
+ * PUT  /api/decks/:id   {deck}          -> DeckResponse       replaces; 404 when missing. A `deck.collectionId`
+ *        other than the deck's moves it to that collection ("Move to MTG Arena"): only `collectionId` changes,
+ *        never the cards; without one the deck stays where it is.
  * DELETE /api/decks/:id                 -> { ok: true }       404 when missing.
  *        `deck.built: true` (the cards are really in this deck) is kept; any other value is dropped.
+ *        Every deck belongs to one collection (`deck.collectionId`; decks saved before that read as
+ *        'physical'). The collection's kind decides the deck's `format`: 'brawl' (MTG Arena's 100-card
+ *        Brawl: Arena cards only, Brawl legality, planeswalkers may lead) for an Arena collection, else
+ *        'commander'. Analyze, cards and build check and build a deck in its own format; a deck that was
+ *        never saved and has no `collectionId` takes the active collection's.
  * POST /api/analyze     {deck}          -> AnalyzeResponse
  *        Rating, bracket report, summary, targets, theme weights and a score for every card in
  *        the deck (commanders, companion and main). `cards` holds a ClientCard for every oracle id
@@ -39,7 +48,8 @@
  *        quantity, but not free. In a built deck (build modes 'auto' and 'fill') the need is the
  *        copies the deck has, as in `conflicts`.
  * POST /api/cards       CardsRequest    -> CardsResponse
- *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged.
+ *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged
+ *        (for a Brawl deck the pool is the cards on MTG Arena and legal in Brawl).
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
@@ -200,10 +210,11 @@
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
+  ArenaRarity, AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckRating, DeckSummary, FixChange, FixResult, Format, ImproveGoals, Role,
+  SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
-export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
+export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, Wildcards };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -211,7 +222,11 @@ export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
 export type ClientCard = Pick<
   Card,
   'oracleId' | 'name' | 'frontName' | 'manaCost' | 'cmc' | 'typeLine' | 'colorIdentity' | 'imageFaces' | 'gameChanger' | 'priceUsd'
-> & { roles: Role[]; owned: boolean };
+> & {
+  roles: Role[]; owned: boolean;
+  /** Rarity of the cheapest printing on MTG Arena (the wildcard that crafts it); null when the card is not on Arena. */
+  arenaRarity: ArenaRarity | null;
+};
 
 export type ScoredCard = ClientCard & { score: CardScore };
 export type CardLookup = Record<string, ClientCard>;
@@ -297,9 +312,16 @@ export interface DeckTile {
   floor: number; playsLike: Bracket;
   /** The cards are really assembled in this deck (see `Deck.built`). */
   built: boolean;
+  /** The collection the deck belongs to, and the format that makes it: 'brawl' for an MTG Arena collection. */
+  collectionId: string;
+  format: Format;
 }
 export interface DecksResponse { decks: DeckTile[] }
-export interface DeckResponse { deck: Deck; updatedAt: string; cards: CardLookup }
+export interface DeckResponse {
+  deck: Deck; updatedAt: string; cards: CardLookup;
+  /** The deck's format, from its collection: MTG Arena decks are Brawl decks. */
+  format: Format;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Analyze, browse, build
@@ -307,6 +329,8 @@ export interface DeckResponse { deck: Deck; updatedAt: string; cards: CardLookup
 export type EdhrecStatus = 'off' | 'loading' | 'ready' | 'none';
 
 export interface AnalyzeResponse {
+  /** The rules the deck was checked under: 'brawl' for a deck of an MTG Arena collection (Arena cards only, Brawl legality). */
+  format: Format;
   rating: DeckRating;
   bracket: BracketReport;
   summary: DeckSummary;
