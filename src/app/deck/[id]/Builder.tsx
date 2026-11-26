@@ -85,6 +85,9 @@ export function Builder({ id }: { id: string }) {
   // The last Fix deck: what it returned, the deck before it (for Undo) and the deck it applied (null: nothing changed).
   const [fixed, setFixed] = useState<{ seq: number; res: FixResponse; before: Deck; after: Deck | null } | null>(null);
   const fixSeq = useRef(0);
+  // When a Fix deck run ends, the focus goes back to its button (it was disabled while the run worked).
+  const fixButton = useRef<HTMLButtonElement>(null);
+  const refocusFix = useRef(false);
   const [freeOnlyPref, setFreeOnly] = useFreeOnly();
   const freeOnly = freeOnlyPref ?? false;
   // "!" of cards outside the deck, from where they were last seen (a browser result, a proposal).
@@ -382,15 +385,22 @@ export function Builder({ id }: { id: string }) {
     } catch (e) {
       notify.error(e);
     } finally {
+      refocusFix.current = true;
       setBusy(null);
     }
   };
+  useEffect(() => {
+    if (busy || !refocusFix.current) return;
+    refocusFix.current = false;
+    fixButton.current?.focus({ preventScroll: true });
+  }, [busy]);
   /** Puts back the deck exactly as it was before the fix; offered only while the fixed deck is unchanged. */
   const undoFix = () => {
     if (!fixed?.after || deck !== fixed.after) return;
     const before = fixed.before;
     mutate(() => before);
     setFixed(null);
+    fixButton.current?.focus({ preventScroll: true });
     notify.info('Undone. The deck is back as it was before Fix deck.');
   };
   // A new result panel scrolls into view at the top of the deck.
@@ -620,15 +630,16 @@ export function Builder({ id }: { id: string }) {
   ) : null;
   const canCommand = !!detailCard && /Legendary|can be your commander/i.test(detailCard.typeLine) && deck.commanders.length < 2 && !detailIsCommander;
   const noCommander = deck.commanders.length === 0;
-  // Fix deck's number: every fix the rating's parts list, plus every rule the deck breaks.
-  const problems = rating ? rating.subscores.reduce((n, s) => n + s.fixes.length, 0) + rating.violations.length : 0;
+  // Fix deck's number: the rating's fixes Fix deck can act on (not advice such as "Plays like Bracket 2"),
+  // plus every rule the deck breaks.
+  const problems = rating ? rating.subscores.reduce((n, s) => n + s.fixes.filter((f) => f.actionable).length, 0) + rating.violations.length : 0;
   const fixTitle = !rating
     ? 'Reading the deck'
     : noCommander
       ? 'Choose a commander first'
       : problems === 0
         ? 'Nothing to fix'
-        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} the rating lists. Uses the card options beside it; Undo puts the deck back.`;
+        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses the card options beside it; Undo puts the deck back.`;
   const fixResult = fixed ? (
     <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
       <ResultPanel
@@ -640,7 +651,10 @@ export function Builder({ id }: { id: string }) {
         heldBy={fixed.res.heldBy}
         note={[fixed.res.note, fixed.after && deck !== fixed.after ? 'The deck changed after the fix, so it can no longer be undone in one step.' : null].filter(Boolean).join(' ') || null}
         onUndo={fixed.after && deck === fixed.after ? undoFix : undefined}
-        onDismiss={() => setFixed(null)}
+        onDismiss={() => {
+          setFixed(null);
+          fixButton.current?.focus({ preventScroll: true });
+        }}
         testId="fix-panel"
       />
     </div>
@@ -749,6 +763,7 @@ export function Builder({ id }: { id: string }) {
         <div className="grid shrink-0 gap-2" data-testid="deck-actions">
           <div className="flex items-center gap-1.5">
             <button
+              ref={fixButton}
               type="button"
               className="btn btn-sm btn-primary"
               disabled={!!busy || !rating || problems === 0 || noCommander}
