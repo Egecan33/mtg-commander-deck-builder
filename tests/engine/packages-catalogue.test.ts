@@ -3,9 +3,8 @@ import { axisLabel } from '@/engine/features';
 import {
   CORE_PACKAGES, FUNCTIONAL_PACKAGES, inPackage, isPackageId, packageDef, packageMembers, tagsOf, themePackage,
 } from '@/engine/packages';
-import type { PackageId } from '@/engine/packages';
 import { bandRoles } from '@/engine/targets';
-import type { Deck } from '@/engine/types';
+import type { Deck, PackageId } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 
 const db = fixtureDb();
