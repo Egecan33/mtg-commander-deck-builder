@@ -1,4 +1,5 @@
 import { forceLink, forceManyBody, forceRadial, forceSimulation, forceZ } from 'd3-force-3d';
+import type { Force } from 'd3-force-3d';
 import { mulberry32 } from '../random';
 import type { DeckNetwork, NetworkEdge, NetworkNode } from '../types';
 
@@ -67,17 +68,29 @@ export function layoutLinks(net: LayoutSource): LayoutLink[] {
   return net.edges.map((e) => ({ source: e.a, target: e.b, weight: e.weight, kind: e.kind }));
 }
 
+/** What `configureForces` needs of a simulation: read a named force, or set one. */
+export interface ForceHost {
+  get(name: string): Force | undefined;
+  set(name: string, force: unknown): void;
+}
+
 /**
- * Sets the forces on a d3-force-3d simulation, or on 3d-force-graph's own (`set` is `sim.force` or
- * `graph.d3Force`): links pulled by edge weight, charge for repulsion, rings for staples and
- * unconnected cards, a pull toward each cluster's centre, a light flattening of z.
+ * Sets the forces on a d3-force-3d simulation, or on 3d-force-graph's own (which already has its
+ * link and charge forces: those are tuned in place): links pulled by edge weight, charge for
+ * repulsion, rings for staples and unconnected cards, a pull toward each cluster's centre, a light
+ * flattening of z.
  */
-export function configureForces(set: (name: string, force: unknown) => void, nodes: LayoutNode[], links: LayoutLink[]): void {
-  set('link', forceLink(links)
+export function configureForces(host: ForceHost, nodes: LayoutNode[], links: LayoutLink[]): void {
+  const set = host.set;
+  const link = host.get('link') ?? forceLink(links);
+  link
     .id((d) => (d as LayoutNode).id)
     .distance((l) => { const w = (l as LayoutLink).weight; return (l as LayoutLink).kind === 'commander' ? 120 : 34 * (1.6 - 0.6 * w); })
-    .strength((l) => { const k = l as LayoutLink; return k.kind === 'commander' ? 0.008 * k.weight : 0.1 + 0.4 * k.weight; }));
-  set('charge', forceManyBody().strength(-26).distanceMax(320));
+    .strength((l) => { const k = l as LayoutLink; return k.kind === 'commander' ? 0.008 * k.weight : 0.1 + 0.4 * k.weight; });
+  if (!host.get('link')) set('link', link);
+  const charge = host.get('charge') ?? forceManyBody();
+  charge.strength(-26).distanceMax(320);
+  if (!host.get('charge')) set('charge', charge);
   set('radial', forceRadial((d) => { const n = (d as LayoutNode).info; return n.unconnected ? UNCONNECTED_RING : n.staple ? STAPLE_RING : 0; }, 0, 0, 0)
     .strength((d) => { const n = (d as LayoutNode).info; return n.unconnected || n.staple ? 0.05 : 0.012; }));
   set('flatten', forceZ(0).strength(0.02));
@@ -114,7 +127,7 @@ export function settle(net: LayoutSource, seed = 1, ticks = SETTLE_TICKS): Map<s
   const links = layoutLinks(net);
   const sim = forceSimulation(nodes, 3);
   sim.stop();
-  configureForces((name, f) => sim.force(name, f), nodes, links);
+  configureForces({ get: (name) => sim.force(name) as Force | undefined, set: (name, f) => void sim.force(name, f) }, nodes, links);
   sim.tick(ticks);
   const out = new Map<string, Vec3>();
   for (const n of nodes) out.set(n.id, [n.x, n.y, n.z]);

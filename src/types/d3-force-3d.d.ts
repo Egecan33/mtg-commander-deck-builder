@@ -9,7 +9,8 @@ declare module 'd3-force-3d' {
     iterations(n: number): Force;
   }
   export interface Simulation {
-    force(name: string, force?: unknown): Simulation;
+    force(name: string): Force | undefined;
+    force(name: string, force: unknown): Simulation;
     stop(): Simulation;
     tick(iterations?: number): Simulation;
     alpha(a: number): Simulation;
