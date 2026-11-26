@@ -1,5 +1,5 @@
 import { analyzeBracket } from '../brackets';
-import { deckSizeFor } from '../format';
+import { deckSizeFor, formatOf } from '../format';
 import { rateDeck } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
@@ -205,7 +205,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     }
   }
 
-  if (g.bracketChanged && g.bracket >= 3) {
+  if (g.bracketChanged && g.bracket >= 3 && formatOf(ctx.db) !== 'standardbrawl') {
     const start = proposals.length;
     tries = 0;
     while (proposals.length < limit && proposals.length - start < FORCED_POWER && tries < FORCED_TRIES) {
@@ -380,7 +380,7 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
     const shown = Math.round(score - c.jitter - c.adjust);
     const objections: string[] = [];
     if (need && need.count >= need.band.hi) {
-      objections.push(`you already have ${need.count} ${need.label}, and ${need.band.lo}-${need.band.hi} is plenty at Bracket ${bracket}`);
+      objections.push(`you already have ${need.count} ${need.label}, and ${need.band.lo}-${need.band.hi} is plenty${formatOf(ctx.db) === 'standardbrawl' ? '' : ` at Bracket ${bracket}`}`);
     }
     if (landsOver) objections.push(`the deck already holds ${r1(summary.landsEffective)} lands where its curve wants about ${targets.lands}`);
     if (after < before - DISSENT) {

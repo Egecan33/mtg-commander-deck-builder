@@ -3,7 +3,8 @@ import { addOne, autoBuild, fillRest, fixDeck, improveDeck, suggestSwaps } from 
 import { deckSize, validateDeck } from '@/engine/rules';
 import { rateDeck } from '@/engine/rating';
 import type { BuildOptions, Deck } from '@/engine/types';
-import { card, standardBrawlFixtureDb } from '../helpers/fixture-db';
+import { makePlan } from '@/engine/builder/plan';
+import { brawlFixtureDb, card, fixtureDb, standardBrawlFixtureDb } from '../helpers/fixture-db';
 import { ctxOf, redDeck } from '../helpers/standard-brawl';
 
 const db = standardBrawlFixtureDb();
@@ -79,5 +80,26 @@ describe('Fix deck in Standard Brawl', () => {
     const r = fixDeck(ok, ctx, opts());
     expect(deckSize(r.deck)).toBe(60);
     expect(r.changes.every((c) => !/to 60/.test(c.reason))).toBe(true);
+  });
+});
+
+describe('Standard Brawl plan counts', () => {
+  const weights = { 'typal:Goblin': 1 } as Deck['themeWeights'];
+  const typal = (d: ReturnType<typeof ctxOf>) => makePlan({ ...shell(), themeWeights: weights }, d);
+
+  it('scales the 99-card plan targets to 59 cards and leaves Brawl and Commander alone', () => {
+    const std60 = typal(ctx);
+    expect(std60.tribe).toBe('Goblin');
+    expect(std60.tribeTarget).toBeLessThan(20);
+    expect(std60.tribeTarget).toBeGreaterThan(10);
+    const cmd = typal(ctxOf(fixtureDb()));
+    expect(cmd.tribeTarget).toBe(28);
+    expect(typal(ctxOf(brawlFixtureDb())).tribeTarget).toBe(28);
+  });
+
+  it('is not steered by "plays like": the build is the same whatever bracket the deck carries', () => {
+    const a = autoBuild({ ...shell(), targetBracket: 1 }, ctx, opts());
+    const b = autoBuild({ ...shell(), targetBracket: 5 }, ctx, opts());
+    expect(a.main).toEqual(b.main);
   });
 });

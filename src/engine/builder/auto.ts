@@ -1,5 +1,5 @@
 import { analyzeBracket } from '../brackets';
-import { deckSizeFor } from '../format';
+import { deckSizeFor, formatOf } from '../format';
 import { karstenSources } from '../mana';
 import { rateDeck } from '../rating';
 import { companionViolation, copyLimit, deckCounts, isBasicLand, validateDeck } from '../rules';
@@ -233,13 +233,17 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   const colors = pool.identity.filter((c) => pool.basics[c]);
   const nColors = pool.identity.length;
   const ci = Math.min(5, nColors);
+  // The land caps are for a 100-card deck; Standard Brawl plays 59 cards and about 24 lands.
+  const landShare = formatOf(ctx.db) === 'standardbrawl' ? (deckSizeFor(ctx.db) - 1) / 99 : 1;
+  const nonbasicCap = landShare === 1 ? NONBASIC_CAP[ci]! : Math.round(NONBASIC_CAP[ci]! * landShare);
+  const utilityCap = landShare === 1 ? UTILITY_CAP[ci]! : Math.max(UTILITY_CAP[ci]! > 0 ? 1 : 0, Math.round(UTILITY_CAP[ci]! * landShare));
   const used = new Set(deckCounts(deck).keys());
   const fixerIds = new Set(pool.fixers.map((c) => c.card.oracleId));
   let cands = pool.lands.filter((c) => !used.has(c.card.oracleId) && !fixerIds.has(c.card.oracleId));
   const basicCards: Card[] = nColors === 0 ? (pool.basics.C ? [pool.basics.C] : []) : colors.map((c) => pool.basics[c] as Card);
   // Every colour keeps at least a couple of basics, for the cards that fetch them.
   const reserve = basicCards.length === 0 ? 0 : nColors === 0 ? 4 : Math.min(slots, nColors >= 4 ? nColors : nColors * 2);
-  const cap = basicCards.length === 0 ? slots : Math.min(NONBASIC_CAP[ci], slots - reserve);
+  const cap = basicCards.length === 0 ? slots : Math.min(nonbasicCap, slots - reserve);
   const makes = (c: Candidate) => pool.identity.filter((col) => finite(c.f.sources[col]) >= RELIABLE_SOURCE).length;
   const anyColours = (c: Candidate) => COLORS.filter((col) => finite(c.f.sources[col]) > 0).length;
   const tapCap = finalTargets(deck, ctx, pool).taplandCap;
@@ -264,7 +268,7 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   // Fixers: lands that make two or more of the deck's colours.
   if (nColors >= 2) {
     const scorer = createScorer(deck, ctx);
-    const room = cap - Math.max(0, UTILITY_CAP[ci] - utility);
+    const room = cap - Math.max(0, utilityCap - utility);
     for (const c of pool.fixers) {
       if (picked >= room) break;
       if (used.has(c.card.oracleId)) continue;
@@ -276,7 +280,7 @@ function fillLands(start: Deck, ctx: EngineContext, pool: Pool, slots: number): 
   }
 
   // Utility lands, by score, while one is worth more than a basic.
-  while (picked < cap && utility < UTILITY_CAP[ci] && cands.length > 0) {
+  while (picked < cap && utility < utilityCap && cands.length > 0) {
     const scorer = createScorer(deck, ctx);
     let basicScore = 0;
     for (const b of basicCards) basicScore = Math.max(basicScore, scorer.score(b).score);
@@ -426,6 +430,7 @@ function repair(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>):
  */
 function tunePower(start: Deck, ctx: EngineContext, pool: Pool, keep: Set<string>): Deck {
   const { db } = ctx;
+  if (formatOf(db) === 'standardbrawl') return start; // no brackets there: "plays like" is not a target
   const target = pool.plan.bracket;
   const gapOf = (d: Deck): number => {
     const plays = analyzeBracket(d, ctx).playsLike;
@@ -575,12 +580,13 @@ function ensureWinConditions(start: Deck, ctx: EngineContext, pool: Pool, keep: 
     }
     if (!out) break;
     // Never at the price of legality or of the bracket the deck plays at.
-    const plays = analyzeBracket(deck, ctx).playsLike;
+    const std = formatOf(ctx.db) === 'standardbrawl';
+    const plays = std ? 0 : analyzeBracket(deck, ctx).playsLike;
     let next: Deck | null = null;
     for (const { c } of ins.slice(0, 4)) {
       const trial = addCard(removeCard(deck, out), c.card.oracleId);
       if (nextOffender(trial, ctx, keep)) continue;
-      if (analyzeBracket(trial, ctx).playsLike > Math.max(plays, pool.plan.bracket)) continue;
+      if (!std && analyzeBracket(trial, ctx).playsLike > Math.max(plays, pool.plan.bracket)) continue;
       next = trial;
       break;
     }
