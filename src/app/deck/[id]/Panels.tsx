@@ -170,13 +170,24 @@ export function RatingPanel({
 }) {
   const { rating, summary, targets } = analysis;
   const defaults = analysis.defaultTargets ?? targets;
-  const defaultOf = (role: Role): number => (role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0));
+  // Ramp, Card draw and Removal are the core packages: their wanted count is the package's target
+  // (at least 8), the same number the Packages tab shows and pins.
+  const corePackage = (role: Role) => (role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null);
+  const defaultOf = (role: Role): number => {
+    const id = corePackage(role);
+    if (id && defaults.packages) return defaults.packages[id].lo;
+    return role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0);
+  };
+  const wantedOf = (role: Role): number | undefined => {
+    const set = deck.roleTargets?.[role];
+    const id = corePackage(role);
+    return set !== undefined && id && targets.packages ? targets.packages[id].lo : set;
+  };
   const anyWanted = Object.keys(deck.roleTargets ?? {}).length > 0;
   const broken = brokenRules(rating, summary.cardCount);
   const curveMax = Math.max(1, ...summary.curve);
   const sources = (['W', 'U', 'B', 'R', 'G', 'C'] as const).filter((c) => (summary.sources[c] ?? 0) > 0);
   const sourceMax = Math.max(1, ...sources.map((c) => summary.sources[c]));
-  const roles = Object.entries(targets.roles) as [keyof typeof ROLE_LABEL, { lo: number; hi: number }][];
 
   return (
     <div data-testid="panel-rating">
@@ -310,32 +321,33 @@ export function RatingPanel({
         <ul className="grid gap-1.5" data-testid="wanted-counts">
           {WANTED.map(({ role, label }) => {
             const base = defaultOf(role);
-            const set = deck.roleTargets?.[role];
+            const set = wantedOf(role);
             const value = set ?? base;
+            // A core package never goes under 8 (owner's rule).
+            const least = corePackage(role) ? 8 : 0;
             return (
               <li key={role} className="flex items-center gap-1.5 text-[0.86rem]" data-testid="wanted-row" data-role={role}>
                 <span className="min-w-0 flex-1 truncate">{label}</span>
-                <button type="button" className="btn btn-sm px-2" disabled={value <= 0} onClick={() => onWanted(role, Math.max(0, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
-                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-brass' : ''}`} data-testid="wanted-value">{value}</span>
+                <button type="button" className="btn btn-sm px-2" disabled={value <= least} onClick={() => onWanted(role, Math.max(least, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
+                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-bone' : ''}`} data-testid="wanted-value">{value}</span>
                 <button type="button" className="btn btn-sm px-2" disabled={value >= 40} onClick={() => onWanted(role, value + 1)} aria-label={`Want one more: ${label}`} data-testid="wanted-more">+</button>
                 <span className="w-[4.6rem] text-right text-[0.75rem] text-smoke">default {base}</span>
-                <button type="button" className={`text-[0.75rem] text-brass hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
+                <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
               </li>
             );
           })}
         </ul>
       </Section>
 
-      <Section title="Roles against the plan for this bracket">
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]">
-          {roles.map(([role, band]) => {
-            const have = summary.roleCounts[role] ?? 0;
-            const off = have < band.lo || have > band.hi;
+      <Section title="Roles against the plan for this bracket" aside="the same counts as the Packages tab">
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]" data-testid="role-coverage">
+          {analysis.roles.map((need) => {
+            const off = need.short > 0 || need.over > 0;
             return (
-              <li key={role} className="flex items-baseline gap-1.5">
-                <span className="min-w-0 flex-1 truncate text-ash">{ROLE_LABEL[role] ?? role}</span>
-                <span className={off ? 'text-band-mid' : ''}>{have}</span>
-                <span className="w-10 text-right text-[0.75rem] text-smoke">{band.lo}&ndash;{band.hi}</span>
+              <li key={need.role} className="flex items-baseline gap-1.5" data-role={need.role}>
+                <span className="min-w-0 flex-1 truncate text-ash">{need.label[0].toUpperCase() + need.label.slice(1)}</span>
+                <span className={off ? 'text-band-mid' : ''}>{need.count}</span>
+                <span className="w-10 text-right text-[0.75rem] text-smoke">{need.band.lo === need.band.hi ? need.band.lo : <>{need.band.lo}&ndash;{need.band.hi}</>}</span>
               </li>
             );
           })}

@@ -186,6 +186,19 @@ describe('POST /api/analyze', () => {
     expect(a.themeFocus.weights).toEqual(a.themeWeights);
   });
 
+  // Review C3: the Rating tab's role list, the rating's fixes and the Packages tab show one set of numbers.
+  it('returns the role coverage the Packages tab shows for the core four', async () => {
+    const deck = await imported('upgraded', 3);
+    const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });
+    for (const [id, key] of [['ramp', 'ramp'], ['draw', 'draw'], ['removal', 'spot-removal'], ['protection', 'protection']] as const) {
+      const p = a.packages.packages.find((x) => x.id === id)!;
+      const r = a.roles.find((x) => x.role === key)!;
+      expect(r.count, id).toBe(p.count);
+      expect(r.band.lo, id).toBe(p.target);
+    }
+    expect(a.roles.some((x) => x.role === 'counterspell')).toBe(false);
+  });
+
   it('rates the precon and scores every card in it', async () => {
     const deck = await imported('precon');
     const a = await call<AnalyzeResponse>('POST', '/api/analyze', { deck });

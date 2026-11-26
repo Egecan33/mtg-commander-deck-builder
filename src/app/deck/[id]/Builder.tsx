@@ -1165,6 +1165,9 @@ export function Builder({ id }: { id: string }) {
                 onOpen={openCard}
                 onAddOne={(role) => void addOne(role)}
                 onWanted={(role, n) => mutate((d) => {
+                  // Ramp, Card draw and Removal are core packages: pinned exactly as the Packages tab pins them.
+                  const core = role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null;
+                  if (core) return pinPackage(d, analysis.packages, analysis.targets, core, n);
                   const next = { ...(d.roleTargets ?? {}) };
                   if (n === null) delete next[role];
                   else next[role] = n;

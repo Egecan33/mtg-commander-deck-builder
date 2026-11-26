@@ -6,7 +6,8 @@ import { packagePlan, withCohesion } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { focusThemeWeights, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
-import { targetsFor } from '@/engine/targets';
+import { roleNeeds, targetsFor } from '@/engine/targets';
+import type { RoleNeed } from '@/engine/targets';
 import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, PackagePlan, DeckSummary, EngineContext, Targets } from '@/engine/types';
 import { cardLookup, poolIndex } from './cards';
 import { peekEdhrec } from './edhrec';
@@ -49,6 +50,8 @@ export interface Report {
   themeFocus: { axes: string[]; focused: boolean; weights: Record<string, number> };
   /** The deck's own plan: core packages, focused themes, pins, lands and offers, with cohesion. */
   packages: PackagePlan;
+  /** Role coverage of the finished deck (`roleNeeds`): the numbers the rating, the scorer and the Packages tab share. */
+  roles: RoleNeed[];
   deckScores: Record<string, CardScore>;
   unknown: string[];
 }
@@ -94,12 +97,14 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         if (card) deckScores[id] = scorer.score(card);
         else if (!unknown.includes(id)) unknown.push(id);
       }
+      const targets = targetsFor(deck, ctx, summary);
       return (report = {
         rating: rateDeck(deck, ctx),
         bracket: analyzeBracket(deck, ctx),
         summary,
-        targets: targetsFor(deck, ctx, summary),
-        defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
+        targets,
+        roles: roleNeeds(deck, ctx, { summary, targets }),
+        defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targets,
         themeWeights,
         themeFocus: { ...themeFocus(themeWeights), weights: focusThemeWeights(themeWeights) },
         packages: withCohesion(packagePlan(deck, ctx, summary), getNetwork()),

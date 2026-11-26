@@ -33,12 +33,16 @@
  *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
  *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
  *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
- *        `themeFocus`: the axes the deck is focused on (the two strongest themes and the creature type
- *        they name), whether it already is, and the weights **Focus on these two** saves (every other
- *        theme at a quarter). A commander's or inferred theme is already focused; a deck's own weights are never changed.
+ *        `themeFocus`: the axes the deck is focused on (the two strongest themes, every theme at 75% of the
+ *        second or at 0.6 and up, and the creature type they name), whether it already is, and the weights the
+ *        **Focus** button saves (every other theme at a quarter). A commander's or inferred theme is already
+ *        focused; a deck's own weights are never changed. Role bands and the land target read the weights before
+ *        the focus. `roles`: the role coverage of the finished deck (see `AnalyzeResponse.roles`), the same numbers
+ *        the rating's fixes and the Packages tab show.
  *        `packages`: the deck's own plan. The four core packages (Ramp, Card draw, Removal, Protection) always come
  *        first; their targets are the role bands' bottoms (Removal: spot removal + counterspells + the 1-2 board-wipe
- *        slot), at least 8 each, each move with its reason. Then the focused theme packages that get at least 8 of the
+ *        slot), at least 8 each, each move with its reason; the rating holds the deck to these same targets
+ *        (`targets.packages`). Then the focused theme packages that get at least 8 of the
  *        slots left after lands and the core packages, then packages the user pinned (`deck.packageTargets`, 8-40). A
  *        card counts in every package it belongs to (role or Scryfall tagger tag; lands in none). `lands`: the land
  *        target from the deck's curve, cheap ramp, cantrips, landfall and commander (28-40; the bracket default while
@@ -51,8 +55,9 @@
  *        missing cards for this deck (its target from `packages`, or 8 for a package not planned yet), cards that
  *        also serve another planned package first, board wipes only up to the 1-2 slot and one-sided wipes first.
  *        Under 100 cards they are plain adds; at 100 each add cuts the weakest unlocked card that is in none of the
- *        deck's packages (never a commander, never lands below the land target). The card options, free copies,
- *        price and locked cards hold. `note` says what could not be added and why.
+ *        deck's packages and is no win condition, graveyard hate, recursion or tutor (never a commander, never lands
+ *        below the land target). The card options, free copies, price and locked cards hold. `note` says what could
+ *        not be added and why, when the rating falls (and which part lost most), and when the deck breaks a rule.
  * GET  /api/packages?colors=UB[&freeOnly=1] -> PackagesResponse
  *        Your best packages from the ACTIVE collection for those colours: owned, legal, nonland cards whose
  *        colour identity fits inside the chosen colours ('C' alone = colourless). The four core packages always
@@ -244,11 +249,12 @@
  */
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
+import type { RoleNeed } from '@/engine/targets';
 import type {
   AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackageId, PackageKind, PackagePlan, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
-export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
+export type { ConflictReport, FixChange, ImproveGoals, RatingKey, RoleNeed };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -375,10 +381,17 @@ export interface AnalyzeResponse {
   /** `targets` as they would be without the deck's own wanted counts (`deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<AxisId, number>;
-  /** The axes the deck is focused on, whether it already is, and the weights the Focus on these two button saves. */
+  /** The axes the deck is focused on, whether it already is, and the weights the Focus button saves. */
   themeFocus: { axes: AxisId[]; focused: boolean; weights: Record<AxisId, number> };
   /** The deck's own plan (see the header): core packages, focused themes, pins, lands, offers. */
   packages: PackagePlan;
+  /**
+   * Role coverage of the finished deck: one entry per band, the four core packages counted by
+   * membership (role or tag) against their package targets (`spot-removal` is the Removal package,
+   * `wipe` the board-wipe slot), the rest by role. The rating, the scorer and the Packages tab use
+   * these same numbers.
+   */
+  roles: RoleNeed[];
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
   /** Deck oracle ids the database does not know. */
