@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { LOOSE_SHARE, looseText, packageDef } from '@/engine/packages';
 import { PACKAGE_MIN, PACKAGE_PIN_MAX } from '@/engine/targets';
 import type { Deck, PackageId, PackageOffer, PlannedPackage } from '@/engine/types';
@@ -109,6 +109,15 @@ function PackageRow({
   onShow: (id: PackageId) => void;
 }) {
   const done = p.count >= p.target;
+  // The stepper shows its own clicks at once; the plan catches up after the deck is read again.
+  const [local, setLocal] = useState<number | null>(null);
+  useEffect(() => setLocal(null), [p.target, p.pinned]);
+  const size = local ?? p.target;
+  const step = (n: number) => {
+    const next = Math.min(PACKAGE_PIN_MAX, Math.max(PACKAGE_MIN, n));
+    setLocal(next);
+    onPin(p.id, next);
+  };
   const loose = p.cohesion && p.cohesion.of >= 4 && p.cohesion.linked / p.cohesion.of < LOOSE_SHARE ? p.cohesion : null;
   return (
     <section
@@ -145,10 +154,10 @@ function PackageRow({
           Show cards
         </button>
         <span className="ml-auto flex items-center gap-1.5 text-[0.86rem]" role="group" aria-label={`${p.name} size`}>
-          <button type="button" className="btn btn-sm px-2" disabled={p.target <= PACKAGE_MIN} onClick={() => onPin(p.id, p.target - 1)} aria-label={`Want one fewer: ${p.name}`} data-testid="package-pin-less">&minus;</button>
-          <span className={`w-6 text-center tabular-nums ${p.pinned ? 'font-semibold text-brass' : ''}`} data-testid="package-pin-value">{p.target}</span>
-          <button type="button" className="btn btn-sm px-2" disabled={p.target >= PACKAGE_PIN_MAX} onClick={() => onPin(p.id, p.target + 1)} aria-label={`Want one more: ${p.name}`} data-testid="package-pin-more">+</button>
-          <button type="button" className={`text-[0.75rem] text-brass hover:underline ${p.pinned ? '' : 'invisible'}`} onClick={() => onPin(p.id, null)} data-testid="package-pin-reset">Reset</button>
+          <button type="button" className="btn btn-sm px-2" disabled={size <= PACKAGE_MIN} onClick={() => step(size - 1)} aria-label={`Want one fewer: ${p.name}`} data-testid="package-pin-less">&minus;</button>
+          <span className={`w-6 text-center tabular-nums ${p.pinned || local !== null ? 'font-semibold text-brass' : ''}`} data-testid="package-pin-value">{size}</span>
+          <button type="button" className="btn btn-sm px-2" disabled={size >= PACKAGE_PIN_MAX} onClick={() => step(size + 1)} aria-label={`Want one more: ${p.name}`} data-testid="package-pin-more">+</button>
+          <button type="button" className={`text-[0.75rem] text-brass hover:underline ${p.pinned || local !== null ? '' : 'invisible'}`} onClick={() => { setLocal(null); onPin(p.id, null); }} data-testid="package-pin-reset">Reset</button>
         </span>
       </div>
     </section>

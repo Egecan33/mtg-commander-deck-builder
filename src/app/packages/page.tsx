@@ -130,9 +130,9 @@ export default function PackagesPage() {
               {p.kind === 'core' && p.total < HAND && (
                 <EmptyState className="mb-2" message={`Your collection has only ${p.total} ${p.name.toLowerCase()} ${p.total === 1 ? 'card' : 'cards'} in ${words}.`} />
               )}
-              <div className="grid grid-cols-[minmax(0,1fr)_17rem] items-end gap-6">
-                <PackageHand cards={p.cards} heldBy={data?.heldBy} onOpen={setDetail} />
-                <div className="pb-8"><OddsBar hits={shown} label={`${shown} of ${p.name}`} testId="package-odds" /></div>
+              <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+                <div className="min-w-0 shrink-0"><PackageHand cards={p.cards} heldBy={data?.heldBy} onOpen={setDetail} /></div>
+                <div className="w-[17rem] shrink-0 pb-8"><OddsBar hits={shown} label={`${shown} of ${p.name}`} testId="package-odds" /></div>
               </div>
             </Section>
           );
