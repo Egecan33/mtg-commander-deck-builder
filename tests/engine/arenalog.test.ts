@@ -49,6 +49,35 @@ describe('parseArenaLog', () => {
     expect(silent.cards.size).toBe(0);
   });
 
+  describe('wildcards', () => {
+    // Shapes copied from a real Player.log (other inventory keys trimmed).
+    const full = '{ "InventoryInfo": { "SeqId": 36, "Gems": 100, "TotalVaultProgress": 2, "WcTrackPosition": 1, "WildCardCommons": 12, "WildCardUnCommons": 12, "WildCardRares": 1, "WildCardMythics": 3, "CustomTokens": { "Token_JumpIn": 5 } } }';
+    const noMythic = '{"Course":{"CourseId":"c0b6","InternalEventName":"X"},"InventoryInfo":{"SeqId":23,"Changes":[],"Gems":100,"TotalVaultProgress":2,"wcTrackPosition":1,"WildCardCommons":12,"WildCardUnCommons":13,"WildCardRares":1,"Boosters":[]}}';
+
+    it('reads the four wildcard counts from InventoryInfo', () => {
+      expect(parseArenaLog(full).wildcards).toEqual({ common: 12, uncommon: 12, rare: 1, mythic: 3 });
+    });
+
+    it('counts a missing key as 0 (no mythic key while the player has none)', () => {
+      expect(parseArenaLog(noMythic).wildcards).toEqual({ common: 12, uncommon: 13, rare: 1, mythic: 0 });
+    });
+
+    it('keeps the last InventoryInfo of the log', () => {
+      expect(parseArenaLog([full, 'other line', noMythic].join('\n')).wildcards).toEqual({ common: 12, uncommon: 13, rare: 1, mythic: 0 });
+      expect(parseArenaLog([noMythic, full].join('\n')).wildcards?.mythic).toBe(3);
+    });
+
+    it('ignores an InventoryInfo that is not a full inventory, and is null without one', () => {
+      expect(parseArenaLog([full, '{"InventoryInfo":{"SeqId":40,"Changes":[{"Source":"X"}]}}'].join('\n')).wildcards?.mythic).toBe(3);
+      expect(parseArenaLog('{"InventoryInfo":{"SeqId":40}}').wildcards).toBeNull();
+      expect(parseArenaLog('DETAILED LOGS: ENABLED\nno inventory here').wildcards).toBeNull();
+    });
+
+    it('finds the inventory in the fixture log, beside its decks', () => {
+      expect(parseArenaLog(LOG).wildcards).toEqual({ common: 4, uncommon: 3, rare: 1, mythic: 0 });
+    });
+  });
+
   it('ignores card ids and quantities that are not positive whole numbers', () => {
     const text = '{"Decks":{"d":{"MainDeck":[{"cardId":0,"quantity":1},{"cardId":5,"quantity":-2},{"cardId":"x","quantity":1},{"cardId":7,"quantity":1.5},{"cardId":9,"quantity":1}]}},"CardPool":[0,-3,"abc",11]}';
     expect(sorted(parseArenaLog(text).cards)).toEqual([[9, 1], [11, 1]]);

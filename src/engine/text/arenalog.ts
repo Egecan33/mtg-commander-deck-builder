@@ -12,6 +12,8 @@
  * Those are told apart by their name, which is a localisation key ("?=?Loc/Decks/Precon/...")
  * instead of text, and are left out.
  */
+import type { Wildcards } from '../types';
+
 export interface ArenaLogData {
   /** Arena's detailed-logging switch as the log states it; null when the log does not say. */
   detailedLogs: boolean | null;
@@ -20,6 +22,11 @@ export interface ArenaLogData {
   /** Different deck lists and non-empty limited pools found. */
   decks: number;
   pools: number;
+  /**
+   * The player's wildcards from the last full `InventoryInfo` the log holds (a missing key is 0:
+   * Arena leaves out a rarity the player has none of); null when the log has none.
+   */
+  wildcards: Wildcards | null;
 }
 
 export interface ArenaLogReader {
@@ -47,8 +54,26 @@ const wholeId = (v: unknown): number | null => {
   return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
 };
 
+const WILDCARD_KEYS: readonly (readonly [keyof Wildcards, string])[] = [
+  ['common', 'WildCardCommons'], ['uncommon', 'WildCardUnCommons'], ['rare', 'WildCardRares'], ['mythic', 'WildCardMythics'],
+];
+
+/**
+ * The wildcards of an `InventoryInfo` object. Only a full inventory counts: one with `Gems` or any
+ * wildcard key (a change notice without them would otherwise read as no wildcards at all).
+ */
+function wildcardsOf(inventory: unknown): Wildcards | null {
+  if (!isObj(inventory)) return null;
+  if (!('Gems' in inventory) && !WILDCARD_KEYS.some(([, key]) => key in inventory)) return null;
+  const count = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : 0);
+  const out = { common: 0, uncommon: 0, rare: 0, mythic: 0 };
+  for (const [rarity, key] of WILDCARD_KEYS) out[rarity] = count(inventory[key]);
+  return out;
+}
+
 export function createArenaLogReader(): ArenaLogReader {
   let detailedLogs: boolean | null = null;
+  let wildcards: Wildcards | null = null;
   const cards = new Map<number, number>();
   const deckSeen = new Set<string>();
   const poolSeen = new Set<string>();
@@ -80,7 +105,9 @@ export function createArenaLogReader(): ArenaLogReader {
     }
     if (typeof value !== 'object' || value === null) return;
     const obj = value as Record<string, unknown>;
-    const skip = new Set<string>();
+    const skip = new Set<string>(['InventoryInfo']);
+    const inventory = wildcardsOf(obj.InventoryInfo);
+    if (inventory) wildcards = inventory;
 
     // A deck with its summary beside it: skip the deck when the summary says it is ready-made.
     for (const [summaryKey, deckKey] of SUMMARY_PAIRS) {
@@ -140,15 +167,15 @@ export function createArenaLogReader(): ArenaLogReader {
       }
       const at = text.indexOf('{');
       if (at < 0) return;
-      // Cheap filter: only lines that can hold a deck or a pool are worth parsing.
-      if (!text.includes('MainDeck') && !text.includes('CardPool') && !text.includes('PickedCards')) return;
+      // Cheap filter: only lines that can hold a deck, a pool or the inventory are worth parsing.
+      if (!text.includes('MainDeck') && !text.includes('CardPool') && !text.includes('PickedCards') && !text.includes('"InventoryInfo"')) return;
       try {
         walk(JSON.parse(text.slice(at)), 0);
       } catch {
         // a cut-off or non-JSON line
       }
     },
-    result: () => ({ detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size }),
+    result: () => ({ detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size, wildcards: wildcards ? { ...wildcards } : null }),
   };
 }
 
