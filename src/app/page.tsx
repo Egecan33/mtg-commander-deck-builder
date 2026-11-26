@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { DeckTileView } from './components/DeckTileView';
 import { ImportDialog } from './components/ImportDialog';
-import { useNotify, useStatus } from './components/Shell';
+import { useCollections, useNotify, useStatus } from './components/Shell';
 import { createDeck, deleteDeck, getDeck, listDecks, type DeckTile } from './lib/api';
 import { fmtDate } from './lib/ui';
 
@@ -13,6 +13,9 @@ export default function DecksPage() {
   const router = useRouter();
   const notify = useNotify();
   const { status } = useStatus();
+  // The list shows the active collection's decks (each deck belongs to one collection).
+  const { active, collections } = useCollections();
+  const other = collections.find((c) => c.id !== active?.id) ?? null;
   const [decks, setDecks] = useState<DeckTile[] | null>(null);
   const [importing, setImporting] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -57,9 +60,11 @@ export default function DecksPage() {
     <div className="mx-auto max-w-[1500px] px-8 py-7">
       <div className="flex items-end gap-3">
         <div>
-          <h1 className="text-[2rem] leading-none">Your decks</h1>
+          <h1 className="text-[2rem] leading-none" data-testid="decks-heading">{active ? `Your ${active.name} decks` : 'Your decks'}</h1>
           <p className="mt-2 text-ash">
             {decks === null ? 'Loading decks' : decks.length === 0 ? 'Nothing here yet.' : `${decks.length} saved ${decks.length === 1 ? 'deck' : 'decks'}, newest first.`}
+            {active?.kind === 'arena' ? ' Built for MTG Arena Brawl, from cards on Arena. ' : ' '}
+            {other && <span className="text-smoke">Your {other.name} decks show when you switch the collection in the top bar.</span>}
           </p>
         </div>
         <div className="ml-auto flex gap-2">
@@ -79,7 +84,7 @@ export default function DecksPage() {
         <div className="mt-10 grid max-w-[46rem] gap-4 rounded-lg border border-slag bg-anvil p-8">
           <h2 className="text-[1.35rem]">Start with a commander, or bring a deck you already play</h2>
           <p className="text-ash">
-            Pick a commander and a bracket and Commander Forge builds a legal 100-card deck you can then change card by card. Or paste a list you already
+            Pick a commander and Commander Forge builds a legal deck (100 cards, or 60 in Standard Brawl) you can then change card by card. Or paste a list you already
             have: it is rated, and you get an ordered set of swaps that make it better.
           </p>
           <div className="flex gap-2">

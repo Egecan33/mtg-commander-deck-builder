@@ -12,8 +12,9 @@
  * POST /api/sync        {step}          -> SyncState   step: 'cards'|'printings'|'tags'|'combos'|'features'|'images'|'products'|'all';
  *        starts `pnpm sync <step>` as a child process. 409 while another run is active. 'all' runs
  *        the steps in that order, products last.
- * GET  /api/commanders?q&colors&mode&page&pageSize&axis&owned&sort&bracket&free -> CommandersResponse
- *        Eligible commanders, most popular first. `colors` is letters from WUBRGC ("WU", "C" =
+ * GET  /api/commanders?q&colors&mode&page&pageSize&axis&owned&sort&bracket&free&arenaFormat -> CommandersResponse
+ *        Eligible commanders, most popular first (while an MTG Arena collection is active: Brawl
+ *        commanders, the ones on Arena, planeswalkers included; /api/partners likewise). `colors` is letters from WUBRGC ("WU", "C" =
  *        colourless). mode: 'includes' (default, identity has every chosen colour), 'exact',
  *        'within' (identity inside the chosen colours). page is 1-based, pageSize 1..200 (60).
  *        `axis` keeps the commanders that lead that theme (`CommanderTile.lead`), `owned=1` only commanders in the
@@ -56,12 +57,20 @@
  *        containing the card's), the up-to-12 whose own deck scores it highest at `bracket`. Cached EDHREC data
  *        only, never a request. A banned card gets none and `note` says why. 404 unknown card, 400 bad bracket.
  * GET  /api/partners?id=<oracleId>      -> PartnersResponse   legal second commanders. 404 unknown id.
- * GET  /api/decks                       -> DecksResponse      saved decks, newest first.
- * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201).
+ * GET  /api/decks                       -> DecksResponse      saved decks of the ACTIVE collection, newest first.
+ * POST /api/decks       {deck}          -> DeckResponse       saves as a new deck (new id; 201). It belongs to
+ *        `deck.collectionId` when that names a collection (400 when it names none), else to the active one.
  * GET  /api/decks/:id                   -> DeckResponse       404 when missing.
- * PUT  /api/decks/:id   {deck}          -> DeckResponse       replaces; 404 when missing.
+ * PUT  /api/decks/:id   {deck, move?}   -> DeckResponse       replaces; 404 when missing. The deck keeps its
+ *        stored collection whatever `deck.collectionId` says; `move: ID` ("Move to MTG Arena") moves it to that
+ *        collection (400 when there is none): only `collectionId` changes, never the cards.
  * DELETE /api/decks/:id                 -> { ok: true }       404 when missing.
  *        `deck.built: true` (the cards are really in this deck) is kept; any other value is dropped.
+ *        Every deck belongs to one collection (`deck.collectionId`; decks saved before that read as
+ *        'physical'). The collection's kind decides the deck's `format`: 'brawl' (MTG Arena's 100-card
+ *        Brawl: Arena cards only, Brawl legality, planeswalkers may lead) for an Arena collection, else
+ *        'commander'. Analyze, cards and build check and build a deck in its own format; a deck that was
+ *        never saved and has no `collectionId` takes the active collection's.
  * POST /api/analyze     {deck}          -> AnalyzeResponse
  *        Rating, bracket report, summary, targets, theme weights and a score for every card in
  *        the deck (commanders, companion and main). `cards` holds a ClientCard for every oracle id
@@ -72,9 +81,46 @@
  *        lands never conflict. `boxMatch`: the newest box of the active collection that is not
  *        linked to a deck (or whose deck is gone), still holds sealed copies, has a commander slot
  *        that is a commander of this deck, and whose non-basic cards are at least 80% in the deck.
- *        `themeFocus`: the axes the deck is focused on (the two strongest themes and the creature type
- *        they name), whether it already is, and the weights **Focus on these two** saves (every other
- *        theme at a quarter). A commander's or inferred theme is already focused; a deck's own weights are never changed.
+ *        `themeFocus`: the axes the deck is focused on (the two strongest themes, every theme at 75% of the
+ *        second or at 0.6 and up, and the creature type they name), whether it already is, and the weights the
+ *        **Focus** button saves (every other theme at a quarter). A commander's or inferred theme is already
+ *        focused; a deck's own weights are never changed. Role bands and the land target read the weights before
+ *        the focus. `roles`: the role coverage of the finished deck (see `AnalyzeResponse.roles`), the same numbers
+ *        the rating's fixes and the Packages tab show.
+ *        `packages`: the deck's own plan. The four core packages (Ramp, Card draw, Removal, Protection) always come
+ *        first; their targets are the role bands' bottoms (Removal: spot removal + counterspells + the 1-2 board-wipe
+ *        slot), at least 8 each, each move with its reason; the rating holds the deck to these same targets
+ *        (`targets.packages`). Then the focused theme packages that get at least 8 of the
+ *        slots left after lands and the core packages, then packages the user pinned (`deck.packageTargets`, 8-40). A
+ *        card counts in every package it belongs to (role or Scryfall tagger tag; lands in none). `lands`: the land
+ *        target from the deck's curve, cheap ramp, cantrips, landfall and commander (28-40; the bracket default while
+ *        the deck has no spells; `roleTargets.land` wins). `offers`: packages to add, the ones the commander points
+ *        at first. `cohesion` (theme and functional packages): members linked to another member in the deck network.
+ *        Under PUT /api/decks/:id: `deck.packageTargets` (`theme:<axis>` or `fn:<id>` -> 8-40) is kept; core package
+ *        sizes are pinned through `roleTargets`.
+ *        A Standard Brawl deck (60 cards): every 8 above is 5 (`packages.packageMin`, 8 x 59/99), the board-wipe slot
+ *        is 0-1, the land target is its own (22 + 0.8 x average mana value, 22-26), and the theme packages share the
+ *        slots of 59 cards; EDHREC stays off. Brawl (100 cards) reads exactly as Commander.
+ *        'package' (Complete package) takes `options.package` ('ramp' | 'draw' | 'removal' | 'protection' |
+ *        'theme:<axis>' | 'fn:<id>'; anything else is a 400) and answers like 'fix': it adds the package's best
+ *        missing cards for this deck (its target from `packages`, or 8 for a package not planned yet), cards that
+ *        also serve another planned package first, board wipes only up to the 1-2 slot and one-sided wipes first.
+ *        Under 100 cards they are plain adds; at 100 each add cuts the weakest unlocked card that is in none of the
+ *        deck's packages and is no win condition, graveyard hate, recursion or tutor (never a commander, never lands
+ *        below the land target); in Standard Brawl the size is 60. The card options, free copies, price and locked cards
+ *        hold; on a Brawl deck "owned" is its own collection and "Only what I can craft" holds across every card added
+ *        (one wildcard spent per unowned card). `note` says what could
+ *        not be added and why, when the rating falls (and which part lost most), and when the deck breaks a rule.
+ * GET  /api/packages?colors=UB[&freeOnly=1][&arenaFormat=standardbrawl] -> PackagesResponse
+ *        While an MTG Arena collection is active the cards are its format's (Brawl, or Standard Brawl with
+ *        `arenaFormat`), and in Standard Brawl every 8 below is 5 (`packageMin`, 8 x 59/99).
+ *        Your best packages from the ACTIVE collection for those colours: owned, legal, nonland cards whose
+ *        colour identity fits inside the chosen colours ('C' alone = colourless). The four core packages always
+ *        (even empty), then up to four theme packages (the axes with the most well-played owned cards, at least
+ *        8), then functional packages (Win the game, Pillow fort, Max hand size) that have at least 8 cards.
+ *        `total`: owned cards in the package; `cards`: the best 8, by the scorer's deck-free quality (theme
+ *        packages: quality x how strongly the card serves the theme). With `freeOnly=1`, copies held by boxes
+ *        and built decks come after free ones; `heldBy` names the holders either way. No colours is a 400.
  * POST /api/network     {deck}          -> NetworkResponse
  *        How the deck's cards work together. `nodes`: every nonland card and the commanders (lands are
  *        left out). `edges`: { a, b, kind, weight 0..1, reasons [from a, from b] }, kind 'combo' (1, or 0.5
@@ -91,15 +137,21 @@
  *        quantity, but not free. In a built deck (build modes 'auto' and 'fill') the need is the
  *        copies the deck has, as in `conflicts`.
  * POST /api/cards       CardsRequest    -> CardsResponse
- *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged.
+ *        The card browser: the whole legal pool scored for this deck, filtered, sorted and paged
+ *        (for a Brawl deck the pool is the cards on MTG Arena and legal in Brawl).
  *        Default sort is score, highest first; gated cards (score 0 with `score.gate` set) always
  *        come last. With `q` set, cards whose name matches come before cards that match only in
  *        type or text. page is 1-based, pageSize 1..200 (default 60). `heldBy` covers this page.
+ *        `filters.package`: only cards of that package (role or Scryfall tagger tag, as in `packages`; lands in none),
+ *        read at the deck's bracket (Standard Brawl: the middle one), from the deck's own format pool. Every card then
+ *        carries `also`: the names of the deck's other planned packages it is in, and with sort score descending the
+ *        cards come in dual-purpose order (score plus a bonus per other package, gated cards last). For a Brawl deck
+ *        `filters.owned` reads the deck's own collection, as a build does.
  * POST /api/build       BuildRequest    -> BuildResponse
  *        mode 'auto' | 'fill' -> { deck, cards, heldBy }; mode 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' -> { proposals, cards, heldBy };
  *        mode 'fix' -> FixResponse { deck, changes, ratingBefore, ratingAfter, note, heldBy, cards }.
- *        'fix' (Fix deck) makes the deck legal and 100 cards (cards that break a rule are replaced by the best
- *        swap the engine agrees with, or removed; over 100 the weakest unlocked cards go; under 100 it is
+ *        'fix' (Fix deck) makes the deck legal and full (100 cards, 60 in Standard Brawl) (cards that break a rule are replaced by the best
+ *        swap the engine agrees with, or removed; over the size the weakest unlocked cards go; under it it is
  *        filled), then (full fix only) brings a deck that breaks its own target bracket's rules (Game
  *        Changers at Bracket 2 and the like) inside it with the same routine as `only: 'bracket'`, and
  *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
@@ -107,7 +159,7 @@
  *        highest rating is kept, when that is above the rating the steps before it left, else none of it).
  *        Every change is in `changes` ({ out, in, reason, summary }; `out` '' for an add, `in` '' for a cut;
  *        `summary` one short line such as "Ramp 6 → 7 of 10–13", `reason` the full sentence).
- *        Making the deck legal and 100 cards always stands, even when it costs rating points (a deck that
+ *        Making the deck legal and full always stands, even when it costs rating points (a deck that
  *        breaks a rule is capped at 40 and cannot be played; `note` then says what it cost), so
  *        `ratingAfter` can be below `ratingBefore` only for that reason; the improve part never ends below
  *        the rating the steps before it left. `note` also explains an empty result (what
@@ -124,7 +176,7 @@
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
  *        'swapin' takes `options.in` (a card not in the deck, or a basic land already in it for one more copy;
  *        400 without it), `count` 1-10, and returns the deck cards it could replace, best rating after
- *        first; a deck under 100 cards gets the plain add (`out` '') first. It returns [] for an illegal
+ *        first; a deck under its size gets the plain add (`out` '') first. It returns [] for an illegal
  *        or gated card, a card the options rule out, or a non-basic card already in the deck.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
@@ -138,7 +190,7 @@
  *        'add' takes `options.role` ('land' or a role with a band: ramp, draw, spot-removal,
  *        counterspell, wipe, protection, recursion, tutor, win-condition, graveyard-hate) and returns
  *        up to `count` (default 5, max 10) ways to add one such card: `in` with the card to cut as
- *        `out`, or `out: ''` (a plain add) while the deck is under 100 cards.
+ *        `out`, or `out: ''` (a plain add) while the deck is under its size.
  *        The engine dissents instead of refusing: a proposal it thinks is not an improvement still
  *        comes back, with `agrees: false` and an `objection` in plain words. Illegal cards are never
  *        proposed.
@@ -200,6 +252,13 @@
  *        `{memory: true}` reads that full list out of the running game with the optional mtga-reader
  *        package (see the README); on macOS the system asks for an administrator password unless a
  *        debugger-entitled copy of Node sits beside the reader.
+ *        Every sync also reads the wildcards from the log's last inventory (`ArenaStatus.wildcards`).
+ * GET  /api/arena/wildcards             -> WildcardsInfo   the MTG Arena collection's wildcards (all 0 until read or typed in).
+ * PUT  /api/arena/wildcards {common, uncommon, rare, mythic} -> WildcardsInfo   typed in by hand; each a
+ *        whole number 0..9999, else 400. `source` becomes 'hand'.
+ * POST /api/arena/wildcards             -> WildcardsReadResponse   "Read from Arena": the last `InventoryInfo` in
+ *        Player.log (Player-prev.log before it); a rarity Arena leaves out is 0. When the log has none,
+ *        `ok` is false, `message` says why and the stored counts stay. Local files only.
  * GET  /api/products?q=&limit=          -> ProductsResponse
  *        Physical precon products (digital MTGO/Arena types are hidden), newest release first. `q` is a
  *        case-insensitive name substring or an exact set code; limit 1..200 (50).
@@ -255,11 +314,16 @@
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
 import type { Budget } from './budget';
+import type { RoleNeed } from '@/engine/targets';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, DeckSummary, FoundCombo, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
+  ArenaRarity, AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackageId, PackageKind, PackagePlan, DeckSummary,
+  FixChange, FixResult, Format, FoundCombo, ImproveGoals, Role, SwapProposal, Targets, Wildcards,
 } from '@/engine/types';
 
-export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
+/** The two MTG Arena formats a deck of an Arena collection can be in (`Deck.arenaFormat`; missing is 'brawl'). */
+export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
+
+export type { ArenaRarity, ConflictReport, FixChange, Format, ImproveGoals, RatingKey, RoleNeed, Wildcards };
 
 // ---------------------------------------------------------------------------------------------
 // Shared shapes
@@ -267,9 +331,19 @@ export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
 export type ClientCard = Pick<
   Card,
   'oracleId' | 'name' | 'frontName' | 'manaCost' | 'cmc' | 'typeLine' | 'colorIdentity' | 'imageFaces' | 'gameChanger' | 'priceUsd'
-> & { roles: Role[]; owned: boolean; /** A commander page slug that differs from its plain name slug (two commanders share the name). */ slug?: string };
+> & {
+  roles: Role[]; owned: boolean;
+  /** A commander page slug that differs from its plain name slug (two commanders share the name). */
+  slug?: string;
+  /** Rarity of the cheapest printing on MTG Arena (the wildcard that crafts it); null when the card is not on Arena. */
+  arenaRarity: ArenaRarity | null;
+};
 
-export type ScoredCard = ClientCard & { score: CardScore };
+export type ScoredCard = ClientCard & {
+  score: CardScore;
+  /** Only with `filters.package`: the names of the deck's other planned packages this card is also in. */
+  also?: string[];
+};
 export type CardLookup = Record<string, ClientCard>;
 /**
  * oracleId -> names of the boxes and built decks ("Landing Party box", "Krenko, Mob Boss (built)")
@@ -306,6 +380,10 @@ export interface StatusResponse {
     features: number; tags: number; combos: number;
     images: { display: number; grid: number };
     collection: number; decks: number;
+    /** Cards on MTG Arena and legal in Brawl: 0 until `pnpm sync cards` has run with Arena data. */
+    brawl: number;
+    /** Cards on MTG Arena and legal in Standard Brawl: 0 until the cards sync has run with Standard Brawl data. */
+    standardBrawl: number;
   };
   /** ISO date of the last cards sync, null when never synced. */
   cardsSyncedAt: string | null;
@@ -341,6 +419,8 @@ export type CommanderSort = 'popularity' | 'name' | 'price' | 'best';
 export interface CommandersQuery {
   q?: string; colors?: ColorLetter[]; mode?: ColorMode; page?: number; pageSize?: number;
   axis?: AxisId; ownedOnly?: boolean; sort?: CommanderSort; bracket?: Bracket; freeOnly?: boolean;
+  /** Picks Brawl or Standard Brawl while an MTG Arena collection is active (default 'brawl'). */
+  arenaFormat?: ArenaFormat;
 }
 export interface CommandersResponse { total: number; page: number; pageSize: number; commanders: CommanderTile[]; bestReady: boolean }
 export interface ThemeInfo { axis: AxisId; slug: string; label: string; commanders: number }
@@ -429,11 +509,28 @@ export interface DeckTile {
   combos: number;
   /** The cards are really assembled in this deck (see `Deck.built`). */
   built: boolean;
+  /** The collection the deck belongs to, and the format that makes it: 'brawl' for an MTG Arena collection. */
+  collectionId: string;
+  format: Format;
+}
+/** GET /api/packages: your best packages per colour (see the header). */
+export interface PackagesResponse {
+  colors: ColorLetter[];
+  /** The format the packages are read in: the active collection's ('brawl' or 'standardbrawl' for MTG Arena, per `arenaFormat`). */
+  format: Format;
+  /** The format's package minimum (8, or 5 in Standard Brawl): the hand size and the fewest cards a theme or functional package needs here. */
+  packageMin: number;
+  packages: { id: PackageId; name: string; kind: PackageKind; total: number; cards: ClientCard[] }[];
+  heldBy: HeldBy;
 }
 /** POST /api/network: the deck's network (see `DeckNetwork`) and a card for every node. */
 export type NetworkResponse = DeckNetwork & { cards: CardLookup };
 export interface DecksResponse { decks: DeckTile[] }
-export interface DeckResponse { deck: Deck; updatedAt: string; cards: CardLookup }
+export interface DeckResponse {
+  deck: Deck; updatedAt: string; cards: CardLookup;
+  /** The deck's format: Commander for a Physical deck; an MTG Arena deck is Brawl, or Standard Brawl when `deck.arenaFormat` says so. */
+  format: Format;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Analyze, browse, build
@@ -441,6 +538,8 @@ export interface DeckResponse { deck: Deck; updatedAt: string; cards: CardLookup
 export type EdhrecStatus = 'off' | 'loading' | 'ready' | 'none';
 
 export interface AnalyzeResponse {
+  /** The rules the deck was checked under: 'brawl' or 'standardbrawl' for a deck of an MTG Arena collection (Arena cards only, that format's legality). */
+  format: Format;
   rating: DeckRating;
   bracket: BracketReport;
   summary: DeckSummary;
@@ -448,8 +547,17 @@ export interface AnalyzeResponse {
   /** `targets` as they would be without the deck's own wanted counts (`deck.roleTargets`). */
   defaultTargets: Targets;
   themeWeights: Record<AxisId, number>;
-  /** The axes the deck is focused on, whether it already is, and the weights the Focus on these two button saves. */
+  /** The axes the deck is focused on, whether it already is, and the weights the Focus button saves. */
   themeFocus: { axes: AxisId[]; focused: boolean; weights: Record<AxisId, number> };
+  /** The deck's own plan (see the header): core packages, focused themes, pins, lands, offers. */
+  packages: PackagePlan;
+  /**
+   * Role coverage of the finished deck: one entry per band, the four core packages counted by
+   * membership (role or tag) against their package targets (`spot-removal` is the Removal package,
+   * `wipe` the board-wipe slot), the rest by role. The rating, the scorer and the Packages tab use
+   * these same numbers.
+   */
+  roles: RoleNeed[];
   deckScores: Record<string, CardScore>;
   cards: CardLookup;
   /** Deck oracle ids the database does not know. */
@@ -459,6 +567,22 @@ export interface AnalyzeResponse {
   conflicts: ConflictReport;
   /** A box not yet linked to a deck that this deck looks like (offer "This deck is my <name> box"); null when none. */
   boxMatch: { boxId: string; name: string } | null;
+  /** Brawl decks: the wildcards the deck needs against those the player has; null for Commander decks. */
+  arena: ArenaReport | null;
+}
+/** One card of a Brawl deck that is not owned: the rarity of wildcard it takes and the Arena printing to craft. */
+export interface CraftLine { oracleId: string; rarity: ArenaRarity; set: string | null; number: string | null }
+export interface ArenaReport {
+  /** Wildcards per rarity for the cards not owned (basic lands are free; each different card counts once). */
+  needed: Wildcards;
+  /** The MTG Arena collection's wildcards. */
+  have: Wildcards;
+  /** Rarities where `needed` is above `have`. */
+  over: ArenaRarity[];
+  /** The cards to craft, commanders first, in deck order. */
+  toCraft: CraftLine[];
+  /** The card data has no Arena information (synced before Arena mode): run `pnpm sync cards`. */
+  noData: boolean;
 }
 
 export interface CardFilters {
@@ -477,6 +601,8 @@ export interface CardFilters {
   maxPrice?: number;
   /** true: only cards in the deck; false: only cards not in it. */
   inDeck?: boolean;
+  /** Only cards of this package (see `packages` under POST /api/analyze); unknown ids are a 400. */
+  package?: PackageId;
 }
 export type CardSort = 'score' | 'name' | 'mv' | 'price' | 'popularity';
 export interface CardsRequest {
@@ -495,7 +621,7 @@ export interface CardsResponse {
   heldBy: HeldBy;
 }
 
-export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix';
+export type BuildMode = 'auto' | 'fill' | 'swaps' | 'improve' | 'add' | 'replace' | 'swapin' | 'fix' | 'package';
 export interface BuildRequestOptions {
   ownedOnly?: boolean;
   /** With `ownedOnly`: copies held by boxes and other built decks do not count as owned. No effect without it. */
@@ -515,6 +641,15 @@ export interface BuildRequestOptions {
   in?: string;
   /** 'fix' only: fix this one part of the rating (a key of the rating's sub-scores); omit to fix them all. */
   only?: RatingKey | null;
+  /**
+   * Brawl decks only: "Only what I can craft" (default true). Cards not owned stay within the MTG Arena
+   * collection's wildcards per rarity, counting the ones the deck already needs; `maxPriceUsd` is ignored.
+   * For a Brawl deck "owned" (here, in `ownedOnly`, in `AnalyzeResponse.arena` and in the Arena export)
+   * is always the deck's own collection, whichever collection is active.
+   */
+  craftableOnly?: boolean;
+  /** 'package' only (required there): the package to complete ('ramp' | 'draw' | 'removal' | 'protection' | 'theme:<axis>' | 'fn:<id>'). */
+  package?: string;
 }
 export interface BuildRequest { deck: Deck; mode: BuildMode; options?: BuildRequestOptions }
 export interface BuildDeckResponse {
@@ -540,7 +675,7 @@ export type BuildResponse = BuildDeckResponse | BuildProposalsResponse | FixResp
 // Import, export, collection, EDHREC
 
 export interface TextLine { line: number; text: string }
-export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket }
+export interface ImportRequest { text: string; name?: string; targetBracket?: Bracket; arenaFormat?: ArenaFormat }
 export interface ImportResponse { deck: Deck; unresolved: TextLine[]; ignored: TextLine[]; cards: CardLookup }
 export interface ExportResponse {
   text: string;
@@ -598,7 +733,13 @@ export interface ArenaStatus {
   /** The last sync of this app run (or the last successful one, from the database). */
   last: ArenaSyncResult | null;
   syncedAt: string | null;
+  /** The wildcards stored on the MTG Arena collection (read from the log by every sync, or typed in). */
+  wildcards: WildcardsInfo;
 }
+/** Wildcards of the MTG Arena collection and where they came from: the log (`readAt` the time read) or typed in by hand. */
+export interface WildcardsInfo { wildcards: Wildcards; readAt: string | null; source: 'log' | 'hand' | null }
+/** "Read from Arena": what the log said (`ok` false and a message when it holds no inventory; the stored counts stay). */
+export interface WildcardsReadResponse extends WildcardsInfo { ok: boolean; message: string }
 export interface CollectionResponse {
   count: number; totalQty: number;
   /** `qty` is the total (loose + boxed); `inBoxes` how many of those copies are still sealed in boxes. */
@@ -639,6 +780,10 @@ export interface ProxyListResponse { items: ProxyItem[]; /** Sum of the quantiti
 export interface DiscoverTier {
   /** Most cards to buy; null = no limit (a normal unrestricted build). */
   cap: number | null;
+  /** On the MTG Arena collection: owned cards only, within your wildcards ('crafted') or the whole Arena pool ('unlimited'). */
+  kind?: 'owned' | 'crafted' | 'unlimited';
+  /** On the MTG Arena collection: the wildcards the deck needs per rarity. */
+  wildcards?: Wildcards;
   rating: number;
   /** Oracle ids of the cards to buy (not owned, not basic lands). */
   buys: string[];
@@ -720,7 +865,9 @@ async function call<T>(method: string, url: string, body?: unknown, signal?: Abo
   let data: unknown = null;
   try {
     data = await res.json();
-  } catch {
+  } catch (err) {
+    // a request aborted while its body was read is an abort, not an empty answer
+    if (signal?.aborted) throw err;
     // an empty or non-JSON body is reported through the status below
   }
   if (!res.ok) {
@@ -748,6 +895,7 @@ export const getCommanders = (params: CommandersQuery = {}, signal?: AbortSignal
     `/api/commanders${query({
       q: params.q, colors: params.colors?.join(''), mode: params.mode, page: params.page, pageSize: params.pageSize,
       axis: params.axis, owned: params.ownedOnly ? 1 : undefined, sort: params.sort, bracket: params.bracket, free: params.freeOnly ? 1 : undefined,
+      arenaFormat: params.arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined,
     })}`,
     undefined,
     signal,
@@ -783,15 +931,20 @@ export const createDeck = (deck: Deck) => call<DeckResponse>('POST', '/api/decks
 export const getDeck = (id: string, signal?: AbortSignal) =>
   call<DeckResponse>('GET', `/api/decks/${encodeURIComponent(id)}`, undefined, signal);
 export const updateDeck = (id: string, deck: Deck) => call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck });
+/** Saves the deck and moves it to another collection (its cards stay as they are). */
+export const moveDeck = (id: string, deck: Deck, collectionId: string) =>
+  call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck, move: collectionId });
 export const deleteDeck = (id: string) => call<{ ok: true }>('DELETE', `/api/decks/${encodeURIComponent(id)}`);
 
+export const getPackages = (colors: ColorLetter[], freeOnly: boolean, signal?: AbortSignal, arenaFormat?: ArenaFormat | null) =>
+  call<PackagesResponse>('GET', `/api/packages${query({ colors: colors.join(''), freeOnly: freeOnly ? 1 : undefined, arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getNetwork = (deck: Deck, signal?: AbortSignal) => call<NetworkResponse>('POST', '/api/network', { deck }, signal);
 export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeResponse>('POST', '/api/analyze', { deck }, signal);
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;
 export function buildDeck(deck: Deck, mode: 'swaps' | 'improve' | 'add' | 'replace' | 'swapin', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildProposalsResponse>;
-export function buildDeck(deck: Deck, mode: 'fix', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
+export function buildDeck(deck: Deck, mode: 'fix' | 'package', options?: BuildRequestOptions, signal?: AbortSignal): Promise<FixResponse>;
 export function buildDeck(deck: Deck, mode: BuildMode, options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildResponse> {
   return call<BuildResponse>('POST', '/api/build', { deck, mode, options } satisfies BuildRequest, signal);
 }
@@ -808,6 +961,9 @@ export const collectionExportUrl = (id?: string) => `/api/collection/export${id 
 export const getArena = (signal?: AbortSignal) => call<ArenaStatus>('GET', '/api/arena', undefined, signal);
 export const syncArena = (auto = false) => call<ArenaStatus>('POST', '/api/arena', { auto });
 export const readArenaMemory = () => call<ArenaStatus>('POST', '/api/arena', { memory: true });
+export const getWildcards = (signal?: AbortSignal) => call<WildcardsInfo>('GET', '/api/arena/wildcards', undefined, signal);
+export const setWildcards = (wildcards: Wildcards) => call<WildcardsInfo>('PUT', '/api/arena/wildcards', wildcards);
+export const readArenaWildcards = () => call<WildcardsReadResponse>('POST', '/api/arena/wildcards');
 
 /** `toBoxes` (positive `delta` only): an earlier removal's `fromBoxes`, so Undo puts the copies back into the same boxes. */
 export const adjustCollection = (oracleId: string, delta: number, toBoxes?: readonly { boxId: string; qty: number }[]) =>
@@ -829,15 +985,15 @@ export const getProxies = (signal?: AbortSignal) => call<ProxyListResponse>('GET
 export const replaceProxies = (items: ProxyItem[]) => call<ProxyListResponse>('PUT', '/api/proxies', { items });
 export const addProxies = (items: ProxyItem[]) => call<ProxyListResponse>('POST', '/api/proxies', { items });
 
-export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly });
-export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal) =>
-  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined })}`, undefined, signal);
-export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false) =>
-  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly });
+export const startDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('POST', '/api/discover', { bracket, scope, freeOnly, arenaFormat });
+export const getDiscover = (bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false, signal?: AbortSignal, arenaFormat?: ArenaFormat) =>
+  call<DiscoverState>('GET', `/api/discover${query({ bracket, scope, freeOnly: freeOnly ? 1 : undefined, arenaFormat })}`, undefined, signal);
+export const getDiscoverTiers = (bracket: Bracket, commander: string, scope: DiscoverScope = 'owned', freeOnly = false, arenaFormat?: ArenaFormat) =>
+  call<DiscoverTiersResponse>('POST', '/api/discover/tiers', { bracket, commander, scope, freeOnly, arenaFormat });
 
 export const getSettings = (signal?: AbortSignal) => call<Settings>('GET', '/api/settings', undefined, signal);
 export const updateSettings = (patch: Partial<Settings>) => call<Settings>('PUT', '/api/settings', patch);
 
-export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal) =>
-  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket }, signal);
+export const loadEdhrec = (commanders: string[], bracket: Bracket, signal?: AbortSignal, format?: Format) =>
+  call<EdhrecResponse>('POST', '/api/edhrec', { commanders, bracket, format }, signal);

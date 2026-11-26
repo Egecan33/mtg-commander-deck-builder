@@ -6,7 +6,7 @@ import type { ClientCard } from '../lib/api';
 import { BAND_VAR, PART_LABEL, ROLE_LABEL, bandOf, fmtPrice } from '../lib/ui';
 import { CardImage, Mana, Overlay, ScoreBadge } from './card';
 import { HeldMark, heldText } from './held';
-import { useProxies } from './Shell';
+import { useCollections, useProxies } from './Shell';
 import { WantedBy } from './WantedBy';
 
 /**
@@ -33,6 +33,8 @@ export function CardDetail({
 }) {
   const [face, setFace] = useState<0 | 1>(0);
   const proxies = useProxies();
+  // On the MTG Arena collection a card's cost is its wildcard rarity, not a price.
+  const arena = useCollections().active?.kind === 'arena';
   const onList = proxies.qty[id] ?? 0;
   useEffect(() => setFace(0), [id]);
   const name = card?.name ?? 'Unknown card';
@@ -80,7 +82,13 @@ export function CardDetail({
                 <span key={r} className="chip">{ROLE_LABEL[r] ?? r}</span>
               ))}
               {card.gameChanger && <span className="chip border-ember text-ember">Game Changer</span>}
-              <span className="chip">{fmtPrice(card.priceUsd)}</span>
+              {arena ? (
+                <span className={`chip ${card.arenaRarity ? '' : 'border-band-low text-band-low'}`} data-testid="detail-rarity">
+                  {card.arenaRarity ? `${card.arenaRarity[0].toUpperCase()}${card.arenaRarity.slice(1)} on Arena` : 'Not on MTG Arena'}
+                </span>
+              ) : (
+                <span className="chip">{fmtPrice(card.priceUsd)}</span>
+              )}
               {card.owned && <span className="chip border-band-top text-band-top">In your collection</span>}
             </div>
           )}

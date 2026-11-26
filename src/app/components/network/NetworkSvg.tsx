@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { imageUrl } from '@/app/lib/api';
 import type { NetworkResponse } from '@/app/lib/api';
+import { drawnEdges } from '@/engine/network/draw';
 import type { Vec3 } from '@/engine/network/layout';
 import type { NetworkEdgeKind } from '@/engine/types';
 import { ART_BOX, EDGE_COLOR, edgeOpacity, edgeWidth, maxDegreeOf, nodeRadius } from './style';
@@ -21,11 +22,13 @@ export function NetworkSvg({
   onOpen(id: string): void;
 }) {
   const maxDegree = maxDegreeOf(network.nodes);
+  // The same edges the 3D view draws: each card's strongest few feeds links, every other link.
+  const drawn = useMemo(() => drawnEdges(network.edges), [network.edges]);
   const near = useMemo(() => {
     const m = new Map<string, Set<string>>();
-    for (const e of network.edges) for (const [x, y] of [[e.a, e.b], [e.b, e.a]] as const) (m.get(x) ?? m.set(x, new Set()).get(x)!).add(y);
+    network.edges.forEach((e, i) => { if (drawn.has(i)) for (const [x, y] of [[e.a, e.b], [e.b, e.a]] as const) (m.get(x) ?? m.set(x, new Set()).get(x)!).add(y); });
     return m;
-  }, [network.edges]);
+  }, [network.edges, drawn]);
   const box = useMemo(() => {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
     for (const n of network.nodes) {
@@ -64,7 +67,7 @@ export function NetworkSvg({
         {network.edges.map((e, i) => {
           const a = positions.get(e.a);
           const b = positions.get(e.b);
-          if (!a || !b || !kinds.has(e.kind)) return null;
+          if (!a || !b || !kinds.has(e.kind) || !drawn.has(i)) return null;
           const on = !hoverId || e.a === hoverId || e.b === hoverId;
           return (
             <line

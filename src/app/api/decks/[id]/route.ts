@@ -1,7 +1,7 @@
 import type { DeckResponse } from '@/app/lib/api';
 import type { Deck } from '@/engine/types';
 import { cardLookup } from '@/server/cards';
-import { deleteDeck, getDeck, sanitizeDeck, saveDeck } from '@/server/decks';
+import { deckFormat, deleteDeck, getDeck, sanitizeDeck, saveDeck } from '@/server/decks';
 import { HttpError, handle, json, readBody } from '@/server/http';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const respond = (saved: { deck: Deck; updatedAt: string }): Response => {
   const ids = [...saved.deck.commanders, saved.deck.companion, ...saved.deck.main.map((e) => e.oracleId)];
-  return json({ ...saved, cards: cardLookup(ids) } satisfies DeckResponse);
+  return json({ ...saved, cards: cardLookup(ids), format: deckFormat(saved.deck) } satisfies DeckResponse);
 };
 
 export const GET = (_req: Request, { params }: Ctx) =>
@@ -24,7 +24,8 @@ export const PUT = (req: Request, { params }: Ctx) =>
   handle(async () => {
     const { id } = await params;
     const body = await readBody(req);
-    const saved = saveDeck(sanitizeDeck(body.deck), id);
+    if (body.move !== undefined && typeof body.move !== 'string') throw new HttpError(400, 'move must be the id of a collection.');
+    const saved = saveDeck(sanitizeDeck(body.deck), id, { move: body.move as string | undefined });
     if (!saved) throw new HttpError(404, 'No such deck.');
     return respond(saved);
   });

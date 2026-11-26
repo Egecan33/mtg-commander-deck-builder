@@ -3,6 +3,7 @@ import { isBasicLand } from '@/engine/rules';
 import { availableCopies, conflicts, type ConflictReport, type Holder } from '@/engine/collection/conflicts';
 import type { Deck } from '@/engine/types';
 import { activeCollectionId, ownedQuantities, ownedSet } from './collection';
+import { PHYSICAL_COLLECTION } from './db';
 import { sanitizeDeck } from './decks';
 import { getCardDb, getDb } from './store';
 
@@ -22,7 +23,10 @@ export function holdersFor(collectionId: string): Holder[] {
   const cards = getCardDb();
 
   const builtDecks: Holder[] = [];
-  const decks = db.prepare("SELECT id, name, json FROM decks WHERE json_extract(json, '$.built') = 1 ORDER BY updated_at, id").all() as { id: string; name: string; json: string }[];
+  // The collection's own built decks (a deck saved before decks belonged to collections is Physical).
+  const decks = db
+    .prepare(`SELECT id, name, json FROM decks WHERE json_extract(json, '$.built') = 1 AND coalesce(json_extract(json, '$.collectionId'), '${PHYSICAL_COLLECTION}') = ? ORDER BY updated_at, id`)
+    .all(collectionId) as { id: string; name: string; json: string }[];
   for (const d of decks) {
     let deck: Deck;
     try {

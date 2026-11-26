@@ -11,7 +11,8 @@ import { ArtCrop } from './ArtCrop';
 /** A saved deck as a tile: its commanders' art, rating, bracket and chips. `footer` is the row of actions under it (the date when absent). */
 export function DeckTileView({ deck: d, footer }: { deck: DeckTile; footer?: ReactNode }) {
   const router = useRouter();
-  const broken = !d.legal && d.cardCount >= 100;
+  const size = d.format === 'standardbrawl' ? 60 : 100;
+  const broken = !d.legal && d.cardCount >= size;
   const band = broken ? 'low' : bandOf(d.rating);
   return (
     <li className="group overflow-hidden rounded-lg border border-slag bg-anvil" data-testid="deck-tile">
@@ -28,16 +29,9 @@ export function DeckTileView({ deck: d, footer }: { deck: DeckTile; footer?: Rea
                   <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-anvil to-transparent" />
                   <div className="absolute bottom-2 right-3 flex items-end gap-2">
                     <div
-                      className="flex h-7 items-center rounded-md bg-iron px-2 text-[0.8rem] tabular-nums text-bone"
-                      title="How well the cards work together, out of 100"
-                      data-testid="deck-cohesion"
-                    >
-                      Cohesion {d.cohesion}
-                    </div>
-                    <div
                       className="display flex h-12 min-w-12 items-center justify-center rounded-md px-2 text-[1.6rem] font-bold text-[#15110a] shadow-lg"
                       style={{ background: BAND_VAR[band] }}
-                      title={broken ? 'Not legal: the rating is capped' : d.cardCount < 100 ? 'Rating so far, out of 100' : 'Deck rating out of 100'}
+                      title={broken ? 'Not legal: the rating is capped' : d.cardCount < size ? 'Rating so far, out of 100' : 'Deck rating out of 100'}
                     >
                       {Math.round(d.rating)}
                     </div>
@@ -61,11 +55,17 @@ export function DeckTileView({ deck: d, footer }: { deck: DeckTile; footer?: Rea
                       ))}
                 </p>
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
-                  <span className={`chip ${d.cardCount === 100 ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / 100</span>
+                  {d.format === 'standardbrawl' ? (
+                    <span className="chip text-bone" data-testid="tile-format">Standard Brawl</span>
+                  ) : (
+                    <span className="chip text-bone">Bracket {d.targetBracket}, {bracketName(d.targetBracket)}</span>
+                  )}
+                  <span className={`chip ${d.cardCount === size ? '' : 'border-band-mid text-band-mid'}`}>{d.cardCount} / {size}</span>
+                  {/* in the caption row, not over the art (app map) */}
+                  <span className="chip tabular-nums" title="How well the cards work together, out of 100" data-testid="deck-cohesion">Cohesion {d.cohesion}</span>
                   {d.built && <span className="chip border-brass text-brass" title="The cards are really in this deck" data-testid="deck-built-chip">Built</span>}
                   {broken && <span className="chip border-band-low text-band-low">Not legal</span>}
-                  {d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
+                  {d.format !== 'standardbrawl' && d.playsLike !== d.targetBracket && <span className="chip">plays like {d.playsLike}</span>}
                   {d.combos > 0 && <span className="chip" data-testid="tile-combos">{d.combos} {d.combos === 1 ? 'combo' : 'combos'}</span>}
                 </div>
               </div>

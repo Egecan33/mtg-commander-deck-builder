@@ -1,19 +1,19 @@
 import { analyzeBracket } from '../brackets';
+import { deckSizeFor, formatLabel, formatOf, isBrawlFormat } from '../format';
 import { deckNetwork } from '../network';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
-import { isBasicLand, validateDeck } from '../rules';
+import { allowedIdentity, isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard, summarizeDeck } from '../summary';
 import { ROLE_LABEL, roleNeeds, targetsFor } from '../targets';
 import type { AxisId, BuildOptions, Color, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, Violation } from '../types';
 import { fillRestReport } from './auto';
-import { improveDeck, replaceCardFrom } from './goals';
-import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from './improve';
+import { improveDeck, landCandidates, replaceCardFrom } from './goals';
+import { applySwaps, bestOf, comboPieces, cuttable, fineRating, matches, shownRating, swapOne } from './improve';
 import { buildPool, deckCount, qtyOf, removeCard } from './pool';
 import type { Pool } from './pool';
 
-const DECK_SIZE = 100;
 /** Swaps the improve step asks for. */
 const FIX_SWAPS = 15;
 /** Replacements rated for each card that breaks a rule. */
@@ -26,12 +26,14 @@ const COMMANDER_CODES: ReadonlySet<string> = new Set(['no-commander', 'bad-comma
 const OFFENCE: Record<string, string> = {
   banned: 'a banned card', identity: "a card outside the commander's colours", copies: 'an extra copy',
   'unknown-card': 'a card the card database does not know', companion: "a card the companion's condition rules out",
+  'not-on-arena': 'a card that is not on MTG Arena',
 };
 
 /** A rule's offender in a change's one-line summary ("Legal: replaces an off-colour card"). */
 const BROKE: Record<string, string> = {
   banned: 'a banned card', identity: 'an off-colour card', copies: 'an extra copy',
   'unknown-card': 'an unknown card', companion: 'a card the companion rules out',
+  'not-on-arena': 'a card not on MTG Arena',
 };
 /** What cutting a card does for the target bracket, by the bracket rule it broke. */
 const BRACKET_CUT: Record<string, string> = {
@@ -74,7 +76,10 @@ function swapSummary(before: Deck, after: Deck, c: { out: string; in: string }, 
   const outF = c.out !== '' ? ctx.db.features(c.out) : undefined;
   if (inF && outF && isLandCard(inF) && isLandCard(outF)) {
     if (Math.round(sa.taplands) < Math.round(sb.taplands)) return `Tapped lands ${Math.round(sb.taplands)} → ${Math.round(sa.taplands)}`;
+    // Only the deck's own colours: a land that makes any colour is not "white sources" for a Temur deck.
+    const identity = allowedIdentity(after, ctx.db);
     const colour = (Object.keys(COLOUR_WORD) as Color[])
+      .filter((k) => identity.size === 0 || identity.has(k))
       .map((k) => ({ k, gain: Math.round(sa.sources[k]) - Math.round(sb.sources[k]) }))
       .sort((x, y) => y.gain - x.gain)[0];
     if (colour && colour.gain > 0) return `${COLOUR_WORD[colour.k]} sources ${Math.round(sb.sources[colour.k])} → ${Math.round(sa.sources[colour.k])}`;
@@ -111,6 +116,13 @@ function commanderFault(deck: Deck, violations: readonly Violation[]): string | 
 /** Every card that breaks a rule (never a commander, never a locked card): the best agreeing replacement, else removed. */
 function repairRules(start: Deck, ctx: EngineContext, pool: () => Pool, changes: FixChange[]): Deck {
   let deck = start;
+  // A Brawl deck has no sideboard, so no companion: its violation names only the companion, which
+  // is not a main-deck card to cut, so it is dropped here.
+  if (deck.companion && isBrawlFormat(formatOf(ctx.db))) {
+    const label = formatLabel(formatOf(ctx.db));
+    changes.push({ out: deck.companion, in: '', reason: `Drops the companion: ${label} decks have no sideboard.`, summary: `Legal: drops the companion (${label} has no sideboard)` });
+    deck = { ...deck, companion: null };
+  }
   for (let n = 0; n < MAX_REPAIRS; n++) {
     let target: { id: string; v: Violation } | null = null;
     for (const v of validateDeck(deck, ctx.db)) {
@@ -152,13 +164,13 @@ function trim(start: Deck, ctx: EngineContext, pool: Pool, changes: FixChange[])
     .filter((id) => !taken.has(id))
     .sort((a, b) => scoreOf(a) - scoreOf(b) || (a < b ? -1 : 1));
   const order = [...first, ...rest];
-  while (deckCount(deck) > DECK_SIZE) {
+  while (deckCount(deck) > deckSizeFor(ctx.db)) {
     const before = deckCount(deck);
     for (const id of order) {
-      if (deckCount(deck) <= DECK_SIZE) break;
+      if (deckCount(deck) <= deckSizeFor(ctx.db)) break;
       if (!removable(deck, id)) continue;
       deck = removeCard(deck, id);
-      changes.push({ out: id, in: '', reason: 'Cuts one of the weakest cards to bring the deck down to 100.', summary: 'Cuts the deck down to 100' });
+      changes.push({ out: id, in: '', reason: `Cuts one of the weakest cards to bring the deck down to ${deckSizeFor(ctx.db)}.`, summary: `Cuts the deck down to ${deckSizeFor(ctx.db)}` });
     }
     if (deckCount(deck) === before) break; // what is left over is locked
   }
@@ -171,20 +183,21 @@ function fill(start: Deck, ctx: EngineContext, opts: BuildOptions, changes: FixC
   const before = counts(start);
   const after = counts(built);
   for (const [id, n] of before) {
-    for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: 'Makes room while filling the deck to 100.', summary: 'Makes room to fill the deck to 100' });
+    for (let k = after.get(id) ?? 0; k < n; k++) changes.push({ out: id, in: '', reason: `Makes room while filling the deck to ${deckSizeFor(ctx.db)}.`, summary: `Makes room to fill the deck to ${deckSizeFor(ctx.db)}` });
   }
   if (start.companion && built.companion !== start.companion) {
     changes.push({ out: start.companion, in: '', reason: notes.find((x) => /companion/.test(x)) ?? 'Drops the companion: the deck cannot meet its condition.', summary: 'Drops the companion' });
   }
-  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: 'Fills the deck to 100.', summary: 'Fills the deck to 100' });
+  for (const [id, n] of after) for (let k = before.get(id) ?? 0; k < n; k++) changes.push({ out: '', in: id, reason: `Fills the deck to ${deckSizeFor(ctx.db)}.`, summary: `Fills the deck to ${deckSizeFor(ctx.db)}` });
   return built;
 }
 
 /** " from the cards allowed (owned cards only, up to $2)" when the options narrow the search, else ''. */
-function searched(opts: BuildOptions): string {
+export function searched(opts: BuildOptions): string {
   const limits: string[] = [];
   if (opts.ownedOnly) limits.push('owned cards only');
   if (typeof opts.maxPriceUsd === 'number' && Number.isFinite(opts.maxPriceUsd)) limits.push(`up to $${opts.maxPriceUsd}`);
+  if (opts.wildcards && !opts.ownedOnly) limits.push('only what your wildcards can craft');
   return limits.length > 0 ? ` from the cards allowed (${limits.join(', ')})` : '';
 }
 
@@ -208,7 +221,7 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
   const none = (why: string): Stage => ({ deck: start, rating: startRating, changes: [], why });
   const fixes = part ? part.fixes : startRating.subscores.flatMap((s) => s.fixes);
   if (fixes.length === 0) return none(`the rating lists no problems${part ? ` with ${part.label}` : ''}`);
-  if (ratingCapped(start, startRating.violations)) return none('a deck that breaks a rule is capped, so no swap can raise its rating');
+  if (ratingCapped(start, startRating.violations, deckSizeFor(ctx.db))) return none('a deck that breaks a rule is capped, so no swap can raise its rating');
 
   const roles = unique(fixes.map((f) => f.filter?.role).filter((r): r is Role => r !== undefined && ROLE_LABEL[r] !== undefined));
   const axes = unique(fixes.map((f) => f.filter?.axis).filter((a): a is AxisId => typeof a === 'string' && a.length > 0));
@@ -284,6 +297,61 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
   return none(`Improve proposed ${plural(proposals.length, 'swap')}${searched(opts)}${tail}`);
 }
 
+/** Cards Fix deck's mana stage tries to cut each round, and lands it rates for each. */
+const LAND_OUTS = 3;
+const LAND_INS = 6;
+
+/**
+ * Step 3b of `fixDeck` for `only = 'mana'`: land swaps tried directly, not picked out of Improve's
+ * proposals. While the rating asks for more lands, the deck's weakest cuttable spells give way to
+ * the best lands for it; otherwise (taplands, colour sources) its weakest lands give way to better
+ * ones. Each round keeps the swap that rates highest, when the rating does not fall and the mana
+ * base rises. Locked cards, commanders and combo pieces stay; the options hold for every land.
+ */
+function landStage(start: Deck, startRating: DeckRating, ctx: EngineContext, poolOf: () => Pool): Stage {
+  const manaOf = (r: DeckRating): number => r.subscores.find((s) => s.key === 'mana')?.value ?? 0;
+  let deck = start;
+  let rating = startRating;
+  const changes: FixChange[] = [];
+  const keep = new Set(start.main.filter((e) => e.locked).map((e) => e.oracleId));
+  for (let round = 0; round < FIX_SWAPS; round++) {
+    const fixes = rating.subscores.find((s) => s.key === 'mana')?.fixes ?? [];
+    if (fixes.length === 0) break;
+    const short = fixes.some((f) => /^Add \d+ lands?/.test(f.text));
+    const pool = poolOf();
+    const scorer = createScorer(deck, ctx);
+    const outs = cuttable(deck, ctx, pool, keep, comboPieces(deck, ctx), scorer)
+      .filter((o) => (short ? !o.land : o.land))
+      .sort((a, b) => a.score - b.score || (a.id < b.id ? -1 : 1))
+      .slice(0, LAND_OUTS);
+    const have = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
+    const ins = bestOf(landCandidates(pool, ctx), scorer, have, LAND_INS, () => true);
+    let best: { out: string; in: string; deck: Deck; rating: DeckRating } | null = null;
+    for (const o of outs) {
+      for (const { c } of ins) {
+        if (c.card.oracleId === o.id) continue;
+        const next = swapOne(deck, o.id, c.card.oracleId);
+        const after = rateDeck(next, ctx);
+        if (shownRating(after) < shownRating(rating) || !(manaOf(after) > manaOf(rating))) continue;
+        if (!best || fineRating(after) > fineRating(best.rating)) best = { out: o.id, in: c.card.oracleId, deck: next, rating: after };
+      }
+    }
+    if (!best) break;
+    const name = (id: string) => ctx.db.get(id)?.name ?? id;
+    const s = summarizeDeck(deck, ctx.db);
+    changes.push({
+      out: best.out, in: best.in,
+      reason: short
+        ? `The deck has ${Math.round(s.landsEffective * 10) / 10} lands and its curve wants about ${targetsFor(deck, ctx, s).lands}: ${name(best.out)} makes way for ${name(best.in)}.`
+        : `${name(best.in)} serves this mana base better than ${name(best.out)}.`,
+      summary: swapSummary(deck, best.deck, best, ctx),
+    });
+    deck = best.deck;
+    rating = best.rating;
+  }
+  return { deck, rating, changes, why: changes.length === 0 ? 'no land swap raises the mana base without lowering the rating' : '' };
+}
+
 /**
  * Step 3b of `fixDeck` for `only = 'synergy'`: every card the network says connects to nothing is
  * swapped, one at a time, for the best replacement the engine agrees with that does connect, as
@@ -328,9 +396,8 @@ function connectStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
  *
  * 1. Legal and complete first. Every card that breaks a rule (banned, outside the colour identity,
  *    over the copy limit, unknown) is replaced by the best `replaceCard` proposal the engine agrees
- *    with, or removed when there is none. Over 100 cards, the weakest unlocked cards are cut; under
- *    100, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not 100
- *    cards, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
+ *    with, or removed when there is none. Over the deck size (100, or 60 in Standard Brawl), the weakest unlocked cards are cut; under
+ *    it, `fillRest` fills the deck. This step runs whenever the deck breaks a rule or is not full, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
  *    is capped at 40 and cannot be played (`note` then says what it cost). One card pool serves
  *    every replacement of the call.
  * 2. A deck that breaks its own target bracket's rules (the bracket report's violations of the
@@ -369,12 +436,12 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   let pool: Pool | null = null;
   const poolOf = (): Pool => (pool ??= buildPool(deck, ctx, plain));
 
-  // 1. Legal, then 100 cards.
+  // 1. Legal, then a full deck.
   if (start.violations.length > 0) {
     current = repairRules(current, ctx, poolOf, changes);
     if (validateDeck(current, ctx.db).some((v) => v.code === 'size')) {
-      if (deckCount(current) > DECK_SIZE) current = trim(current, ctx, poolOf(), changes);
-      else if (deckCount(current) < DECK_SIZE) current = fill(current, ctx, plain, changes);
+      if (deckCount(current) > deckSizeFor(ctx.db)) current = trim(current, ctx, poolOf(), changes);
+      else if (deckCount(current) < deckSizeFor(ctx.db)) current = fill(current, ctx, plain, changes);
     }
   }
   const legalChanges = changes.length;
@@ -384,7 +451,7 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   // over its run (bracket fit stays 0 until the last offender goes).
   const outsideBracket = (d: Deck): boolean => analyzeBracket(d, ctx).violationsOfTarget.length > 0;
   let bracketStage: Stage | null = null;
-  if (!only && !ratingCapped(current, mid.violations) && outsideBracket(current)) {
+  if (!only && !ratingCapped(current, mid.violations, deckSizeFor(ctx.db)) && outsideBracket(current)) {
     bracketStage = improveStage(current, mid, ctx, opts, mid.subscores.find((s) => s.key === 'bracket') ?? null);
     current = bracketStage.deck;
     changes.push(...bracketStage.changes);
@@ -401,6 +468,12 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
     if (more.changes.length > 0) stage = { deck: more.deck, rating: more.rating, changes: [...stage.changes, ...more.changes], why: stage.why };
     else if (stage.changes.length === 0) stage = { ...stage, why: `${stage.why}; ${more.why}` };
   }
+  // The mana base: land swaps tried directly (review I1), after whatever Improve's run found.
+  if (only === 'mana' && part && !ratingCapped(stage.deck, stage.rating.violations, deckSizeFor(ctx.db))) {
+    const more = landStage(stage.deck, stage.rating, ctx, poolOf);
+    if (more.changes.length > 0) stage = { deck: more.deck, rating: more.rating, changes: [...stage.changes, ...more.changes], why: stage.why };
+    else if (stage.changes.length === 0) stage = { ...stage, why: `${stage.why}; ${more.why}` };
+  }
   current = stage.deck;
   changes.push(...stage.changes);
   const rating = stage.rating;
@@ -408,9 +481,9 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
 
   const notes: string[] = [];
   if (ratingAfter < ratingBefore) {
-    notes.push(ratingCapped(deck, start.violations)
+    notes.push(ratingCapped(deck, start.violations, deckSizeFor(ctx.db))
       ? `Making the deck legal cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck that breaks a rule is capped at ${ILLEGAL_CAP} and cannot be played as it was.`
-      : `Filling the deck to 100 cards cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck under 100 cards cannot be played as it was.`);
+      : `Filling the deck to ${deckSizeFor(ctx.db)} cards cost rating points (from ${ratingBefore} to ${ratingAfter}): a deck under ${deckSizeFor(ctx.db)} cards cannot be played as it was.`);
   }
   if (rating.violations.length > 0) {
     const lockedBlock = rating.violations.some((v) => v.oracleIds.some((id) => current.main.some((e) => e.oracleId === id && e.locked)));

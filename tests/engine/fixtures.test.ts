@@ -47,6 +47,21 @@ describe('fixture cards', () => {
     expect(card('Brisela, Voice of Nightmares').isMeldResult).toBe(true);
   });
 
+  it('carries Arena rarity, printing and Brawl legality from the cards sync', () => {
+    for (const c of raw.cards) {
+      expect(c.arenaRarity === null || ['common', 'uncommon', 'rare', 'mythic'].includes(c.arenaRarity as string), c.name).toBe(true);
+      expect(['legal', 'banned', 'not_legal'], c.name).toContain(c.brawlLegality);
+      expect(c.arenaRarity === null ? c.arenaPrinting === null : typeof c.arenaPrinting?.set === 'string', c.name).toBe(true);
+    }
+    expect(card('Sol Ring').arenaRarity).toBeNull(); // paper only
+    expect(card('Infernal Grasp').arenaRarity).toBe('uncommon'); // also a mythic printing on Arena
+    expect(card('Primeval Titan')).toMatchObject({ legality: 'banned', brawlLegality: 'legal' });
+    expect(card('Ancient Tomb')).toMatchObject({ legality: 'legal', brawlLegality: 'banned' });
+    expect(card('Tyvar Kell').frontTypeLine).toMatch(/^Legendary Planeswalker/);
+    expect(card('Tyvar Kell').arenaRarity).not.toBeNull();
+    expect(raw.cards.filter((c) => c.arenaRarity !== null && c.brawlLegality === 'legal').length).toBeGreaterThan(500);
+  });
+
   it('contains every commander the plan tests against', () => {
     for (const n of [
       "Atraxa, Praetors' Voice", 'Kinnan, Bonder Prodigy', 'Lathril, Blade of the Elves', 'Krenko, Mob Boss',

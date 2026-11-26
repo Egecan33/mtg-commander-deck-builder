@@ -5,7 +5,7 @@ import { deckNetwork } from '@/engine/network';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { resolveThemeWeights } from '@/engine/summary';
-import { ROLE_LABEL, roleNeeds } from '@/engine/targets';
+import { ROLE_LABEL, coverageRoles, roleNeeds } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -50,6 +50,7 @@ function junkFor(deck: Deck, n: number): string[] {
   const junk = db.all()
     .filter((c) => !have.has(c.oracleId) && !isLand(c.oracleId) && c.colorIdentity.every((k) => identity.has(k))
       && (c.edhrecRank ?? 99999) > 4000 && !c.gameChanger && c.cmc >= 4 && (db.features(c.oracleId)?.roles.length ?? 0) === 0
+      && coverageRoles(c, db.features(c.oracleId)!, db.tagSlugs(c.oracleId), deck.targetBracket).length === 0
       && db.combosFor(c.oracleId).length === 0)
     .slice(0, n).map((c) => c.oracleId);
   expect(junk.length).toBe(n);
@@ -165,12 +166,18 @@ describe('fixDeck', () => {
   });
 
   it('a deck short of ramp gains ramp and the rating does not drop', () => {
-    const deck = swapInto(precon, junkFor(precon, 6), (id) => hasRole(id, 'ramp'));
+    // Seven ramp cards out, then three short of the Ramp package's target by the rating's own count (role
+    // or tag): the precon's Ramp package holds 21 against 9, more than single copies can take it under.
+    const inRamp = (id: string) => coverageRoles(db.get(id)!, db.features(id)!, db.tagSlugs(id), 2).includes('ramp');
+    const cut = swapInto(precon, junkFor(precon, 7), inRamp);
+    const deck: Deck = { ...cut, roleTargets: { ramp: roleNeeds(cut, ctx).find((n) => n.role === 'ramp')!.count + 3 } };
     expect(size(deck)).toBe(100);
     expect(validateDeck(deck, db)).toEqual([]);
     expect(rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes).some((f) => f.filter?.role === 'ramp')).toBe(true);
     const r = fixDeck(deck, ctx, opts());
-    expect(roleCount(r.deck, 'ramp')).toBeGreaterThan(roleCount(deck, 'ramp'));
+    // The Ramp package by the rating's own count (role or tag).
+    const ramp = (d: Deck) => roleNeeds(d, ctx).find((n) => n.role === 'ramp')!.count;
+    expect(ramp(r.deck)).toBeGreaterThan(ramp(deck));
     expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
     expect(rateDeck(r.deck, ctx).rating).toBeGreaterThanOrEqual(rateDeck(deck, ctx).rating);
     expect(validateDeck(r.deck, db)).toEqual([]);
@@ -294,6 +301,8 @@ describe('fixDeck', () => {
     const mana = fixDeck(precon, ctx, opts(), 'mana');
     expect(mana.changes.length).toBeGreaterThan(0);
     for (const c of mana.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(true);
+    // The precon is Temur: a land that makes any colour is never summed up as white or black sources.
+    for (const c of mana.changes) expect(c.summary).not.toMatch(/^(White|Black) sources/);
     const curve = fixDeck(fixtureDeck('cedh', 5), ctx, opts(), 'curve');
     expect(curve.changes.length).toBeGreaterThan(0);
     for (const c of curve.changes) expect(isLand(c.in), db.get(c.in)?.name).toBe(false);
@@ -391,8 +400,7 @@ describe('fixDeck', () => {
     const deck = swapInto(talrand, gcs, (id) => !db.get(id)!.gameChanger);
     const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
     expect(fixes.length).toBeGreaterThan(0);
-    // (The cards that connect to nothing are a theme fix since the network; they are not what this test is about.)
-    expect(fixes.some((f) => (f.filter?.role || f.filter?.axis) && !/connect to nothing/.test(f.text))).toBe(false);
+    expect(fixes.some((f) => f.filter?.role || f.filter?.axis)).toBe(false);
     const r = fixDeck(deck, ctx, opts());
     const path = ratingsAlong(deck, r.changes);
     expect(path.some((x, i) => x < (i === 0 ? r.ratingBefore : path[i - 1]))).toBe(true); // it dipped

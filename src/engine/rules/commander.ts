@@ -1,5 +1,6 @@
 import { normalizeName } from '../carddb';
-import type { Card } from '../types';
+import { isBrawlFormat } from '../format';
+import type { Card, Format } from '../types';
 
 /** Hardcoded per rules.md §4.1: the one planeswalker that is a creature card outside the battlefield. */
 const GRIST_ORACLE_ID = '0efb0d7e-dea0-4817-a243-15066e9ef333';
@@ -56,6 +57,19 @@ export function isCommanderEligible(card: Card): boolean {
   if (types.includes('Creature')) return true;
   if (subtypes.includes('Vehicle')) return true;
   return subtypes.includes('Spacecraft') && card.power !== null;
+}
+
+/**
+ * True when the card can be a deck's only commander in this format. Brawl and Standard Brawl (MTG Arena) take what
+ * Arena publishes: "any legendary creature or Planeswalker" (https://magic.wizards.com/en/formats/brawl,
+ * checked 2026-11-26), so a planeswalker can lead and a legendary Vehicle or Background cannot.
+ * Commander follows `isCommanderEligible`.
+ */
+export function canLead(card: Card, format: Format): boolean {
+  if (!isBrawlFormat(format)) return isCommanderEligible(card);
+  if (card.isMeldResult) return false;
+  const { types } = frontTypes(card);
+  return types.includes('Legendary') && (types.includes('Creature') || types.includes('Planeswalker'));
 }
 
 /** Every two-commander ability (CR 702.124) or partner role the card has. `detail` is the named card or variant, else ''. */

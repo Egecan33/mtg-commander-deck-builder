@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -83,6 +83,32 @@ export async function* readJsonLines<T = unknown>(file: string): AsyncGenerator<
 }
 
 interface BulkEntry { type: string; jsonl_download_uri?: string; download_uri?: string; updated_at?: string }
+
+/**
+ * Downloads a Scryfall bulk file to `file` unless the copy there is already of the current update
+ * (`<file>.updated` holds the `updated_at` it was downloaded for), so the steps that read the same
+ * file (cards and printings both read default-cards) fetch it once. Returns `updated_at`.
+ */
+export async function fetchBulk(type: string, file: string, log: (line: string) => void, opts?: HttpOptions): Promise<string | null> {
+  const { url, updatedAt } = await resolveBulk(type, opts);
+  const stamp = `${file}.updated`;
+  let have: string | null = null;
+  try {
+    have = existsSync(file) ? readFileSync(stamp, 'utf8').trim() : null;
+  } catch {
+    have = null;
+  }
+  if (updatedAt && have === updatedAt) {
+    log(`${type} is current (${updatedAt}), not downloaded again`);
+    return updatedAt;
+  }
+  log(`${type} downloading ${url}`);
+  const bytes = await downloadToFile(url, file, opts);
+  log(`${type} downloaded ${bytes} bytes`);
+  if (updatedAt) writeFileSync(stamp, updatedAt);
+  else rmSync(stamp, { force: true });
+  return updatedAt;
+}
 
 /** Resolves a Scryfall bulk file URL by type; the URLs carry a timestamp and change daily. */
 export async function resolveBulk(type: string, opts?: HttpOptions): Promise<{ url: string; updatedAt: string | null }> {

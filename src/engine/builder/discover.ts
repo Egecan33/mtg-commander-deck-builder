@@ -1,8 +1,10 @@
 import { rateDeck } from '../rating';
-import { isBasicLand, isCommanderEligible } from '../rules';
+import { deckSizeFor, formatOf, isLegalIn } from '../format';
+import { canLead, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
-import type { Bracket, BuildOptions, Card, CardDb, Color, Deck, EngineContext } from '../types';
+import type { Bracket, BuildOptions, Card, CardDb, Color, Deck, EngineContext, Wildcards } from '../types';
+import { wildcardsNeeded } from '../wildcards';
 import { autoBuild } from './auto';
 import { improveDeck } from './goals';
 import { applySwaps } from './improve';
@@ -20,9 +22,9 @@ const shell = (commander: string, bracket: Bracket): Deck => ({
 });
 const opts = (owned: Set<string>, ownedOnly: boolean, extra: Partial<BuildOptions> = {}): BuildOptions => ({ ownedOnly, owned, maxPriceUsd: null, seed: 1, ...extra });
 
-/** Commanders worth looking at: legal cards that can lead a deck alone. */
+/** Commanders worth looking at: legal cards that can lead a deck alone in the database's format (Brawl adds planeswalkers). */
 export function discoverCandidates(db: CardDb, owned: ReadonlySet<string>, ownedCommandersOnly: boolean): Card[] {
-  return db.all().filter((c) => isCommanderEligible(c) && (!ownedCommandersOnly || owned.has(c.oracleId)));
+  return db.all().filter((c) => canLead(c, formatOf(db)) && (!ownedCommandersOnly || owned.has(c.oracleId)));
 }
 
 /**
@@ -47,12 +49,14 @@ export function preScore(commander: Card, ownedCards: readonly Card[], ctx: Engi
   }
   scores.sort((a, b) => b - a);
   let sum = 0;
-  for (let i = 0; i < Math.min(PRESCORE_TOP, scores.length); i++) sum += scores[i];
+  for (let i = 0; i < Math.min(topFor(PRESCORE_TOP, ctx.db), scores.length); i++) sum += scores[i];
   return sum + LAND_BONUS * Math.min(LAND_BONUS_MAX, lands);
 }
 
 /** Owned cards counted by `quickFit`. */
 const QUICK_TOP = 60;
+/** How many of the best cards a ranking sums: 60 for a 99-card deck, fewer in Standard Brawl's 59. */
+const topFor = (n: number, db: CardDb): number => (formatOf(db) === 'standardbrawl' ? Math.round((n * (deckSizeFor(db) - 1)) / 99) : n);
 
 /**
  * A much cheaper stand-in for `preScore`, for ranking thousands of commanders before the real
@@ -64,7 +68,7 @@ export function quickFit(commander: Card, ownedCards: readonly Card[], db: CardD
   const themes = Object.entries(db.features(commander.oracleId)?.axes ?? {}).map(([axis, w]) => [axis, Math.min(1, w.e + w.p)] as const);
   const fits: number[] = [];
   for (const card of ownedCards) {
-    if (card.oracleId === commander.oracleId || isBasicLand(card) || card.legality !== 'legal') continue;
+    if (card.oracleId === commander.oracleId || isBasicLand(card) || !isLegalIn(card, db)) continue;
     if (card.colorIdentity.some((c) => !identity.has(c))) continue;
     const axes = db.features(card.oracleId)?.axes as Record<string, { e: number; p: number }> | undefined;
     let fit = 1;
@@ -73,7 +77,7 @@ export function quickFit(commander: Card, ownedCards: readonly Card[], db: CardD
   }
   fits.sort((a, b) => b - a);
   let sum = 0;
-  for (let i = 0; i < Math.min(QUICK_TOP, fits.length); i++) sum += fits[i];
+  for (let i = 0; i < Math.min(topFor(QUICK_TOP, db), fits.length); i++) sum += fits[i];
   return sum;
 }
 
@@ -88,7 +92,14 @@ export function buysOf(deck: Deck, owned: ReadonlySet<string>, db: CardDb): stri
   return out;
 }
 
-export interface TierDeck { /** Most cards to buy besides what is owned; null = no limit. */ cap: number | null; deck: Deck; rating: number; buys: string[] }
+export interface TierDeck {
+  /** Most cards to buy besides what is owned; null = no limit. */
+  cap: number | null; deck: Deck; rating: number; buys: string[];
+  /** Brawl tiers: owned cards only, within the wildcards ('crafted'), or the whole Arena pool ('unlimited'). */
+  kind?: 'owned' | 'crafted' | 'unlimited';
+  /** Brawl tiers: the wildcards the deck needs, per rarity. */
+  wildcards?: Wildcards;
+}
 
 const tier = (cap: number | null, deck: Deck, ctx: EngineContext, owned: ReadonlySet<string>): TierDeck => ({
   cap, deck, rating: rateDeck(deck, ctx).rating, buys: buysOf(deck, owned, ctx.db),
@@ -99,6 +110,30 @@ export function eagerTiers(commander: string, ctx: EngineContext, owned: Set<str
   const base = autoBuild(shell(commander, bracket), ctx, opts(owned, true));
   const free = autoBuild(shell(commander, bracket), ctx, opts(owned, false));
   return { owned: tier(0, base, ctx, owned), unlimited: tier(null, free, ctx, owned) };
+}
+
+/**
+ * Best from collection on MTG Arena (`ctx.db` a Brawl database): the best deck from owned cards
+ * only, the best deck within the wildcards the player has ("Only what I can craft"), and the best
+ * deck from the whole Arena pool. Each says the wildcards it needs per rarity.
+ */
+export function wildcardTiers(
+  commander: string, ctx: EngineContext, owned: Set<string>, bracket: Bracket, wildcards: Wildcards,
+): { owned: TierDeck; crafted: TierDeck; unlimited: TierDeck } {
+  const make = (kind: 'owned' | 'crafted' | 'unlimited', deck: Deck): TierDeck => ({
+    ...tier(kind === 'owned' ? 0 : null, deck, ctx, owned), kind, wildcards: wildcardsNeeded(deck, ctx.db, owned),
+  });
+  // Each build is greedy, so a looser tier's own build can rate below a tighter one; then the
+  // tighter tier's deck (which the looser limits also allow) is the looser tier's best. On a tie
+  // the tighter deck stays too: no wildcards spent for no gain.
+  const atLeast = (kind: 'crafted' | 'unlimited', built: Deck, floor: TierDeck): TierDeck => {
+    const t = make(kind, built);
+    return t.rating > floor.rating ? t : { ...floor, cap: null, kind };
+  };
+  const ownedTier = make('owned', autoBuild(shell(commander, bracket), ctx, opts(owned, true)));
+  const crafted = atLeast('crafted', autoBuild(shell(commander, bracket), ctx, opts(owned, false, { wildcards })), ownedTier);
+  const unlimited = atLeast('unlimited', autoBuild(shell(commander, bracket), ctx, opts(owned, false)), crafted);
+  return { owned: ownedTier, crafted, unlimited };
 }
 
 /**

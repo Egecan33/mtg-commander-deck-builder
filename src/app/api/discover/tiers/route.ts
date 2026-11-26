@@ -6,5 +6,5 @@ export const dynamic = 'force-dynamic';
 export const POST = (req: Request) =>
   handle(async () => {
     const body = await readBody(req);
-    return json(discoverTiers(readBracket(body.bracket ?? 3), body.commander, readScope(body.scope), readFreeOnly(body.freeOnly)));
+    return json(discoverTiers(readBracket(body.bracket ?? 3), body.commander, readScope(body.scope), readFreeOnly(body.freeOnly), body.arenaFormat));
   });

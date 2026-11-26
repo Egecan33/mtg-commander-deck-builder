@@ -179,7 +179,8 @@ describe('collection routes', () => {
     const cdb = getCardDb();
     const lathril = cdb.byName('Lathril, Blade of the Elves')!.oracleId;
     const shell = { id: null, name: 'T', commanders: [lathril], companion: null, chosenColor: null, main: [], targetBracket: 3, themeWeights: null };
-    const built = (await send<{ deck: { main: { oracleId: string }[] } }>(build.POST, 'POST', '/api/build', { deck: shell, mode: 'auto', options: { seed: 1 } })).data.deck;
+    // A Physical deck (Commander rules) built from the Arena collection's cards: only "owned" moves.
+    const built = { ...(await send<{ deck: { main: { oracleId: string }[] } }>(build.POST, 'POST', '/api/build', { deck: shell, mode: 'auto', options: { seed: 1 } })).data.deck, collectionId: 'physical' };
     // The Arena collection: 40 green or black cards the deck does not run.
     const inDeck = new Set(built.main.map((e) => e.oracleId));
     const spare = cdb.all().filter((c) => c.legality === 'legal' && !inDeck.has(c.oracleId) && c.oracleId !== lathril && c.colorIdentity.every((x) => x === 'G' || x === 'B')).slice(0, 40);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { packageMinimum } from '@/engine/format';
 import type { Bracket, CardScore, Deck, Fix, FoundCombo, Role, SwapProposal } from '@/engine/types';
 import { CardTile, unknownCard } from '../../components/CardTile';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,7 +10,7 @@ import { HeldMark, heldText } from '../../components/held';
 import type { AnalyzeResponse, CardLookup, ClientCard, ConflictReport, HeldBy, RatingKey } from '../../lib/api';
 import { AXIS_IDS, BAND_VAR, BRACKETS, ROLE_LABEL, axisLabel, bandOf, bracketName, brokenRules, fmtPrice, fmtRatingChange } from '../../lib/ui';
 
-export type PanelId = 'rating' | 'bracket' | 'themes' | 'improve' | 'network';
+export type PanelId = 'rating' | 'packages' | 'bracket' | 'themes' | 'improve' | 'network';
 
 function Thumb({ id, lookup, onOpen, width = 54, dim = false, label, held }: { id: string; lookup: CardLookup; onOpen: (id: string) => void; width?: number; dim?: boolean; label?: string; held?: string[] }) {
   const card = lookup[id];
@@ -119,7 +120,7 @@ export function BoxMatchOffer({ name, busy, onLink }: { name: string; busy: bool
   );
 }
 
-const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
+export const Section = ({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) => (
   <section className="border-t border-slag px-4 py-4 first:border-t-0">
     <div className="mb-2.5 flex items-baseline gap-2">
       <h3 className="text-[1.02rem] leading-tight">{title}</h3>
@@ -169,28 +170,44 @@ export function RatingPanel({
   onWanted: (role: Role, n: number | null) => void;
 }) {
   const { rating, summary, targets } = analysis;
+  const std = analysis.format === 'standardbrawl';
+  const size = std ? 60 : 100;
   const defaults = analysis.defaultTargets ?? targets;
-  const defaultOf = (role: Role): number => (role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0));
+  // Ramp, Card draw and Removal are the core packages: their wanted count is the package's target
+  // (at least 8), the same number the Packages tab shows and pins.
+  const corePackage = (role: Role) => (role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null);
+  const defaultOf = (role: Role): number => {
+    const id = corePackage(role);
+    if (id && defaults.packages) return defaults.packages[id].lo;
+    return role === 'land' ? defaults.lands : (defaults.roles[role]?.lo ?? 0);
+  };
+  const wantedOf = (role: Role): number | undefined => {
+    const set = deck.roleTargets?.[role];
+    const id = corePackage(role);
+    return set !== undefined && id && targets.packages ? targets.packages[id].lo : set;
+  };
   const anyWanted = Object.keys(deck.roleTargets ?? {}).length > 0;
-  const broken = brokenRules(rating, summary.cardCount);
+  const broken = brokenRules(rating, summary.cardCount, size);
   const curveMax = Math.max(1, ...summary.curve);
   const sources = (['W', 'U', 'B', 'R', 'G', 'C'] as const).filter((c) => (summary.sources[c] ?? 0) > 0);
   const sourceMax = Math.max(1, ...sources.map((c) => summary.sources[c]));
-  const roles = Object.entries(targets.roles) as [keyof typeof ROLE_LABEL, { lo: number; hi: number }][];
 
   return (
     <div data-testid="panel-rating">
-      <Section title={rating.complete ? 'Deck rating' : 'Deck rating so far'} aside={`${summary.cardCount} of 100 cards`}>
+      <Section title={rating.complete ? 'Deck rating' : 'Deck rating so far'} aside={`${summary.cardCount} of ${size} cards`}>
         <div className="flex items-center gap-4">
           <Gauge value={rating.rating} partial={!rating.complete} legal={broken.length === 0} size={128} />
           <p className="text-[0.86rem] text-ash">
             {broken.length
               ? 'The deck breaks a rule, so the rating is capped at 40 until that is fixed.'
               : rating.complete
-                ? 'Nine things a deck needs, weighed together. Click a fix to see cards that solve it.'
+                ? `${std ? 'Eight' : 'Nine'} things a deck needs, weighed together. Click a fix to see cards that solve it.`
                 : 'The deck is not full yet, so each part is judged against a deck of this size.'}
           </p>
         </div>
+        {rating.notes?.map((note) => (
+          <p key={note} className="mt-2 text-[0.8rem] text-smoke" data-testid="rating-note">{note}</p>
+        ))}
         {rating.violations.length > 0 && (
           <ul className="mt-3 grid gap-1.5" data-testid="violations">
             {rating.violations.map((v, i) => (
@@ -207,7 +224,7 @@ export function RatingPanel({
         )}
       </Section>
 
-      <Section title="The nine parts">
+      <Section title="The parts">
         <ul className="grid gap-3.5">
           {rating.subscores.map((s) => {
             const pct = Math.round(s.value * 100);
@@ -305,41 +322,47 @@ export function RatingPanel({
         </ul>
       </Section>
 
-      <Section title="Wanted counts" aside={anyWanted ? 'set by you' : `defaults for Bracket ${deck.targetBracket}`}>
+      <Section title="Wanted counts" aside={anyWanted ? 'set by you' : std ? 'defaults for Standard Brawl' : `defaults for Bracket ${deck.targetBracket}`}>
         <p className="mb-2.5 text-[0.84rem] text-ash">How many of each this deck should run. The rating, the card scores and the builder all aim for your number.</p>
         <ul className="grid gap-1.5" data-testid="wanted-counts">
           {WANTED.map(({ role, label }) => {
             const base = defaultOf(role);
-            const set = deck.roleTargets?.[role];
+            const set = wantedOf(role);
             const value = set ?? base;
+            // A core package never goes under the format's package minimum (owner's rule: 8, or 5 in Standard Brawl).
+            const least = corePackage(role) ? packageMinimum(analysis.format) : 0;
             return (
               <li key={role} className="flex items-center gap-1.5 text-[0.86rem]" data-testid="wanted-row" data-role={role}>
                 <span className="min-w-0 flex-1 truncate">{label}</span>
-                <button type="button" className="btn btn-sm px-2" disabled={value <= 0} onClick={() => onWanted(role, Math.max(0, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
-                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-brass' : ''}`} data-testid="wanted-value">{value}</span>
+                <button type="button" className="btn btn-sm px-2" disabled={value <= least} onClick={() => onWanted(role, Math.max(least, value - 1))} aria-label={`Want one fewer: ${label}`} data-testid="wanted-less">−</button>
+                <span className={`w-6 text-center ${set !== undefined ? 'font-semibold text-bone' : ''}`} data-testid="wanted-value">{value}</span>
                 <button type="button" className="btn btn-sm px-2" disabled={value >= 40} onClick={() => onWanted(role, value + 1)} aria-label={`Want one more: ${label}`} data-testid="wanted-more">+</button>
                 <span className="w-[4.6rem] text-right text-[0.75rem] text-smoke">default {base}</span>
-                <button type="button" className={`text-[0.75rem] text-brass hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
+                <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${set === undefined ? 'invisible' : ''}`} onClick={() => onWanted(role, null)} data-testid="wanted-reset">Reset</button>
               </li>
             );
           })}
         </ul>
       </Section>
 
-      <Section title="Roles against the plan for this bracket">
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]">
-          {roles.map(([role, band]) => {
-            const have = summary.roleCounts[role] ?? 0;
-            const off = have < band.lo || have > band.hi;
+      <Section title={std ? 'Roles against the plan for Standard Brawl' : 'Roles against the plan for this bracket'} aside="the same counts as the Packages tab">
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.86rem]" data-testid="role-coverage">
+          {analysis.roles.map((need) => {
+            const off = need.short > 0 || need.over > 0;
             return (
-              <li key={role} className="flex items-baseline gap-1.5">
-                <span className="min-w-0 flex-1 truncate text-ash">{ROLE_LABEL[role] ?? role}</span>
-                <span className={off ? 'text-band-mid' : ''}>{have}</span>
-                <span className="w-10 text-right text-[0.75rem] text-smoke">{band.lo}&ndash;{band.hi}</span>
+              <li key={need.role} className="flex items-baseline gap-1.5" data-role={need.role}>
+                <span className="min-w-0 flex-1 truncate text-ash">{need.label[0].toUpperCase() + need.label.slice(1)}</span>
+                <span className={off ? 'text-band-mid' : ''}>{need.count}</span>
+                <span className="w-10 text-right text-[0.75rem] text-smoke">{need.band.lo === need.band.hi ? need.band.lo : <>{need.band.lo}&ndash;{need.band.hi}</>}</span>
               </li>
             );
           })}
         </ul>
+        {targets.notes && (
+          <ul className="mt-3 grid gap-1 text-[0.8rem] text-smoke" data-testid="targets-notes">
+            {targets.notes.map((n) => <li key={n}>{n}</li>)}
+          </ul>
+        )}
       </Section>
     </div>
   );
@@ -400,11 +423,13 @@ const SWAPIN_SHOWN = 5;
  * anyway". When the list is empty it says why.
  */
 export function PutItIn({
-  card, count, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
+  card, count, size = 100, another, state, why, lookup, deckHeld, scoreOf, onSwap, add, reveal = false,
 }: {
   card: ClientCard;
   /** Cards in the deck now. */
   count: number;
+  /** Cards in a full deck of this format (60 in Standard Brawl). */
+  size?: number;
   /** A basic land already in the deck: the section offers one more copy. */
   another: boolean;
   /** The suggestions for this card; `list` is null while they load. */
@@ -427,7 +452,7 @@ export function PutItIn({
   const loading = list === null && !state?.error;
   const swaps = (list ?? []).filter((p) => p.out !== '' && p.out !== p.in).slice(0, SWAPIN_SHOWN);
   const plain = list?.find((p) => p.out === '');
-  const open = count < 100;
+  const open = count < size;
   const inHeld = state?.heldBy[card.oracleId];
   const best = open ? -1 : swaps.findIndex((p) => p.agrees !== false);
   const reason = why ?? NO_ROOM;
@@ -648,6 +673,8 @@ export function ThemesPanel({
   const rest = AXIS_IDS.filter((a) => !ids.includes(a));
   const { focused, axes: focusAxes } = analysis.themeFocus;
   const focusLabels = focusAxes.filter((a) => a !== 'typal').map(axisLabel);
+  // The button names as many themes as the focus keeps (a strong third theme stays in it).
+  const focusCount = ['', 'this one', 'these two', 'these three', 'these four', 'these five'][focusLabels.length] ?? `these ${focusLabels.length}`;
 
   return (
     <div data-testid="panel-themes">
@@ -711,7 +738,7 @@ export function ThemesPanel({
             title={focused ? 'Already focused' : `Keep ${focusLabels.join(', ')} at full weight and turn every other theme down to a quarter`}
             data-testid="theme-focus"
           >
-            Focus on these two
+            Focus on {focusCount || 'these'}
           </button>
           <button type="button" className="btn" disabled={!deck.themeWeights} onClick={() => { order.current = []; onReset(); }} data-testid="theme-reset">
             Reset to the commander
@@ -757,9 +784,13 @@ const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n
 const chipClass = (on: boolean) => `chip cursor-pointer ${on ? 'border-brass bg-iron text-bone' : 'hover:text-bone'}`;
 
 export function ImprovePanel({
-  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
+  deck, lookup, themeAxes, options, collectionName, ownedOnly, onOwnedOnly, showFreeOnly, showPrice = true, showBracket = true, freeOnly, setOptions, onFreeOnly, proposals, busy, onRun, onAddOne, onAccept, onReject, onApplyAll, onProxy, onOpen,
 }: {
   deck: Deck;
+  /** False for Standard Brawl: no brackets, so there is no bracket to aim for. */
+  showBracket?: boolean;
+  /** False for an MTG Arena deck: its budget is the wildcards ("Only what I can craft"), not a price. */
+  showPrice?: boolean;
   /** Name of the active collection, for the owned-only box. */
   collectionName: string | null;
   /** "Only my collection", the shared filter (the header's box shows and sets the same value). */
@@ -819,18 +850,20 @@ export function ImprovePanel({
             />
             <span>cards</span>
           </label>
+          {showBracket && (
           <label className="flex items-center gap-2">
-            <span className="shrink-0">Aim for bracket</span>
-            <select
-              className="field w-0 min-w-0 flex-1"
-              value={options.bracket}
-              onChange={(e) => setOptions({ ...options, bracket: e.target.value === 'keep' ? 'keep' : (Number(e.target.value) as Bracket) })}
-              data-testid="improve-bracket"
-            >
-              <option value="keep">{deck.targetBracket}, {bracketName(deck.targetBracket)} (the deck&rsquo;s)</option>
-              {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>{b.n}, {b.name}</option>)}
-            </select>
-          </label>
+              <span className="shrink-0">Aim for bracket</span>
+              <select
+                className="field w-0 min-w-0 flex-1"
+                value={options.bracket}
+                onChange={(e) => setOptions({ ...options, bracket: e.target.value === 'keep' ? 'keep' : (Number(e.target.value) as Bracket) })}
+                data-testid="improve-bracket"
+              >
+                <option value="keep">{deck.targetBracket}, {bracketName(deck.targetBracket)} (the deck&rsquo;s)</option>
+                {BRACKETS.filter((b) => b.n !== deck.targetBracket).map((b) => <option key={b.n} value={b.n}>{b.n}, {b.name}</option>)}
+              </select>
+            </label>
+          )}
           <div>
             <div className="mb-1 text-[0.8rem] text-ash">Goals (pick any)</div>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Goals for this run">
@@ -849,19 +882,21 @@ export function ImprovePanel({
               </select>
             )}
           </div>
-          <label className="flex items-center gap-2">
-            <span className="shrink-0 text-ash">Price cap</span>
-            <input
-              className="field w-20"
-              inputMode="decimal"
-              value={options.maxPrice}
-              onChange={(e) => setOptions({ ...options, maxPrice: e.target.value })}
-              placeholder="no cap"
-              aria-label="Highest price per card in dollars"
-              data-testid="improve-price"
-            />
-            <span className="text-ash">dollars per card</span>
-          </label>
+          {showPrice && (
+            <label className="flex items-center gap-2">
+              <span className="shrink-0 text-ash">Price cap</span>
+              <input
+                className="field w-20"
+                inputMode="decimal"
+                value={options.maxPrice}
+                onChange={(e) => setOptions({ ...options, maxPrice: e.target.value })}
+                placeholder="no cap"
+                aria-label="Highest price per card in dollars"
+                data-testid="improve-price"
+              />
+              <span className="text-ash">dollars per card</span>
+            </label>
+          )}
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={ownedOnly} onChange={(e) => onOwnedOnly(e.target.checked)} data-testid="improve-owned" />
             <span>Only cards in my {collectionName ? `${collectionName} ` : ''}collection</span>
@@ -925,7 +960,7 @@ export function ImprovePanel({
                   )}
                   {dissent > 0 && <span className="block text-band-mid">The engine disagrees with {dissent === items.length ? (dissent === 1 ? 'it' : 'all of them') : `${dissent} of them`}; its reasons are on the {dissent === 1 ? 'card' : 'cards'}.</span>}
                 </p>
-                {proposals.kind !== 'add' && <button type="button" className="btn btn-sm btn-primary" onClick={onApplyAll} data-testid="apply-all">Apply all</button>}
+                {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={onApplyAll} data-testid="apply-all">Apply all</button>}
               </div>
               <button type="button" className="btn btn-sm mb-3 w-full" onClick={() => onProxy([...new Set(items.map((p) => p.in))])} data-testid="proxy-incoming">
                 Add incoming cards to proxy list ({new Set(items.map((p) => p.in)).size})
@@ -952,7 +987,7 @@ export function ImprovePanel({
                         </div>
                         <Thumb id={p.in} lookup={lookup} onOpen={onOpen} width={78} held={held} />
                         <div className="ml-1 flex min-w-0 flex-1 flex-col gap-1.5">
-                          <button type="button" className="btn btn-sm btn-primary" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
+                          <button type="button" className="btn btn-sm" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
                           {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={() => onReject(p)} data-testid="proposal-reject">Reject</button>}
                           <button type="button" className="btn btn-sm btn-quiet" onClick={() => onProxy([p.in])} title={`Put ${lookup[p.in]?.name ?? 'the incoming card'} on the proxy list`} data-testid="proposal-proxy">Proxy</button>
                         </div>

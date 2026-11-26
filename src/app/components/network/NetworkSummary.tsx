@@ -68,10 +68,12 @@ export function NetworkSummary({
         title="Not connected"
         count={cards.length}
         testId="network-unconnected"
-        actions={onSwap && cards.length > 0 ? (
+      >
+        {/* under the heading, not beside it: the side panel is too narrow for both on one line */}
+        {onSwap && cards.length > 0 && (
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm mb-3"
             disabled={busy}
             onClick={onSwap}
             title="Runs Fix deck on synergy: cards that connect to nothing are swapped for cards that work with this deck"
@@ -79,8 +81,7 @@ export function NetworkSummary({
           >
             Swap the unconnected cards
           </button>
-        ) : undefined}
-      >
+        )}
         {cards.length === 0 ? (
           <EmptyState message="Every card works with another card or with the commander." />
         ) : (

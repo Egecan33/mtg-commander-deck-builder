@@ -39,6 +39,8 @@ const EXTRAS = [
   'Gyruda, Doom of Depths', 'Jegantha, the Wellspring', 'Kaheera, the Orphanguard', 'Keruga, the Macrosage',
   'Lurrus of the Dream-Den', 'Lutri, the Spellchaser', 'Obosh, the Preypiercer', 'Umori, the Collector',
   'Yorion, Sky Nomad', 'Zirda, the Dawnwaker',
+  // Arena Brawl: a card on Arena at two rarities, Commander-banned but Brawl-legal cards, Brawl-banned cards.
+  'Infernal Grasp', 'Primeval Titan', 'Dockside Extortionist', 'Ancient Tomb',
   // Colourless cards, so a colourless commander has a full deck's worth to build from (builder tests).
   'Access Tunnel', "Agatha's Soul Cauldron", 'All Is Dust', 'Altar of Dementia', 'Artisan of Kozilek',
   'Astral Cornucopia', 'Avishkar Raceway', "Azor's Gateway // Sanctum of the Sun", 'Bag of Holding',
@@ -185,5 +187,45 @@ function main(): void {
   db.close();
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+/**
+ * `--arena-only`: refreshes only the Arena fields (`arenaRarity`, `arenaPrinting`, `brawlLegality`, `standardBrawlLegality`)
+ * of the committed fixture from the synced database, and adds any COMMANDERS or EXTRAS card it lacks
+ * (whole, with its tags). Every other field of the cards already there stays as committed, so tests
+ * tuned on that data keep their numbers. combos.json is not touched.
+ */
+function refreshArena(): void {
+  const db = openDb();
+  const cardDb = loadCardDb(db);
+  const file = path.join(FIXTURES, 'cards.json');
+  const fixture = JSON.parse(readFileSync(file, 'utf8')) as { cards: Card[]; tags: Record<string, string[]> };
+  const byId = new Map(fixture.cards.map((c) => [c.oracleId, c]));
+  let added = 0;
+  for (const name of [...COMMANDERS, ...EXTRAS]) {
+    const c = cardDb.byName(name);
+    if (!c) throw new Error(`"${name}" is not in the synced database`);
+    if (byId.has(c.oracleId)) continue;
+    byId.set(c.oracleId, c);
+    fixture.tags[c.oracleId] = [...cardDb.tagSlugs(c.oracleId)].sort();
+    added++;
+  }
+  for (const c of byId.values()) {
+    const fresh = cardDb.get(c.oracleId);
+    c.arenaRarity = fresh?.arenaRarity ?? null;
+    c.arenaPrinting = fresh?.arenaPrinting ?? null;
+    c.brawlLegality = fresh?.brawlLegality ?? 'not_legal';
+    c.standardBrawlLegality = fresh?.standardBrawlLegality ?? 'not_legal';
+  }
+  const cards = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  writeFileSync(
+    file,
+    `{"cards":[\n${cards.map((c) => JSON.stringify(c)).join(',\n')}\n],\n"tags":{\n${cards.map((c) => `${JSON.stringify(c.oracleId)}:${JSON.stringify(fixture.tags[c.oracleId] ?? [])}`).join(',\n')}\n}}\n`,
+  );
+  console.log(`fixtures cards ${cards.length} (+${added}), on Arena ${cards.filter((c) => c.arenaRarity).length}`);
+  db.close();
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv.includes('--arena-only')) refreshArena();
+  else main();
+}
 

@@ -5,7 +5,8 @@ import { rateDeck } from '@/engine/rating';
 import { CONNECTION_LOSS, createScorer } from '@/engine/scoring/scorer';
 import { deckCards, isLandCard } from '@/engine/summary';
 import { cardFitsDeck, copyLimit } from '@/engine/rules';
-import type { Card, Deck, EngineContext } from '@/engine/types';
+import { ROLE_LABEL, bandRoles } from '@/engine/targets';
+import type { Bracket, Card, Deck, EngineContext, Role } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck } from '../helpers/network';
 
@@ -23,7 +24,7 @@ function sacrificeDecks(): { a: Deck; b: Deck; x: Card; y: Card } {
   };
   const pool = db.all().filter((c) => {
     const f = db.features(c.oracleId);
-    return !!f && !isLandCard(f) && !isRingCard(f) && copyLimit(c) === 1 && cardFitsDeck(c, upgraded, db) === null && !base.main.some((e) => e.oracleId === c.oracleId);
+    return !!f && !isLandCard(f) && !isRingCard(f, c, 3, db.tagSlugs(c.oracleId)) && copyLimit(c) === 1 && cardFitsDeck(c, upgraded, db) === null && !base.main.some((e) => e.oracleId === c.oracleId);
   });
   const enablers = pool.filter((c) => (db.features(c.oracleId)!.axes.sacrifice?.e ?? 0) >= 0.9);
   const payoffs = pool.filter((c) => (db.features(c.oracleId)!.axes.sacrifice?.p ?? 0) >= 0.9);
@@ -58,7 +59,7 @@ describe('the connection term', () => {
       const deck = fixtureDeck(name, name === 'precon' ? 2 : name === 'upgraded' ? 3 : 5);
       const scorer = createScorer(deck, ctx);
       for (const { card: c, features } of deckCards(deck, db).cards) {
-        if (!isRingCard(features) && !isLandCard(features) && !deck.commanders.includes(c.oracleId)) continue;
+        if (!isRingCard(features, c, deck.targetBracket, db.tagSlugs(c.oracleId)) && !isLandCard(features) && !deck.commanders.includes(c.oracleId)) continue;
         expect(scorer.score(c).reasons.some((r) => REASON.test(r)), c.name).toBe(false);
       }
     }
@@ -75,18 +76,36 @@ describe('the connection term', () => {
     }
   });
 
-  // The plan asked for []; the small fixture pool has one graveyard-hate card for the deck's role
-  // band (Soul-Guide Lantern, synergy 0.28 with the commander), so a card that fills a needed role
-  // may stay. Nothing else may.
   it('an auto-build has no unconnected cards when the pool allows', () => {
     const shell: Deck = {
       id: null, name: 'Lathril', commanders: [card('Lathril, Blade of the Elves').oracleId], companion: null, chosenColor: null,
       main: [], targetBracket: 3, themeWeights: null,
     };
     const built = autoBuild(shell, ctx, { ownedOnly: false, owned: null, maxPriceUsd: null, seed: 1 });
-    const left = deckNetwork(built, ctx).unconnected;
-    expect(left.length).toBeLessThanOrEqual(1);
-    for (const id of left) expect(db.features(id)!.roles.length).toBeGreaterThan(0);
+    expect(deckNetwork(built, ctx).unconnected).toEqual([]);
     expect(rateDeck(built, ctx).rating).toBeGreaterThan(0);
+  });
+
+  it('every role the rating holds against a band is a ring role', () => {
+    for (const role of Object.keys(ROLE_LABEL) as Role[]) {
+      const f = { ...db.features(card('Island').oracleId)!, landWeight: 0, roles: [role] };
+      expect(isRingCard(f), role).toBe(true);
+    }
+  });
+
+  // Review C2: Grafdigger's Cage, Soul-Guide Lantern and Darksteel Reactor were "connects to nothing" in auto-builds.
+  it('auto-builds of the fixture commanders have no role card in unconnected', () => {
+    const builds: [string, Bracket][] = [
+      ['Loran of the Third Path', 2], ['Wilson, Refined Grizzly', 3], ['Kozilek, the Great Distortion', 3],
+      ['Kinnan, Bonder Prodigy', 3], ['Krenko, Mob Boss', 3], ['Talrand, Sky Summoner', 2],
+    ];
+    for (const [name, bracket] of builds) {
+      const shell: Deck = { id: null, name, commanders: [card(name).oracleId], companion: null, chosenColor: null, main: [], targetBracket: bracket, themeWeights: null };
+      const built = autoBuild(shell, ctx, { ownedOnly: false, owned: null, maxPriceUsd: null, seed: 1 });
+      const roleCards = deckNetwork(built, ctx).unconnected
+        .filter((id) => bandRoles(db.get(id)!, db.features(id)!, bracket).length > 0)
+        .map((id) => db.get(id)!.name);
+      expect(roleCards, name).toEqual([]);
+    }
   });
 });

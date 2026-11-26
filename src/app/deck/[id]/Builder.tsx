@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { commanderHref } from '../../lib/links';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProposal } from '@/engine/types';
+import { packageMinimum } from '@/engine/format';
+import { isPackageId, packageDef, pinPackage } from '@/engine/packages';
+import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, PackageId, Role, SwapProposal } from '@/engine/types';
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
@@ -14,22 +16,26 @@ import { useNetwork } from '../../components/network/useNetwork';
 import { ResultPanel, type Change } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
-  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, takeFromBox, updateDeck,
-  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type ConflictReport, type HeldBy, type RatingKey, type ScoredCard,
+  ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, moveDeck, takeFromBox, updateDeck,
+  type AnalyzeResponse, type ArenaFormat, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type RatingKey, type ScoredCard,
 } from '../../lib/api';
+import type { Format } from '@/engine/types';
 import { setFilters, useFilters } from '../../lib/filters';
 import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
   type BrowserQuery,
 } from '../../lib/ui';
+import { CraftSection, FormatChip, WildcardLine } from './ArenaParts';
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
+import { PackagesPanel } from './PackagesPanel';
 import {
   ADD_ONE, BoxMatchOffer, BracketPanel, GOAL_CHIPS, HeldSummary, ImprovePanel, PutItIn, RatingPanel, ThemesPanel, whyNotIn, type ImproveOptions, type PanelId, type ProposalSet,
 } from './Panels';
 
 const PANELS: { id: PanelId; label: string }[] = [
   { id: 'rating', label: 'Rating' },
+  { id: 'packages', label: 'Packages' },
   { id: 'bracket', label: 'Bracket' },
   { id: 'themes', label: 'Themes' },
   { id: 'improve', label: 'Improve' },
@@ -37,7 +43,6 @@ const PANELS: { id: PanelId; label: string }[] = [
 ];
 const WEAKEST = 5;
 const NO_HELD: HeldBy = {};
-const DECK_SIZE = 100;
 const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(card.typeLine);
 
 /**
@@ -46,7 +51,7 @@ const isBasicLand = (card: ClientCard): boolean => /\bBasic\b.*\bLand\b/.test(ca
  */
 interface DeckResult {
   seq: number;
-  kind: 'fix' | 'swap';
+  kind: 'fix' | 'swap' | 'package';
   title: string;
   changes: Change[];
   ratingBefore: number;
@@ -88,7 +93,7 @@ function withoutHolder(map: HeldBy, name: string): HeldBy {
 
 export function Builder({ id }: { id: string }) {
   const notify = useNotify();
-  const { active: activeCollection, refresh: refreshCollections } = useCollections();
+  const { active: activeCollection, refresh: refreshCollections, collections, switchTo } = useCollections();
   const proxies = useProxies();
   const { status } = useStatus();
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -107,6 +112,18 @@ export function Builder({ id }: { id: string }) {
   const networkNow = net.network;
   useEffect(() => setNetworkFocus(null), [networkNow]);
   const [query, setQuery] = useState<BrowserQuery>(DEFAULT_QUERY);
+  /** The package the Packages page pointed at (`?panel=packages&package=<id>`). */
+  const [highlight, setHighlight] = useState<PackageId | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('panel') === 'packages') setPanel('packages');
+    const wanted = params.get('package');
+    if (wanted && isPackageId(wanted)) setHighlight(wanted);
+  }, []);
+  const themePackages = useMemo(
+    () => (analysis?.packages.packages ?? []).filter((p) => p.kind === 'theme').map((p) => ({ id: p.id, name: p.name })),
+    [analysis],
+  );
   const [detail, setDetail] = useState<string | null>(null);
   const [exported, setExported] = useState<{ text: string; copied: boolean; format: 'text' | 'arena'; notOnArena?: string[] | null } | null>(null);
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
@@ -139,6 +156,22 @@ export function Builder({ id }: { id: string }) {
   // `built` as last saved: when a save changes it, the collections are read again.
   const savedBuilt = useRef(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  // The deck's collection decides its format: an MTG Arena deck is a Brawl deck (Arena cards, wildcards).
+  const deckCollection = collections.find((c) => c.id === (deck?.collectionId ?? activeCollection?.id)) ?? null;
+  const otherCollection = collections.find((c) => c.id !== deckCollection?.id && c.kind !== deckCollection?.kind) ?? null;
+  // The deck's own settings, not the last analysis: after a switch the old analysis still carries the old format.
+  const format: Format = deckCollection ? (deckCollection.kind === 'arena' ? (deck?.arenaFormat ?? 'brawl') : 'commander') : analysis ? analysis.format : 'commander';
+  const brawl = format !== 'commander';
+  const std = format === 'standardbrawl';
+  // Cards in a full deck: 60 in Standard Brawl, 100 otherwise.
+  const DECK_SIZE = std ? 60 : 100;
+  useEffect(() => {
+    if (std) setPanel((p) => (p === 'bracket' ? 'rating' : p));
+  }, [std]);
+  const { craftOnly } = useFilters();
+  const [moving, setMoving] = useState(false);
+  // "Cards to craft" of a Brawl deck, shown above the deck sections.
+  const [craftOpen, setCraftOpen] = useState(false);
 
   const learn = useCallback((cards: CardLookup | ClientCard[]) => {
     setLookup((cur) => {
@@ -160,7 +193,7 @@ export function Builder({ id }: { id: string }) {
         setDeck(res.deck);
         setSettled(res.deck);
         // Optional per-commander play data; answers 'off' at once unless switched on under Card data.
-        if (res.deck.commanders.length) {
+        if (res.deck.commanders.length && res.format !== 'standardbrawl') {
           loadEdhrec(res.deck.commanders, res.deck.targetBracket).then(
             (r) => {
               if (r.status === 'ready') setRev((n) => n + 1);
@@ -175,6 +208,17 @@ export function Builder({ id }: { id: string }) {
     );
     return () => ctrl.abort();
   }, [id, learn]);
+
+  // A deck of the other collection: that collection becomes the active one ("owned" follows the deck), once.
+  const switched = useRef(false);
+  const deckCollectionId = deck?.collectionId ?? null;
+  useEffect(() => {
+    if (switched.current || !deckCollectionId || !activeCollection || deckCollectionId === activeCollection.id) return;
+    const target = collections.find((c) => c.id === deckCollectionId);
+    if (!target) return;
+    switched.current = true;
+    void switchTo(target.id, `Switched to your ${target.name} collection: this deck belongs to it.`);
+  }, [deckCollectionId, activeCollection, collections, switchTo]);
 
   // A deck that already is a box's deck gets no "This deck is my … box" offer.
   useEffect(() => {
@@ -373,9 +417,11 @@ export function Builder({ id }: { id: string }) {
     return {
       ownedOnly: ownedOnly || undefined,
       freeOnly: (ownedOnly && freeOnly) || undefined,
-      maxPriceUsd: options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
+      // A Brawl deck's budget is its wildcards ("Only what I can craft"), not dollars.
+      maxPriceUsd: !brawl && options.maxPrice.trim() && Number.isFinite(price) && price > 0 ? price : null,
+      craftableOnly: brawl ? craftOnly : undefined,
     };
-  }, [ownedOnly, options.maxPrice, freeOnly]);
+  }, [ownedOnly, options.maxPrice, freeOnly, brawl, craftOnly]);
   const buildOpts = () => cardOpts;
 
   // ---- "Put it in instead of" for the card in the detail: a card not in the deck, or one more basic land
@@ -402,7 +448,7 @@ export function Builder({ id }: { id: string }) {
     }
     const ctrl = new AbortController();
     setSwapin({ id: swapinId, list: null, heldBy: {} });
-    // Under 100 cards the plain add comes first, so one more is asked for to keep five swaps.
+    // Under a full deck the plain add comes first, so one more is asked for to keep five swaps.
     buildDeck(settled, 'swapin', { ...cardOpts, in: swapinId, count: deckCount(settled) < DECK_SIZE ? 6 : 5 }, ctrl.signal).then(
       (res) => {
         learn(res.cards);
@@ -435,10 +481,15 @@ export function Builder({ id }: { id: string }) {
   }, []);
   const rebuild = async (mode: 'auto' | 'fill', label: string, seed?: number) => {
     if (!deck) return;
+    const before = deck;
     setBusy(label);
     try {
-      const res = await buildDeck(deck, mode, { ...buildOpts(), seed });
+      const res = await buildDeck(before, mode, { ...buildOpts(), seed });
       learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info(`The deck changed while ${label.toLowerCase()} was working, so nothing was applied. Try again.`);
+        return;
+      }
       setProposals(null);
       mutate((d) => {
         // A rebuild changes the cards, never whether the deck is built.
@@ -447,7 +498,7 @@ export function Builder({ id }: { id: string }) {
         else delete next.built;
         return next;
       });
-      notify.info(mode === 'fill' ? 'Filled the deck to 100 cards' : 'Built a new 100-card deck. Locked cards were kept.');
+      notify.info(mode === 'fill' ? `Filled the deck to ${DECK_SIZE} cards` : `Built a new ${DECK_SIZE}-card deck. Locked cards were kept.`);
     } catch (e) {
       notify.error(e);
     } finally {
@@ -514,6 +565,52 @@ export function Builder({ id }: { id: string }) {
     if (el && el !== document.body && el !== target) return;
     target?.focus({ preventScroll: true });
   }, [busy]);
+  /**
+   * Complete package (and Add a package, which first pins the package at its minimum, 8 or 5 in Standard Brawl): the same panel and Undo as
+   * Fix deck. The deck before is what Undo restores, so an added package's pin goes with it.
+   */
+  const runPackage = async (id: PackageId, add: boolean) => {
+    if (!deck || !analysis) return;
+    const before = deck;
+    const name = analysis.packages.packages.find((p) => p.id === id)?.name ?? analysis.packages.offers.find((o) => o.id === id)?.name ?? packageDef(id)?.name ?? 'the package';
+    const start = add ? pinPackage(before, analysis.packages, analysis.targets, id, packageMinimum(format)) : before;
+    setBusy(`package:${id}`);
+    try {
+      const res = await buildDeck(start, 'package', { ...buildOpts(), package: id });
+      learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info('The deck changed while the package was being completed, so nothing was applied. Try again.');
+        return;
+      }
+      const n = res.changes.filter((c) => c.in !== '').length;
+      let after: Deck | null = null;
+      if (res.changes.length > 0 || add) {
+        const next: Deck = { ...res.deck, id: before.id, name: before.name };
+        if (before.built) next.built = true;
+        else delete next.built;
+        after = next;
+        mutate(() => next);
+        setProposals(null);
+      }
+      setFixed({
+        seq: ++fixSeq.current,
+        kind: 'package',
+        title: n > 0 ? `Completed ${name}: added ${n}` : `${name}: nothing added`,
+        changes: res.changes,
+        ratingBefore: res.ratingBefore,
+        ratingAfter: res.ratingAfter,
+        note: res.note,
+        heldBy: res.heldBy,
+        before,
+        after,
+        undone: 'Undone. The deck is back as it was before Complete package.',
+      });
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setBusy(null);
+    }
+  };
   /** Puts back the deck exactly as it was before the fix or swap; offered only while the deck it made is unchanged. */
   const undoResult = () => {
     if (!fixed?.after || deck !== fixed.after) return;
@@ -563,7 +660,8 @@ export function Builder({ id }: { id: string }) {
     if (!deck) return;
     setBusy(kind);
     setPanel('improve');
-    const bracket = options.bracket === 'keep' ? deck.targetBracket : options.bracket;
+    // Standard Brawl has no brackets: a power setting left over from an earlier Brawl deck must not steer it.
+    const bracket = std || options.bracket === 'keep' ? deck.targetBracket : options.bracket;
     try {
       let res;
       if (kind === 'improve') {
@@ -641,6 +739,46 @@ export function Builder({ id }: { id: string }) {
     setProposals({ ...proposals, asked: true, items: proposals.kind === 'add' ? [] : proposals.items.filter((p) => !list.includes(p)) });
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
+  // "Move to MTG Arena / Physical": only the deck's collection changes, then that collection becomes the active one.
+  const moveTo = async (to: CollectionInfo) => {
+    if (!deck) return;
+    setMoving(true);
+    try {
+      await moveDeck(id, deck, to.id);
+      dirty.current = false;
+      switched.current = true;
+      await switchTo(to.id, `Moved to your ${to.name} collection: it is now checked as a ${to.kind === 'arena' ? (deck.arenaFormat === 'standardbrawl' ? 'Standard Brawl' : 'Brawl') : 'Commander'} deck.`);
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  // "Switch to Brawl / Standard Brawl": only the deck's arenaFormat changes; it is then checked again under the other rules.
+  const switchFormat = (to: ArenaFormat) => {
+    if (!deck || to === (deck.arenaFormat ?? 'brawl')) return;
+    const full = to === 'standardbrawl' ? 60 : 100;
+    const total = deckCount(deck);
+    // What was suggested or fixed under the old rules may not be legal under the new ones.
+    setProposals(null);
+    setReplacing(null);
+    setFixed(null);
+    mutate((d) => {
+      const { arenaFormat: _drop, ...rest } = d;
+      void _drop;
+      return to === 'standardbrawl' ? { ...rest, arenaFormat: 'standardbrawl' } : rest;
+    });
+    const where = to === 'standardbrawl' ? 'Standard Brawl' : 'Brawl';
+    notify.info(
+      total > full
+        ? `Switched to ${where}: ${total - full} cards over the limit; Fix deck can cut them.`
+        : total < full
+          ? `Switched to ${where}: ${full - total} cards short; Build can fill them.`
+          : `Switched to ${where}: the deck is checked under its rules.`,
+    );
+  };
+
   // Built: the cards are really in this deck, so other decks see them as taken. Never changes the cards.
   const toggleBuilt = () => {
     if (!deck) return;
@@ -747,7 +885,7 @@ export function Builder({ id }: { id: string }) {
   const count = deckCount(deck);
   const rating = analysis?.rating;
   const noCollection = status?.counts.collection === 0;
-  const broken = rating ? brokenRules(rating, count) : [];
+  const broken = rating ? brokenRules(rating, count, DECK_SIZE) : [];
   const needsColor = rating?.violations.some((v) => v.code === 'needs-color') || deck.chosenColor !== null;
   const detailEntry = detail ? entryOf(deck, detail) : undefined;
   const detailIsCommander = !!detail && deck.commanders.includes(detail);
@@ -761,8 +899,10 @@ export function Builder({ id }: { id: string }) {
   const manual = activeCollection?.kind === 'manual';
   const offer = analysis?.boxMatch && boxLinked === false ? analysis.boxMatch : null;
   const takes = analysis && analysis.conflicts.byHolder.length > 0;
-  const notice = takes || offer ? (
+  const crafts = craftOpen && analysis?.arena && analysis.arena.toCraft.length > 0 ? analysis.arena : null;
+  const notice = takes || offer || crafts ? (
     <>
+      {crafts && <CraftSection report={crafts} lookup={lookup} onOpen={openCard} onClose={() => setCraftOpen(false)} />}
       {takes && (
         <HeldSummary
           conflicts={analysis.conflicts}
@@ -787,7 +927,7 @@ export function Builder({ id }: { id: string }) {
       ? 'Choose a commander first'
       : problems === 0
         ? 'Nothing to fix'
-        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses Only my collection, Use free copies only and the price cap set under Improve; Undo puts the deck back.`;
+        : `Make the deck legal and ${DECK_SIZE} cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses Only my collection, Use free copies only and the price cap set under Improve; Undo puts the deck back.`;
   const fixResult = fixed ? (
     <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
       <ResultPanel
@@ -798,7 +938,7 @@ export function Builder({ id }: { id: string }) {
         lookup={lookup}
         heldBy={fixed.heldBy}
         note={
-          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after the ${fixed.kind}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
+          [fixed.note, fixed.after && deck !== fixed.after ? `The deck changed after ${fixed.kind === 'package' ? 'Complete package' : `the ${fixed.kind}`}, so it can no longer be undone in one step.` : null].filter(Boolean).join(' ') || null
         }
         onUndo={fixed.after && deck === fixed.after ? undoResult : undefined}
         onDismiss={() => {
@@ -846,7 +986,8 @@ export function Builder({ id }: { id: string }) {
             data-testid="deck-name"
           />
           <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1">
-            <span className={`chip ${count === 100 ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / 100</span>
+            <span className={`chip ${count === DECK_SIZE ? 'text-bone' : 'border-band-mid text-band-mid'}`} data-testid="deck-count">{count} / {DECK_SIZE}</span>
+            <FormatChip format={format} collection={deckCollection} other={otherCollection} busy={moving || !!busy} onMove={(to) => void moveTo(to)} onSwitch={switchFormat} standardBrawlCards={status?.counts.standardBrawl} />
             {manual && (
               <button
                 type="button"
@@ -864,7 +1005,7 @@ export function Builder({ id }: { id: string }) {
               <button
                 type="button"
                 className={`chip ${rating.legal ? 'border-band-top text-band-top' : broken.length ? 'border-band-low text-band-low' : ''}`}
-                title={rating.legal ? 'Follows every Commander deck-building rule' : rating.violations.map((v) => v.message).join('\n')}
+                title={rating.legal ? `Follows every ${std ? 'MTG Arena Standard Brawl' : brawl ? 'MTG Arena Brawl' : 'Commander'} deck-building rule` : rating.violations.map((v) => v.message).join('\n')}
                 onClick={() => setPanel('rating')}
                 data-testid="legality"
               >
@@ -873,20 +1014,24 @@ export function Builder({ id }: { id: string }) {
             )}
             {analysis && (
               <>
-                <button type="button" className="chip hover:text-bone" onClick={() => setPanel('bracket')} title="The lowest bracket the hard rules allow for this list" data-testid="chip-floor">
-                  Minimum bracket {analysis.bracket.floor}
-                </button>
-                <button type="button" className={`chip hover:text-bone ${analysis.bracket.playsLike !== deck.targetBracket ? 'border-band-good text-band-good' : ''}`} onClick={() => setPanel('bracket')} data-testid="chip-plays-like">
-                  Plays like {analysis.bracket.playsLike}
-                </button>
-                {analysis.bracket.violationsOfTarget.length > 0 && (
+                {!std && (
+                  <button type="button" className="chip hover:text-bone" onClick={() => setPanel('bracket')} title="The lowest bracket the hard rules allow for this list" data-testid="chip-floor">
+                    Minimum bracket {analysis.bracket.floor}
+                  </button>
+                )}
+                {!std && (
+                  <button type="button" className={`chip hover:text-bone ${analysis.bracket.playsLike !== deck.targetBracket ? 'border-band-good text-band-good' : ''}`} onClick={() => setPanel('bracket')} data-testid="chip-plays-like">
+                    Plays like {analysis.bracket.playsLike}
+                  </button>
+                )}
+                {!std && analysis.bracket.violationsOfTarget.length > 0 && (
                   <button type="button" className="chip border-band-low text-band-low" onClick={() => setPanel('bracket')} title="Cards or combos in the deck that the target bracket does not allow" data-testid="chip-over-bracket">
                     Over Bracket {deck.targetBracket} ({analysis.bracket.violationsOfTarget.length})
                   </button>
                 )}
                 {analysis.unknown.length > 0 && <span className="chip border-band-low text-band-low">{analysis.unknown.length} unknown</span>}
                 {analysis.edhrec !== 'ready' && (
-                  <span className="text-[0.75rem] text-smoke" title="EDHREC play data is off or not available. It can be switched on under Card data.">Scored from card text and tags</span>
+                  <span className="text-[0.75rem] text-smoke" title={std ? 'EDHREC has no data for Standard Brawl.' : 'EDHREC play data is off or not available. It can be switched on under Card data.'}>Scored from card text and tags</span>
                 )}
               </>
             )}
@@ -894,6 +1039,7 @@ export function Builder({ id }: { id: string }) {
               {saveState === 'saving' || deck !== settled ? 'Saving' : saveState === 'failed' ? 'Not saved' : dirty.current ? 'Saved' : ''}
             </span>
           </div>
+          {analysis?.arena && <WildcardLine report={analysis.arena} open={craftOpen} onToggle={() => setCraftOpen((o) => !o)} />}
           {needsColor && (
             <div className="mt-1 flex items-center gap-1.5 px-1 text-[0.8rem] text-ash" data-testid="chosen-color">
               <span>Chosen colour</span>
@@ -906,8 +1052,11 @@ export function Builder({ id }: { id: string }) {
           )}
         </div>
 
+        {!std && (
         <div className="shrink-0">
-          <div className="mb-1 text-[0.75rem] text-ash">Target bracket: {bracketName(deck.targetBracket)}</div>
+          <div className="mb-1 text-[0.75rem] text-ash" title={brawl ? 'MTG Arena has no brackets; the builder uses them as its power setting' : undefined} data-testid="bracket-label">
+            {brawl ? `Power level, Commander brackets; Arena ignores this: ${bracketName(deck.targetBracket)}` : `Target bracket: ${bracketName(deck.targetBracket)}`}
+          </div>
           <div className="seg" role="group" aria-label="Target bracket">
             {BRACKETS.map((b) => (
               <button key={b.n} type="button" aria-pressed={deck.targetBracket === b.n} title={`${b.name}. ${b.blurb}`} onClick={() => mutate((d) => ({ ...d, targetBracket: b.n as Bracket }))} data-testid={`target-${b.n}`}>
@@ -916,6 +1065,7 @@ export function Builder({ id }: { id: string }) {
             ))}
           </div>
         </div>
+        )}
 
         <button type="button" className={`shrink-0 rounded-md px-1 ${analysing ? 'opacity-70' : ''}`} onClick={() => setPanel('rating')} title="Open the rating" data-testid="header-gauge">
           {rating ? <Gauge value={rating.rating} partial={!rating.complete} legal={broken.length === 0} size={112} /> : <div className="skeleton h-[4.3rem] w-28 rounded-md" />}
@@ -942,7 +1092,7 @@ export function Builder({ id }: { id: string }) {
               items={[
                 {
                   label: 'Auto-build',
-                  description: 'A new 100-card deck around the commander. Locked cards stay.',
+                  description: `A new ${DECK_SIZE}-card deck around the commander. Locked cards stay.`,
                   onSelect: () => void rebuild('auto', 'auto', 1),
                   disabled: !!busy || noCommander,
                   title: noCommander ? 'Choose a commander first' : undefined,
@@ -952,8 +1102,8 @@ export function Builder({ id }: { id: string }) {
                   label: 'Fill the rest',
                   description: 'Keeps every card and adds the best ones for the empty slots.',
                   onSelect: () => void rebuild('fill', 'fill'),
-                  disabled: !!busy || noCommander || count >= 100,
-                  title: noCommander ? 'Choose a commander first' : count >= 100 ? 'The deck already has 100 cards' : undefined,
+                  disabled: !!busy || noCommander || count >= DECK_SIZE,
+                  title: noCommander ? 'Choose a commander first' : count >= DECK_SIZE ? `The deck already has ${DECK_SIZE} cards` : undefined,
                   testId: 'fill',
                 },
                 {
@@ -1000,6 +1150,15 @@ export function Builder({ id }: { id: string }) {
               <input type="checkbox" checked={ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
               <span className="max-w-[15rem] truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
             </label>
+            {brawl && (
+              <label
+                className={`flex items-center gap-1.5 ${ownedOnly ? 'text-smoke' : 'cursor-pointer'}`}
+                title="Builds and suggestions keep the cards you do not own within your MTG Arena wildcards, per rarity (set them on the Collection page). Off: the whole Arena pool."
+              >
+                <input type="checkbox" checked={craftOnly} disabled={ownedOnly} onChange={(e) => setFilters({ craftOnly: e.target.checked })} data-testid="craft-only" />
+                <span className="truncate">Only what I can craft</span>
+              </label>
+            )}
             {manual && (
               <label
                 className={`flex shrink-0 items-center gap-1.5 ${ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
@@ -1025,12 +1184,15 @@ export function Builder({ id }: { id: string }) {
             query={query}
             setQuery={setQuery}
             extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+            themePackages={themePackages}
             held={held}
             onAdd={addFromBrowser}
             onRemove={remove}
             onOpen={openCard}
             searchRef={searchRef}
             onHide={() => setFilters({ browser: false })}
+            brawl={brawl}
+            size={DECK_SIZE}
           />
         )}
         {panel === 'network' && (
@@ -1083,13 +1245,13 @@ export function Builder({ id }: { id: string }) {
         />}
         <aside className="flex min-h-0 flex-col border-l border-slag bg-anvil" aria-label="Deck analysis">
           <div className="flex shrink-0 border-b border-slag" role="tablist">
-            {PANELS.map((p) => (
+            {PANELS.filter((p) => !(std && p.id === 'bracket')).map((p) => (
               <button
                 key={p.id}
                 type="button"
                 role="tab"
                 aria-selected={panel === p.id}
-                className={`display flex-1 border-b-2 py-2.5 text-[0.98rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
+                className={`display flex-1 border-b-2 px-1 py-2.5 text-[0.9rem] ${panel === p.id ? 'border-brass text-bone' : 'border-transparent text-ash hover:text-bone'}`}
                 onClick={() => setPanel(p.id)}
                 data-testid={`tab-${p.id}`}
               >
@@ -1113,13 +1275,30 @@ export function Builder({ id }: { id: string }) {
                 onOpen={openCard}
                 onAddOne={(role) => void addOne(role)}
                 onWanted={(role, n) => mutate((d) => {
+                  // Ramp, Card draw and Removal are core packages: pinned exactly as the Packages tab pins them.
+                  const core = role === 'ramp' ? 'ramp' : role === 'draw' ? 'draw' : role === 'spot-removal' ? 'removal' : null;
+                  if (core) return pinPackage(d, analysis.packages, analysis.targets, core, n);
                   const next = { ...(d.roleTargets ?? {}) };
                   if (n === null) delete next[role];
                   else next[role] = n;
                   return { ...d, roleTargets: Object.keys(next).length > 0 ? next : null };
                 })}
               />
-            ) : panel === 'bracket' ? (
+            ) : panel === 'packages' ? (
+              <PackagesPanel
+                analysis={analysis}
+                deck={deck}
+                busy={busy}
+                highlight={highlight}
+                onComplete={(id) => void runPackage(id, false)}
+                onAdd={(id) => void runPackage(id, true)}
+                onPin={(id, n) => mutate((d) => pinPackage(d, analysis.packages, analysis.targets, id, n))}
+                onShow={(id) => {
+                  setQuery({ ...DEFAULT_QUERY, package: id, hideInDeck: true, fromFix: null });
+                  showBrowser();
+                }}
+              />
+            ) : panel === 'bracket' && !std ? (
               <BracketPanel analysis={analysis} deck={deck} lookup={lookup} onOpen={openCard} onShowCombos={showCombos} />
             ) : panel === 'network' ? (
               net.network ? (
@@ -1154,6 +1333,8 @@ export function Builder({ id }: { id: string }) {
                 ownedOnly={ownedOnly}
                 onOwnedOnly={setOwnedOnly}
                 showFreeOnly={manual}
+                showPrice={!brawl}
+                showBracket={!std}
                 freeOnly={freeOnly}
                 onFreeOnly={setFreeOnly}
                 setOptions={setOptions}
@@ -1234,6 +1415,7 @@ export function Builder({ id }: { id: string }) {
             <PutItIn
               card={detailCard}
               count={count}
+              size={DECK_SIZE}
               another={!!detailEntry}
               state={swapin?.id === detail ? swapin : null}
               why={swapWhy}
@@ -1298,6 +1480,11 @@ export function Builder({ id }: { id: string }) {
                       ? 'Copied to the clipboard. In Arena open Decks and press Import.'
                       : 'Copied to the clipboard. It pastes into Moxfield, Archidekt and most other deck sites.'}
                 </p>
+                {exported.format === 'arena' && brawl && (
+                  <p className="mt-2 max-w-[44rem] text-[0.88rem] text-ash" data-testid="export-printings">
+                    Cards you do not own carry the set and number of their cheapest Arena printing, so Arena crafts that one with the wildcard counted above.
+                  </p>
+                )}
                 {exported.format === 'arena' && exported.notOnArena && exported.notOnArena.length > 0 && (
                   <p className="mt-2 max-w-[44rem] text-[0.88rem] text-band-mid" data-testid="export-not-on-arena">
                     {exported.notOnArena.length} {exported.notOnArena.length === 1 ? 'card is' : 'cards are'} not on Arena and will not import: {exported.notOnArena.join(', ')}.

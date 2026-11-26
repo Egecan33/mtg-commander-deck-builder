@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { findCombos } from '@/engine/brackets';
+import { autoBuild } from '@/engine/builder';
 import { axisLabel } from '@/engine/features';
-import { cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
+import { CLUSTER_MIN_EDGE, clusterNetwork, cohesionOf, deckNetwork, linkIndex } from '@/engine/network';
+import { packageCohesion } from '@/engine/packages';
 import { createScorer } from '@/engine/scoring';
 import { deckCards, resolveThemeWeights } from '@/engine/summary';
-import type { DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
+import type { Deck, DeckNetwork, EngineContext, NetworkCluster, NetworkEdge, NetworkNode } from '@/engine/types';
 import { card, fixtureDb } from '../helpers/fixture-db';
 import { fixtureDeck, oddDeck, withTenRandom } from '../helpers/network';
 
@@ -201,6 +203,40 @@ describe('deckNetwork', () => {
     expect(a.clusters.some((c) => c.name === 'Elf typal')).toBe(true);
   });
 
+  it('a two-theme deck splits into at least two clusters, and none holds most of the non-staple cards', () => {
+    const nonStaple = (net: DeckNetwork) => net.nodes.filter((n) => !n.commander && !n.staple).length;
+    const staple = (net: DeckNetwork) => new Set(net.nodes.filter((n) => n.staple).map((n) => n.oracleId));
+    /** The most non-staple cards any one cluster holds. */
+    const biggest = (net: DeckNetwork) => Math.max(...net.clusters.map((c) => c.cards.filter((id) => !staple(net).has(id)).length));
+    // the cEDH list has several themes
+    expect(nets.cedh.clusters.length).toBeGreaterThanOrEqual(2);
+    // an Elf deck that also holds the precon's Dragons: two clear themes
+    const have = new Set(upgraded.main.map((e) => e.oracleId));
+    const dragons = precon.main.filter((e) => !have.has(e.oracleId) && (db.features(e.oracleId)?.axes['typal:dragon']?.e ?? 0) >= 0.5 && (db.features(e.oracleId)?.landWeight ?? 0) < 1);
+    expect(dragons.length).toBeGreaterThanOrEqual(20);
+    const net = deckNetwork({ ...upgraded, main: [...upgraded.main, ...dragons] }, ctx);
+    expect(net.clusters.length).toBeGreaterThanOrEqual(2);
+    expect(net.clusters.map((c) => c.name)).toEqual(expect.arrayContaining(['Elf typal', 'Dragon typal']));
+    // "most" is more than half (package cards count as staples since the core packages count tags)
+    expect(biggest(net)).toBeLessThanOrEqual(nonStaple(net) / 2);
+  });
+
+  it('clusters use only theme edges of at least the minimum weight, never a commander spoke', () => {
+    for (const net of [nets.precon, nets.upgraded, nets.cedh]) {
+      const cluster = new Map<string, number>();
+      for (const c of net.clusters) for (const id of c.cards) cluster.set(id, c.id);
+      const isCommander = new Set(net.nodes.filter((n) => n.commander).map((n) => n.oracleId));
+      expect(net.clusters.every((c) => c.cards.every((id) => !isCommander.has(id)))).toBe(true);
+      // every clustered card has a theme edge of at least the minimum weight to another card of its cluster
+      const ok = new Set<string>();
+      for (const e of net.edges) {
+        if (e.kind === 'commander' || e.weight < CLUSTER_MIN_EDGE) continue;
+        if (cluster.has(e.a) && cluster.get(e.a) === cluster.get(e.b)) { ok.add(e.a); ok.add(e.b); }
+      }
+      for (const id of cluster.keys()) expect(ok.has(id), id).toBe(true);
+    }
+  });
+
   it('cohesion follows its formula', () => {
     const node = (id: string, unconnected = false): NetworkNode => ({
       oracleId: id, qty: 1, commander: false, staple: false, roles: [], axes: [], degree: 0, link: 0, cluster: null, unconnected,
@@ -249,5 +285,61 @@ describe('deckNetwork', () => {
     const many = odd.main[0].oracleId;
     expect(net.nodes.filter((n) => n.oracleId === many)).toHaveLength(1);
     expect(net.nodes.find((n) => n.oracleId === many)?.qty).toBe(30);
+  });
+});
+
+// Review M5: every spoke hung off the first partner.
+describe('partner commanders', () => {
+  it("a card's commander spoke goes to the partner it works with", () => {
+    const shell: Deck = {
+      id: null, name: 'partners', commanders: [card('Thrasios, Triton Hero').oracleId, card('Tymna the Weaver').oracleId], companion: null,
+      chosenColor: null, main: [], targetBracket: 3, themeWeights: null,
+    };
+    const deck = autoBuild(shell, ctx, { ownedOnly: false, owned: null, maxPriceUsd: null, seed: 1 });
+    const net = deckNetwork(deck, ctx);
+    const cmds = new Set(deck.commanders);
+    const themeWith = (id: string, cmd: string) => Math.max(0, ...net.edges.filter((e) => THEME.has(e.kind) && ((e.a === id && e.b === cmd) || (e.b === id && e.a === cmd))).map((e) => e.weight));
+    const seen = new Set<string>();
+    for (const e of net.edges) {
+      if (e.kind !== 'commander' || (cmds.has(e.a) && cmds.has(e.b))) continue;
+      const cmd = cmds.has(e.a) ? e.a : e.b;
+      const other = [...cmds].find((x) => x !== cmd)!;
+      const id = e.a === cmd ? e.b : e.a;
+      expect(themeWith(id, cmd), db.get(id)!.name).toBeGreaterThanOrEqual(themeWith(id, other));
+      seen.add(cmd);
+    }
+    expect(seen.size).toBe(2);
+  });
+});
+
+// Review I4: functional ("spice") packages were unconnected by construction.
+describe('functional package co-members', () => {
+  const books = ['Spellbook', 'Library of Leng'].map((n) => card(n).oracleId);
+  const withBooks = (pinned: boolean): Deck => {
+    const out = upgraded.main.filter((e) => e.qty === 1 && !db.features(e.oracleId)!.roles.length && (db.features(e.oracleId)!.landWeight ?? 0) < 1).slice(0, 2).map((e) => e.oracleId);
+    const main = [...upgraded.main.filter((e) => !out.includes(e.oracleId)), ...books.map((id) => ({ oracleId: id, qty: 1, locked: false }))];
+    return { ...upgraded, main, packageTargets: pinned ? { 'fn:max-hand-size': 8 } : null };
+  };
+
+  it('connect to each other through a package edge when the package is pinned', () => {
+    expect(deckNetwork(withBooks(false), ctx).unconnected).toEqual(expect.arrayContaining(books));
+    const deck = withBooks(true);
+    const net = deckNetwork(deck, ctx);
+    for (const id of books) expect(net.unconnected, db.get(id)!.name).not.toContain(id);
+    const edge = net.edges.find((e) => e.kind === 'package' && books.includes(e.a) && books.includes(e.b));
+    expect(edge).toBeDefined();
+    expect(edge!.reasons[0]).toMatch(/Max hand size/);
+    // the scorer agrees: no connection penalty for them
+    const scorer = createScorer(deck, ctx);
+    for (const id of books) expect(scorer.score(db.get(id)!).reasons.join(' ')).not.toMatch(/connects to nothing/);
+    // and the package's own cohesion reads them as linked
+    expect(packageCohesion(net, books)).toEqual({ linked: 2, of: 2 });
+  });
+
+  it('package edges never make clusters', () => {
+    const net = deckNetwork(withBooks(true), ctx);
+    const plain = net.edges.filter((e) => e.kind !== 'package');
+    expect(clusterNetwork(net.nodes, net.edges, db, 1)).toEqual(clusterNetwork(net.nodes, plain, db, 1));
+    expect(cohesionOf(net.nodes, net.edges, net.clusters).parts.clustered).toBe(cohesionOf(net.nodes, plain, net.clusters).parts.clustered);
   });
 });

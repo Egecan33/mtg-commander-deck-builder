@@ -1,9 +1,10 @@
 import { analyzeBracket } from '../brackets';
+import { deckSizeFor, formatOf } from '../format';
 import { rateDeck } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
-import { ROLE_LABEL, ROLE_TARGET_MAX, roleNeeds, scaleTargets, targetsFor } from '../targets';
+import { ROLE_LABEL, ROLE_TARGET_MAX, pinFor, roleNeeds, scaleTargets, targetsFor } from '../targets';
 import type { AxisId, Bracket, BuildOptions, CardFeatures, Color, Deck, EngineContext, ImproveGoals, Role, SwapProposal } from '../types';
 import {
   COLOR_NAME, MAX_PROPOSALS, applySwaps, basicCandidates, bestOf, bestReplacement, colourBalance, comboPieces, cuttable, improveDeck as improvePlain,
@@ -28,7 +29,6 @@ const FORCED_THEME = 3;
 const FORCED_TRIES = 10;
 /** A rating has to fall by more than this for the engine to object. */
 const DISSENT = 0.05;
-const DECK_SIZE = 100;
 
 /** "a win condition", for reasons. */
 const ROLE_ONE: Partial<Record<Role, string>> = {
@@ -76,9 +76,10 @@ export function goalDeck(deck: Deck, ctx: EngineContext, goals: ImproveGoals): D
     const roleTargets: NonNullable<Deck['roleTargets']> = { ...(d.roleTargets ?? {}) };
     for (const role of g.roles) {
       const need = needs.find((x) => x.role === role);
-      if (!need) continue; // no band for this deck (counterspells outside blue)
+      if (!need) continue; // no band for this deck (counterspells count inside Removal)
       const top = need.band.hi + EMPHASIS_RAISE;
-      roleTargets[role] = Math.min(ROLE_TARGET_MAX, top, Math.max(need.band.lo + EMPHASIS_RAISE, need.count + EMPHASIS_STEP));
+      // The want is in the entry's own count (the Removal package for removal); the pin is its spot-removal share.
+      roleTargets[role] = pinFor(role, Math.min(ROLE_TARGET_MAX, top, Math.max(need.band.lo + EMPHASIS_RAISE, need.count + EMPHASIS_STEP)), targets);
     }
     d = { ...d, roleTargets };
   }
@@ -205,7 +206,7 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
     }
   }
 
-  if (g.bracketChanged && g.bracket >= 3) {
+  if (g.bracketChanged && g.bracket >= 3 && formatOf(ctx.db) !== 'standardbrawl') {
     const start = proposals.length;
     tries = 0;
     while (proposals.length < limit && proposals.length - start < FORCED_POWER && tries < FORCED_TRIES) {
@@ -291,8 +292,8 @@ export function improveDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, 
 
 const r1 = (n: number): string => String(Math.round(n * 10) / 10);
 
-/** Land candidates for `addOne`: fixers, the pool's other lands and the deck's basics, each once. */
-function landCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
+/** Land candidates for `addOne` and Fix deck's mana stage: fixers, the pool's other lands and the deck's basics, each once. */
+export function landCandidates(pool: Pool, ctx: EngineContext): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const c of [...pool.fixers, ...pool.lands, ...basicCandidates(pool, ctx)]) {
@@ -324,10 +325,10 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
   const scorer = createScorer(deck, ctx);
   const have = idsOf(deck);
   const fits = planFilter(deck, ctx, pool);
-  const open = deckCount(deck) < DECK_SIZE;
+  const open = deckCount(deck) < deckSizeFor(ctx.db);
   const summary = summarizeDeck(deck, db);
   const full = targetsFor(deck, ctx, summary);
-  const targets = open ? scaleTargets(full, summary.cardCount) : full;
+  const targets = open ? scaleTargets(full, summary.cardCount, deckSizeFor(ctx.db)) : full;
   const needs = roleNeeds(deck, ctx, { summary, targets: full, scaled: open });
   const bracket = deck.targetBracket;
   const one = ROLE_ONE[role] ?? role;
@@ -380,7 +381,7 @@ export function addOne(deck: Deck, ctx: EngineContext, opts: BuildOptions, role:
     const shown = Math.round(score - c.jitter - c.adjust);
     const objections: string[] = [];
     if (need && need.count >= need.band.hi) {
-      objections.push(`you already have ${need.count} ${need.label}, and ${need.band.lo}-${need.band.hi} is plenty at Bracket ${bracket}`);
+      objections.push(`you already have ${need.count} ${need.label}, and ${need.band.lo}-${need.band.hi} is plenty${formatOf(ctx.db) === 'standardbrawl' ? '' : ` at Bracket ${bracket}`}`);
     }
     if (landsOver) objections.push(`the deck already holds ${r1(summary.landsEffective)} lands where its curve wants about ${targets.lands}`);
     if (after < before - DISSENT) {
@@ -491,7 +492,7 @@ export function swapIn(deck: Deck, ctx: EngineContext, opts: BuildOptions, inId:
   const inScore = scorer.score(inCard);
   if (inScore.gate) return [];
 
-  const open = deckCount(deck) < DECK_SIZE;
+  const open = deckCount(deck) < deckSizeFor(ctx.db);
   const summary = summarizeDeck(deck, db);
   const landsOver = summary.landsEffective > targetsFor(deck, ctx, summary).lands;
   const roles: Role[] = c.f.roles.filter((r) => r !== 'land' && r !== 'game-changer' && r !== 'mass-land-denial' && r !== 'extra-turn');
@@ -510,7 +511,7 @@ export function swapIn(deck: Deck, ctx: EngineContext, opts: BuildOptions, inId:
   const made: { p: SwapProposal; same: boolean; cut: number }[] = [];
   if (open) {
     const after = shownRating(rateDeck(addCard(deck, inId), ctx));
-    const p: SwapProposal = { out: '', in: inId, reason: `${inCard.name} (${score}) fits in an open slot; the deck is under 100 cards, so nothing is cut.`, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
+    const p: SwapProposal = { out: '', in: inId, reason: `${inCard.name} (${score}) fits in an open slot; the deck is under ${deckSizeFor(ctx.db)} cards, so nothing is cut.`, ratingBefore: before, ratingAfter: after, agrees: after >= before - DISSENT };
     if (!p.agrees) p.objection = `Adding ${inCard.name} drops the rating ${before} -> ${after}.`;
     made.push({ p, same: true, cut: -Infinity });
   }

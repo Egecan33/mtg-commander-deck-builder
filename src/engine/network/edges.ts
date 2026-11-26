@@ -1,10 +1,17 @@
+import { bracketOf } from '../format';
 import { axisLabel } from '../features';
 import { cardFitsDeck } from '../rules';
 import { AXIS_MEMBER, deckCards, isLandCard, namedTypes } from '../summary';
+import { inPackage, packageDef, packageMembers } from '../packages/catalogue';
+import type { PackageDef } from '../packages/catalogue';
+import { ROLE_LABEL, coverageRoles } from '../targets';
 import type { AxisId, Card, CardDb, CardFeatures, Combo, Deck, NetworkEdge, Role } from '../types';
 
-/** Roles that put a card on the staple ring: they are in the deck for the deck's balance, not for a partner. */
-export const RING_ROLES: readonly Role[] = ['ramp', 'fast-mana', 'draw', 'spot-removal', 'protection', 'tutor', 'wipe', 'counterspell'];
+/**
+ * Roles that put a card on the staple ring: they are in the deck for the deck's balance, not for a
+ * partner. Every role the rating holds against a band is one (`ROLE_LABEL`), plus fast mana.
+ */
+export const RING_ROLES: readonly Role[] = [...(Object.keys(ROLE_LABEL) as Role[]), 'fast-mana'];
 /** The weakest link that still counts as a connection. */
 export const UNCONNECTED_EDGE = 0.15;
 /** Commander synergy from here up also keeps a card from being unconnected. */
@@ -13,13 +20,36 @@ export const TYPAL_EDGE = 0.6;
 export const COMBO_EDGE = 1;
 export const ONE_AWAY_EDGE = 0.5;
 export const MAX_EDGES_PER_NODE = 12;
+/** Weight of a `package` edge between two cards of a pinned functional package. */
+export const PACKAGE_EDGE = 0.5;
+
+/**
+ * The deck's planned functional packages (functional packages are planned when the user pins them:
+ * `deck.packageTargets`) and their members among the deck's nonland cards, each package once.
+ */
+export function functionalPackages(deck: Deck, db: CardDb): { def: PackageDef; ids: string[] }[] {
+  const out: { def: PackageDef; ids: string[] }[] = [];
+  for (const [id, n] of Object.entries(deck.packageTargets ?? {})) {
+    const def = packageDef(id);
+    if (!def || def.kind !== 'functional' || typeof n !== 'number' || !Number.isFinite(n)) continue;
+    const ids = packageMembers(deck, db, def).ids.filter((x) => !deck.commanders.includes(x));
+    out.push({ def, ids });
+  }
+  return out;
+}
 /** A payoff strength from here up pays off a type or a theme. */
 const PAYOFF = 0.5;
 
 export const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 const num = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
 
-export const isRingCard = (f: CardFeatures): boolean => f.roles.some((r) => RING_ROLES.includes(r));
+/**
+ * A staple: a card with a ring role. Given the card, the deck's bracket and the card's tags, every
+ * entry of the rating's role coverage counts too (`coverageRoles`: a core package by role or tag, a
+ * cheap cantrip as card draw at Brackets 4-5).
+ */
+export const isRingCard = (f: CardFeatures, card?: Card, bracket?: number, tags: readonly string[] = []): boolean =>
+  f.roles.some((r) => RING_ROLES.includes(r)) || (!!card && bracket !== undefined && coverageRoles(card, f, tags, bracket).length > 0);
 
 /** The name without its epithet: Ezuri, Claw of Progress -> Ezuri. */
 export function shortName(card: Card): string {
@@ -235,12 +265,13 @@ export function comboEdges(deck: Deck, db: CardDb): NetworkEdge[] {
 
 // ---- the link index --------------------------------------------------------------------------
 
-export interface LinkStrongest { weight: number; kind: 'combo' | 'feeds' | 'typal'; with: string }
+export interface LinkStrongest { weight: number; kind: 'combo' | 'feeds' | 'typal' | 'package'; with: string }
 
 /**
  * Answers "how strongly does this card link to the rest of the deck" without building the
  * network: the raw maximum of the combo, feeds and typal rules, values under UNCONNECTED_EDGE
- * included, never pairing a card with itself. For a card outside the deck it answers "if it were added".
+ * included, and the package link to another card of a pinned functional package, never pairing a
+ * card with itself. For a card outside the deck it answers "if it were added".
  */
 export function linkIndex(deck: Deck, db: CardDb, weights: Record<AxisId, number>): { strongest(card: Card): LinkStrongest | null } {
   const named = namedTypes(weights);
@@ -299,6 +330,7 @@ export function linkIndex(deck: Deck, db: CardDb, weights: Record<AxisId, number
   const inDeck = new Set<string>([...deck.commanders, ...deck.main.filter((e) => e.qty > 0).map((e) => e.oracleId)]);
   const nodes = nodeIds(deck, db);
   const fits = fitsFn(deck, db);
+  const functional = functionalPackages(deck, db);
 
   function comboWithAdded(card: Card): { weight: number; with: string } | null {
     let best: { weight: number; with: string } | null = null;
@@ -345,6 +377,12 @@ export function linkIndex(deck: Deck, db: CardDb, weights: Record<AxisId, number
         offer(TYPAL_EDGE, 'typal', other(commandersIn, self));
       }
       if (commandersIn.includes(self)) offer(TYPAL_EDGE, 'typal', other(memberOfNamed(self), self));
+      // a pinned functional package: its cards do the same job together
+      if (!isLandCard(f) && !commanderIds.has(self)) {
+        for (const { def, ids } of functional) {
+          if (inPackage(def, card, f, db.tagSlugs?.(self) ?? [], bracketOf(deck, db))) offer(PACKAGE_EDGE, 'package', other(ids, self));
+        }
+      }
       return best;
     },
   };

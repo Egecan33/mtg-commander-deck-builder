@@ -1,12 +1,15 @@
 import { bracketGate } from '../brackets';
+import { bracketOf, deckSizeFor, formatOf, spreadWeights } from '../format';
 import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
+import { isLegalIn } from '../format';
 import { karstenSources } from '../mana';
+import { BASIC_LAND_QUALITY, rankQuality, rawQuality } from './quality';
 import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
-import { ROLE_LABEL, bandRoles, roleNeeds, targetsFor } from '../targets';
+import { ROLE_LABEL, coverageRoles, roleNeeds, targetsFor } from '../targets';
 import type {
   AxisId, Bracket, Card, CardDb, CardFeatures, CardScore, Color, Combo, Deck, DeckSummary, EdhrecData, EngineContext, Role,
   ScorePart, Targets,
@@ -40,34 +43,6 @@ const signed = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 
 // ---- quality -------------------------------------------------------------------------------
 
-/** EDHREC rank → quality, through log10(rank). Anchors follow deck-theory.md §6.4, smoothed. */
-const RANK_CURVE: readonly (readonly [number, number])[] = [
-  [0, 1], [1.7, 1], [2, 0.93], [2.7, 0.8], [3.18, 0.6], [3.6, 0.38], [4, 0.2], [4.5, 0.06],
-];
-const UNRANKED_QUALITY = 0.08;
-const BASIC_LAND_QUALITY = 0.6;
-
-function rankQuality(rank: number | null | undefined): number {
-  if (rank === null || rank === undefined || !(rank >= 1)) return UNRANKED_QUALITY;
-  const x = Math.log10(rank);
-  for (let i = 1; i < RANK_CURVE.length; i++) {
-    const [x1, y1] = RANK_CURVE[i];
-    if (x <= x1) {
-      const [x0, y0] = RANK_CURVE[i - 1];
-      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-    }
-  }
-  return RANK_CURVE[RANK_CURVE.length - 1][1];
-}
-
-/** Mana value a role's cards normally cost; each mana above it costs quality. */
-const ROLE_BASELINE: Partial<Record<Role, number>> = { ramp: 2, 'spot-removal': 2, counterspell: 2, draw: 3, tutor: 3, wipe: 5 };
-/** Commander mana value from which mana rocks that make two or more mana are not held to the two-mana baseline. */
-const BIG_COMMANDER = [6];
-const MULTI_MANA = /\{T\}[^.\n]*: Add (\{[WUBRGC]\}){2,}|: Add (two|three|four|five|X) mana/;
-const OVERCOST_STEP = 0.05;
-const OVERCOST_MAX = 0.15;
-const INSTANT_BONUS = 0.05;
 /**
  * Power, not popularity, at Brackets 4-5: a card's quality there is at least what its power tier
  * earns ([Bracket 4, Bracket 5]). Mana Vault and Demonic Consultation are in few decks overall,
@@ -316,7 +291,7 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   // Gate: legality and colour identity. The common case is decided here; anything else goes
   // through cardFitsDeck, which knows the Rulebreaker commanders.
   let gate: Gate | null = null;
-  let fits = card.legality === 'legal' && !card.isMeldResult;
+  let fits = isLegalIn(card, db);
   if (fits && s.hasCommander) for (const c of card.colorIdentity) if (!s.identity.has(c)) { fits = false; break; }
   if (!fits) {
     const v = cardFitsDeck(card, deck, db);
@@ -393,27 +368,11 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
 
   // Quality: global popularity, a little for instant-speed interaction, less for costing too much.
+  const rankQ = isBasicLand(card) ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
   const basic = isBasicLand(card);
-  const rankQ = basic ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
-  let quality = rankQ;
-  let qualityText = basic ? 'basic land' : card.edhrecRank ? `EDHREC rank ${card.edhrecRank}` : 'no popularity data';
-  if (f && !land) {
-    const interaction = roles.includes('spot-removal') || roles.includes('counterspell') || roles.includes('wipe');
-    if (interaction && f.instantSpeed) { quality += INSTANT_BONUS; qualityText += ', instant speed'; }
-    let over = Infinity;
-    for (const role of roles) {
-      const base = ROLE_BASELINE[role];
-      if (base !== undefined) over = Math.min(over, mv - base);
-    }
-    // A creature or planeswalker brings a body with the effect; only plain spells are held to the role's price.
-    // Nor is a rock that makes two or more mana overpriced for a commander that costs six or more
-    // (Thran Dynamo and Gilded Lotus are how Kozilek gets cast).
-    const bigRock = roles.includes('ramp') && BIG_COMMANDER.some((n) => s.commanderMvs.has(n) || [...s.commanderMvs].some((m) => m >= n)) && MULTI_MANA.test(card.oracleText);
-    if (over !== Infinity && over >= 1 && !bigRock && !/\b(Creature|Planeswalker)\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) {
-      quality -= Math.min(OVERCOST_MAX, OVERCOST_STEP * Math.floor(over));
-      qualityText += ', costs more than most cards doing this job';
-    }
-  }
+  const raw = rawQuality(card, f, s.commanderMvs);
+  let quality = raw.quality;
+  let qualityText = raw.text;
   const tierTop = bracket >= 4 ? TIER_QUALITY[f?.powerTier ?? 0]?.[bracket - 4] : undefined;
   const tierQuality = tierTop === undefined ? undefined : tierTop - TIER_RANK_SPREAD * (1 - rankQ);
   if (tierQuality !== undefined && tierQuality > quality) {
@@ -431,7 +390,10 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
   quality = clamp01(quality);
 
-  const needRoles = f ? bandRoles(card, f, bracket).filter((r) => roleValue(r, bracket) !== undefined && !(noMana && r === 'ramp')) : [];
+  // The coverage entries the card counts toward (`roleNeeds`): its core packages by role or tag, the
+  // wipe slot, other band roles. A mana card that makes no mana for this commander fills no slot.
+  const tags = db.tagSlugs?.(card.oracleId) ?? [];
+  const needRoles = f && !noMana ? coverageRoles(card, f, tags, bracket).filter((r) => roleValue(r, bracket) !== undefined) : [];
   let synText = synAxis ? `${axisLabel(synAxis)} ${synSide === 'p' ? 'payoff' : 'piece'}${second ? ', fits a second theme' : ''}` : '';
   const themeMember = !land && syn >= THEME_MEMBER;
   if (land) syn *= LAND_THEME_SHARE;
@@ -501,11 +463,14 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
     fitText = `stronger than Bracket ${bracket} tables expect`;
   }
 
+  // Standard Brawl has no bracket: nothing here is a fit, a penalty or a reason.
+  if (weights.bracket === 0) { fitPts = 0; fitText = ''; fitSpeed = false; }
+
   const pipReq: [Color, number][] = [];
   if (f && !land) {
     for (const c of COLORS) {
       const pips = finite(f.pips[c]);
-      if (pips > 0) pipReq.push([c, karstenSources(pips, mv)]);
+      if (pips > 0) pipReq.push([c, karstenSources(pips, mv, deckSizeFor(ctx.db))]);
     }
   }
   const coreRoles = bracket >= 4 ? CORE_ROLES_HIGH : CORE_ROLES;
@@ -554,6 +519,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
   const { ctx, bracket } = s;
   const summary: DeckSummary = summarizeDeck(deck, ctx.db);
   const targets: Targets = targetsFor(deck, ctx, summary);
+  const size = deckSizeFor(ctx.db);
 
   const roleNeed: State['roleNeed'] = {};
   const roleText: State['roleText'] = {};
@@ -583,7 +549,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
   const sources = {} as Record<Color, number>;
   for (const c of COLORS) sources[c] = finite(summary.sources[c]) + (s.hasCommander && !s.identity.has(c) ? 0 : prior);
 
-  const slots = Math.max(1, 100 - targets.lands);
+  const slots = Math.max(1, size - targets.lands);
   const curveFit = CURVE_SHAPE[bracket - 1].map((share, i) => {
     const ratio = finite(summary.curve[i]) / Math.max(0.5, share * slots);
     return ratio <= 0.8 ? 1 : ratio >= 1.3 ? 0.2 : 1 - ((ratio - 0.8) / 0.5) * 0.8;
@@ -600,7 +566,7 @@ function buildState(deck: Deck, s: Setup, themeCount: number): State {
     counts: deckCounts(deck),
     roleNeed, roleText, roleBand, landNeed, landText, themeNeed, themeText, sources, curveFit, scarce,
     taplandsOver: finite(summary.taplands) >= targets.taplandCap,
-    landLight: summary.cardCount >= 60 && finite(summary.landsEffective) < targets.lands * (summary.cardCount / 100) - 3,
+    landLight: summary.cardCount >= 60 * (size / 100) && finite(summary.landsEffective) < targets.lands * (summary.cardCount / size) - 3,
   };
 }
 
@@ -663,10 +629,11 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   commanderLink(card: Card): number | null;
 } {
   const { db } = ctx;
-  const bracket = (Math.min(5, Math.max(1, Math.round(Number(deck.targetBracket) || 3)))) as Bracket;
+  const bracket = (Math.min(5, Math.max(1, Math.round(Number(bracketOf(deck, db)) || 3)))) as Bracket;
   const theme = resolveThemeWeights(deck, ctx) ?? {};
   const commanders = commanderCards(deck, db);
-  const weights: Weights = ctx.edhrec ? { ...WEIGHTS_EDHREC } : { ...WEIGHTS_PLAIN };
+  const noBracket = formatOf(db) === 'standardbrawl';
+  const weights: Weights = noBracket ? spreadWeights<PartKey>(ctx.edhrec ? WEIGHTS_EDHREC : WEIGHTS_PLAIN, 'bracket') : ctx.edhrec ? { ...WEIGHTS_EDHREC } : { ...WEIGHTS_PLAIN };
   // Theme weights are resolved once and pinned, so every leave-one-out deck reads the same ones.
   const pinned: Deck = { ...deck, targetBracket: bracket, themeWeights: theme };
   const pull: Record<AxisId, number> = {};
@@ -780,7 +747,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
   const allowedCombo = (info: ComboInfo): boolean => !(info.twoCard && (bracket <= 2 || (bracket === 3 && info.early)));
   const couldJoin = (oracleId: string): boolean => {
     const c = db.get(oracleId);
-    if (!c || c.legality !== 'legal' || c.isMeldResult) return false;
+    if (!c || !isLegalIn(c, db)) return false;
     return !(setup.hasCommander && c.colorIdentity.some((col) => !setup.identity.has(col)));
   };
   const completeStrength = (info: ComboInfo) => COMBO_COMPLETE[bracket - 1] * (COMBO_OBSCURE_SHARE + (1 - COMBO_OBSCURE_SHARE) * info.weight);
@@ -928,7 +895,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
 
     // A spell with no partner in the deck, no ring role and little synergy with the commander loses
     // up to CONNECTION_LOSS synergy points (the same test the network uses for "unconnected").
-    if (!stat.land && stat.f && !isRingCard(stat.f) && !commanderSlots.has(card.oracleId)) {
+    if (!stat.land && stat.f && !isRingCard(stat.f, card, bracket, db.tagSlugs?.(card.oracleId) ?? []) && !commanderSlots.has(card.oracleId)) {
       const link = commanderLink(card) ?? 0;
       if (link < UNCONNECTED_LINK) {
         const strongest = connectionIndex().strongest(card)?.weight ?? 0;

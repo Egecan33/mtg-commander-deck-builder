@@ -1,5 +1,14 @@
 export type Color = 'W' | 'U' | 'B' | 'R' | 'G';
 export type Bracket = 1 | 2 | 3 | 4 | 5;
+/**
+ * Which rules a deck is checked and built under: paper Commander, MTG Arena's 100-card Brawl, or
+ * MTG Arena's 60-card Standard Brawl.
+ */
+export type Format = 'commander' | 'brawl' | 'standardbrawl';
+/** The rarities MTG Arena has wildcards for. */
+export type ArenaRarity = 'common' | 'uncommon' | 'rare' | 'mythic';
+/** Wildcards per rarity: what the player has, or what a deck needs. */
+export type Wildcards = Record<ArenaRarity, number>;
 
 export interface CardFace {
   name: string; manaCost: string; typeLine: string; oracleText: string;
@@ -19,6 +28,10 @@ export interface Card {
   keywords: string[];
   power: string | null;    // front face
   producedMana: string[];
+  /**
+   * Commander legality as synced. In a Brawl view of the database (`formatCardDb`) it is the card's
+   * Brawl playability instead: 'legal' only when it is on Arena and legal in Brawl.
+   */
   legality: 'legal' | 'banned';
   gameChanger: boolean;
   edhrecRank: number | null;
@@ -26,6 +39,17 @@ export interface Card {
   faces: CardFace[];       // length 1 for single-faced cards
   imageFaces: 1 | 2;       // 2 only for transform / modal_dfc
   isMeldResult: boolean;
+  /**
+   * Lowest rarity among the card's printings that are on MTG Arena (the cheapest wildcard that
+   * crafts it); null when no printing is on Arena. Absent on card data synced before Arena mode (read as null).
+   */
+  arenaRarity?: ArenaRarity | null;
+  /** That cheapest Arena printing (the newest of them on a tie): Arena's set code and collector number. */
+  arenaPrinting?: { set: string; number: string } | null;
+  /** Scryfall's `legalities.brawl` (MTG Arena's 100-card Brawl). Absent on older data (read as 'not_legal'). */
+  brawlLegality?: 'legal' | 'banned' | 'not_legal';
+  /** Scryfall's `legalities.standardbrawl` (MTG Arena's 60-card Standard Brawl). Absent on older data (read as 'not_legal'). */
+  standardBrawlLegality?: 'legal' | 'banned' | 'not_legal';
 }
 
 export type Role =
@@ -64,6 +88,10 @@ export interface CardDb {
   byName(name: string): Card | undefined;   // case/diacritic-insensitive; full or front name
   all(): readonly Card[];                    // legal, non-meld-result cards only
   combosFor(oracleId: string): readonly Combo[];
+  /** The format whose pool `all()` holds and whose legality `legality` reports; absent means 'commander'. */
+  format?: Format;
+  /** Rolled-up Scryfall Tagger slugs; absent on a database built without tags. */
+  tagSlugs?(oracleId: string): string[];
 }
 
 export interface DeckEntry { oracleId: string; qty: number; locked: boolean }
@@ -85,6 +113,18 @@ export interface Deck {
    * copies of the collection count as free, never the deck's cards. Absent means false.
    */
   built?: boolean;
+  /**
+   * The collection the deck belongs to ('physical', 'arena', ...). The engine does not read it; the
+   * server picks the format from the collection's kind. Absent on decks from before collections owned decks.
+   */
+  collectionId?: string;
+  /**
+   * The rules an MTG Arena deck is checked under: 100-card Brawl or 60-card Standard Brawl. Missing
+   * means 'brawl'. Ignored for decks of other collections (they are Commander decks).
+   */
+  arenaFormat?: 'brawl' | 'standardbrawl';
+  /** Sizes the user set for theme and functional packages (`theme:<axis>`, `fn:<id>` -> 8..40); core pins live in roleTargets. */
+  packageTargets?: Record<string, number> | null;
 }
 
 export interface Violation { code: string; message: string; oracleIds: string[] }
@@ -109,7 +149,21 @@ export interface Targets {
   avgMv: RoleBand;
   themeCards: number;
   taplandCap: number;
+  /** Why the numbers are what they are, for formats tuned apart from Commander (Standard Brawl); absent otherwise. */
+  notes?: string[];
+  /**
+   * The four core packages' targets (at least 8 each) and the board-wipe slot inside Removal: the
+   * one set of numbers the Packages tab, Complete package, the scorer and the rating's role coverage
+   * hold the deck to (packages spec, owner's rule 6). Set by `targetsFor`.
+   */
+  packages?: CorePackageTargets;
 }
+/**
+ * Each core package as a band: `lo` is its target (at least 8), `hi` the top before "over" costs
+ * anything (four over the target, or the bands' own top when that is higher, as for Kinnan's ramp).
+ * `wipes` is the board-wipe slot inside Removal.
+ */
+export interface CorePackageTargets { ramp: RoleBand; draw: RoleBand; removal: RoleBand; protection: RoleBand; wipes: RoleBand }
 
 export interface FoundCombo { combo: Combo; missing: string[]; twoCard: boolean; early: boolean; relevant: boolean }
 export interface BracketReport {
@@ -141,7 +195,11 @@ export interface Fix {
    */
   actionable?: boolean;
 }
-export interface DeckRating { rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[] }
+export interface DeckRating {
+  rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[];
+  /** Said next to the rating when the format changes how it is made (Standard Brawl has no bracket part); absent otherwise. */
+  notes?: string[];
+}
 
 /** What a directed improve run is asked to do (all optional; see `improveDeck`). */
 export interface ImproveGoals {
@@ -157,6 +215,12 @@ export interface ImproveGoals {
 export interface BuildOptions {
   ownedOnly: boolean; owned: Set<string> | null; maxPriceUsd: number | null; seed: number;
   goals?: ImproveGoals | null;
+  /**
+   * "Only what I can craft" (Brawl): the wildcards the player has. Unowned non-basic cards of each
+   * Arena rarity in the result stay within these, counting the ones the deck already needs; `owned`
+   * says what is owned. Null or absent: no cap.
+   */
+  wildcards?: Wildcards | null;
 }
 export interface SwapProposal {
   /** The card to cut; '' when the proposal is a plain add (the deck is under 100 cards). */
@@ -183,10 +247,14 @@ export interface FixResult { deck: Deck; changes: FixChange[]; ratingBefore: num
 export interface EngineContext { db: CardDb; edhrec: EdhrecData | null; mldOverrides: Record<string, boolean>; extraTurnOverrides: Record<string, boolean> }
 
 // ---- the deck network (src/engine/network) ----------------------------------------------------
-export type NetworkEdgeKind = 'combo' | 'feeds' | 'typal' | 'commander';
+/**
+ * `package`: two cards of the same planned or pinned functional package (Pillow fort, Max hand size,
+ * Win the game). It counts for "connected", never for clusters or cohesion's clustered share.
+ */
+export type NetworkEdgeKind = 'combo' | 'feeds' | 'typal' | 'commander' | 'package';
 export interface NetworkNode {
   oracleId: string; qty: number; commander: boolean;
-  /** Has a ring role (ramp, fast mana, draw, spot removal, protection, tutor, wipe, counterspell): drawn on the staple ring, never unconnected. */
+  /** Counts toward the rating's role coverage (a band role, or a core package by tag): drawn on the staple ring, never unconnected. */
   staple: boolean;
   roles: Role[];
   /** Its strongest theme axes in this deck (max(e, p) >= 0.5, ordered by max(e, p) x deck weight), at most three. */
@@ -205,6 +273,8 @@ export interface NetworkEdge {
   /** The reason as read from a's side and from b's side. */
   reasons: [string, string];
   axis?: AxisId; comboId?: string;
+  /** The functional package of a `package` edge. */
+  packageId?: PackageId;
 }
 export interface NetworkCluster { id: number; key: string; name: string; cards: string[]; weight: number }
 export interface DeckNetwork {
@@ -212,4 +282,32 @@ export interface DeckNetwork {
   cohesion: number;                                       // 0..100 integer
   cohesionParts: { connected: number; clustered: number }; // shares 0..1, three decimals
   unconnected: string[];
+}
+
+// ---- packages (src/engine/packages) -----------------------------------------------------------
+export type CorePackageId = 'ramp' | 'draw' | 'removal' | 'protection';
+export type PackageId = CorePackageId | `theme:${string}` | `fn:${string}`;
+export type PackageKind = 'core' | 'theme' | 'functional';
+export interface PlanMove { role: Role; delta: number; reason: string }   // delta as applied to the band's bottom
+export interface PackageCohesion { linked: number; of: number }
+export interface PlannedPackage {
+  id: PackageId; name: string; kind: PackageKind;
+  target: number;              // >= 8, no maximum
+  count: number;               // the deck's cards in it, overlaps counted in every package
+  /** `count` without the commanders: the copies in the 99, what the draw odds are against. */
+  library?: number;
+  cards: string[];             // those cards' oracle ids
+  reason: string; moves: PlanMove[]; pinned: boolean;
+  wipes: { lo: number; hi: number; count: number; reason: string } | null;   // Removal only
+  cohesion: PackageCohesion | null;
+}
+export interface PackageOffer { id: PackageId; name: string; kind: PackageKind; why: string | null; count: number }
+export interface PackagePlan {
+  packages: PlannedPackage[];                       // core four first, then theme, then functional
+  lands: { target: number; count: number; reason: string; pinned: boolean };
+  offers: PackageOffer[];
+  /** Focused themes left out: under `packageMin` slots, or (with `legal`) fewer than `packageMin` cards the deck and its legal pool hold. */
+  dropped: { id: PackageId; name: string; slots: number; legal?: number }[];
+  /** The fewest cards a package holds in the deck's format (`packageMinimum`): 8, or 5 in Standard Brawl. */
+  packageMin: number;
 }

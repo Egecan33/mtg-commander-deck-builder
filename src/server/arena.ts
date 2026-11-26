@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import Database from 'better-sqlite3';
-import type { ArenaProblem, ArenaStatus, ArenaSyncResult } from '@/app/lib/api';
+import type { ArenaProblem, ArenaStatus, ArenaSyncResult, WildcardsReadResponse } from '@/app/lib/api';
 import { createArenaLogReader, type ArenaLogData } from '@/engine/text';
 import { resolveCardName } from '@/engine/text/decklist';
 import { listCollections, setCollectionCards } from './collection';
@@ -13,6 +13,7 @@ import { ARENA_COLLECTION } from './db';
 import { findPrinting } from './printings';
 import { cacheSlot } from './state';
 import { getCardDb, getDb } from './store';
+import { getWildcards, setWildcards } from './wildcards';
 
 /**
  * MTG Arena sync. Everything here reads files that Arena itself leaves on this computer: its
@@ -114,7 +115,7 @@ const stampOf = (found: Found): string =>
 
 async function readLogs(files: string[]): Promise<ArenaLogData> {
   const reader = createArenaLogReader();
-  // Oldest first, so the newest log has the last word on the detailed-logging switch.
+  // Oldest first, so the newest log has the last word on the detailed-logging switch (and the inventory).
   for (const file of [...files].reverse()) {
     const lines = createInterface({ input: createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
     for await (const line of lines) reader.line(line);
@@ -243,6 +244,7 @@ function status(found: Found = locate()): ArenaStatus {
     readerNeedsPassword: process.platform === 'darwin' && !existsSync(allowedNode()),
     last: m.last,
     syncedAt: listCollections().find((c) => c.id === ARENA_COLLECTION)?.syncedAt ?? null,
+    wildcards: getWildcards(ARENA_COLLECTION),
   };
 }
 
@@ -276,6 +278,16 @@ export async function syncArenaCollection(options: { auto?: boolean } = {}): Pro
 
     const log = await readLogs(found.logs);
     m.detailedLogs = log.detailedLogs;
+    // The wildcards are in the log whether or not it holds decks: kept from every sync that finds them.
+    // Counts typed in by hand give way only to an inventory line dated after they were typed (a live
+    // Player.log is rewritten all the time, so the file's own time says nothing about the line); a line
+    // with no readable time never replaces them here. "Read from Arena" always reads.
+    if (log.wildcards) {
+      const stored = getWildcards(ARENA_COLLECTION);
+      const typed = stored.source === 'hand' ? Date.parse(stored.readAt ?? '') : Number.NaN;
+      const keepTyped = stored.source === 'hand' && (log.wildcardsAt === null || !Number.isFinite(typed) || log.wildcardsAt <= typed);
+      if (!keepTyped) setWildcards(log.wildcards, 'log', at, ARENA_COLLECTION);
+    }
     if (log.cards.size === 0) {
       if (log.detailedLogs === false) {
         return fail(
@@ -309,6 +321,28 @@ export async function syncArenaCollection(options: { auto?: boolean } = {}): Pro
     return status(found);
   } catch (err) {
     return fail('unreadable', `MTG Arena’s files could not be read (${err instanceof Error ? err.message : String(err)}). Nothing was changed.`, found);
+  }
+}
+
+/**
+ * "Read from Arena" for the wildcards alone: the last full inventory in Player.log (Player-prev.log
+ * before it) is stored on the MTG Arena collection. When no log holds one, nothing is stored and the
+ * message says what to do. Reads local files only.
+ */
+export async function readArenaWildcards(): Promise<WildcardsReadResponse> {
+  const keep = (message: string): WildcardsReadResponse => ({ ...getWildcards(ARENA_COLLECTION), ok: false, message });
+  try {
+    const found = locate();
+    if (found.logs.length === 0) {
+      return keep(found.logDir ? 'MTG Arena has not written a log yet. Start Arena once, then read again.' : 'No MTG Arena log was found on this computer. Type your wildcards in instead.');
+    }
+    const log = await readLogs(found.logs);
+    if (!log.wildcards) return keep('The Arena log does not show your wildcards yet. Start Arena and wait for the home screen, then read again.');
+    const info = setWildcards(log.wildcards, 'log', new Date().toISOString(), ARENA_COLLECTION);
+    const w = info.wildcards;
+    return { ...info, ok: true, message: `Wildcards read from Arena: ${w.common} common, ${w.uncommon} uncommon, ${w.rare} rare, ${w.mythic} mythic.` };
+  } catch (err) {
+    return keep(`MTG Arena’s log could not be read (${err instanceof Error ? err.message : String(err)}). Nothing was changed.`);
   }
 }
 

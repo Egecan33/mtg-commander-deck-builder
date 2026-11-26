@@ -1,12 +1,17 @@
 import type {
   CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommanderSort, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
+import { overlapKey } from '@/engine/builder';
 import { normalizeName } from '@/engine/carddb';
+import { bracketOf, formatOf, isBrawlFormat } from '@/engine/format';
+import { inPackage, packageDef, tagsOf } from '@/engine/packages';
+import type { PackageDef } from '@/engine/packages';
 import { canPair } from '@/engine/rules';
 import { AXIS_MEMBER, ROLES } from '@/engine/summary';
 import type { Card, Color, Deck, Role } from '@/engine/types';
 import { poolIndex, toClientCard, toCommanderCard } from './cards';
-import { ownedSet } from './collection';
+import type { ServerCardDb } from './carddb';
+import { activeFormat, deckCollection, ownedSet, ownedSetOf } from './collection';
 import { getAnalysis } from './context';
 import { commanderIndex, toCommanderTile } from './commander-index';
 import { discoverState, readBracket, readFreeOnly } from './discover';
@@ -63,10 +68,18 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const f = (query.filters ?? {}) as CardFilters;
   if (f.role !== undefined && !ROLES.includes(f.role)) throw new HttpError(400, `Unknown role "${String(f.role)}".`);
 
-  const db = getCardDb();
+  let pkg: PackageDef | null = null;
+  if (f.package !== undefined && f.package !== null) {
+    pkg = typeof f.package === 'string' ? packageDef(f.package) : null;
+    if (!pkg) throw new HttpError(400, `Unknown package "${String(f.package)}".`);
+  }
+
+  // The deck's own format: an Arena deck browses its format's pool only (package filters included).
+  const analysis = getAnalysis(deck);
+  const db = analysis.ctx.db as ServerCardDb;
   const index = poolIndex(db);
   const { cards, names, haystacks, typeLines, ranks } = index;
-  const pool = getAnalysis(deck).pool();
+  const pool = analysis.pool();
   const { scores } = pool;
 
   const byRank = (a: number, b: number) => ranks[a] - ranks[b] || (names[a] < names[b] ? -1 : names[a] > names[b] ? 1 : 0);
@@ -91,13 +104,20 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const mvMax = optNumber(f.mvMax);
   const maxPrice = optNumber(f.maxPrice);
   const type = typeof f.type === 'string' && f.type.trim() ? f.type.trim().toLowerCase() : null;
-  const owned = ownedSet();
+  // "Owned" on a Brawl deck is its own (Arena) collection, as in a build; a Commander deck reads the active one.
+  const owned = isBrawlFormat(formatOf(db)) ? ownedSetOf(deckCollection(deck)) : ownedSet();
   const ownedOnly = f.owned === true;
   const legalOnly = f.legalAtBracket === true;
   const inDeck = typeof f.inDeck === 'boolean' ? f.inDeck : null;
   const deckIds = inDeck === null ? null : new Set<string>([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
   const words = tokens(query.q);
   const phrase = words.join(' ');
+
+  // Package membership is read at the bracket the deck is tuned for (Standard Brawl has none: the middle one).
+  const bracket = bracketOf(deck, db);
+  // A package filter: the deck's other planned packages each card is also in
+  const others = pkg ? analysis.report().packages.packages.map((p) => packageDef(p.id)).filter((d): d is PackageDef => d !== null && d.id !== pkg!.id) : [];
+  const alsoOf = new Map<number, string[]>();
 
   // Search tiers: 0 the name is the query, 1 the name contains it, 2 it matches in type or text.
   const tiers: number[][] = [[], [], []];
@@ -111,6 +131,12 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
     if (deckIds && deckIds.has(card.oracleId) !== inDeck) continue;
     if (colorOk && !colorOk(card)) continue;
     if (type && !typeLines[i].includes(type)) continue;
+    if (pkg) {
+      const feat = db.features(card.oracleId);
+      const tags = tagsOf(db, card.oracleId);
+      if (!feat || !inPackage(pkg, card, feat, tags, bracket)) continue;
+      alsoOf.set(i, others.filter((d) => inPackage(d, card, feat, tags, bracket)).map((d) => d.name));
+    }
     if (role || axis) {
       const feat = db.features(card.oracleId);
       if (role && !feat?.roles.includes(role)) continue;
@@ -128,25 +154,36 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
     const name = names[i];
     tiers[name === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(i);
   }
+  // With a package filter and the score order, dual-purpose cards come first (gated cards stay last)
+  if (pkg && sort === 'score' && dir === 'desc') {
+    const key = (i: number) => overlapKey(scores[i].score, alsoOf.get(i)?.length ?? 0);
+    for (const tier of tiers) tier.sort((a, b) => (scores[a].gate ? 1 : 0) - (scores[b].gate ? 1 : 0) || key(b) - key(a));
+  }
   const matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
 
   const { start, end } = page(matches.length, pageNo, pageSize);
   const out: ScoredCard[] = [];
   for (let k = start; k < end; k++) {
     const i = matches[k];
-    out.push({ ...toClientCard(cards[i], db, owned), score: scores[i] });
+    const card: ScoredCard = { ...toClientCard(cards[i], db, owned), score: scores[i] };
+    if (pkg) card.also = alsoOf.get(i) ?? [];
+    out.push(card);
   }
   return { total: matches.length, page: pageNo, pageSize, cards: out, heldBy: heldByFor(deck, out.map((c) => c.oracleId)) };
 }
 
 const COMMANDER_SORTS: readonly CommanderSort[] = ['popularity', 'name', 'price', 'best'];
 
+/** The card data as the active collection builds: the Brawl (or Standard Brawl, per `arena`) view while an MTG Arena collection is active. */
+const activeDb = (arena?: unknown): ServerCardDb => getCardDb(activeFormat(arena));
+
 /**
  * Eligible commanders, filtered by name/text, colour identity, theme and ownership, most popular
- * first unless another sort is asked for.
+ * first unless another sort is asked for. While an MTG Arena collection is active these are Brawl
+ * commanders: on Arena, planeswalkers included (Standard Brawl: legal there).
  */
 export function browseCommanders(params: URLSearchParams): CommandersResponse {
-  const db = getCardDb();
+  const db = activeDb(params.get('arenaFormat'));
   const index = poolIndex(db);
   const owned = ownedSet();
   const pageSize = intParam(params.get('pageSize'), DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
@@ -200,14 +237,18 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   };
 }
 
-/** Every card that may be the second commander next to `oracleId`, most popular first. */
+/**
+ * Every card that may be the second commander next to `oracleId`, most popular first. None while an
+ * MTG Arena collection is active: a Brawl deck has one commander.
+ */
 export function partnersOf(oracleId: string): PartnersResponse {
-  const db = getCardDb();
+  const db = activeDb();
   const commander = db.get(oracleId);
   if (!commander) throw new HttpError(404, 'Unknown card.');
   const owned = ownedSet();
   const { ranks, position } = poolIndex(db);
   const rank = (c: Card) => ranks[position.get(c.oracleId) as number];
-  const partners = db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const brawl = isBrawlFormat(formatOf(db));
+  const partners = brawl ? [] : db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned)) };
 }

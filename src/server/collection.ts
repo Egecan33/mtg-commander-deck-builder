@@ -1,6 +1,7 @@
 import type { BoxTake, CollectionAdjustResponse, CollectionInfo } from '@/app/lib/api';
 import { parseCollection } from '@/engine/text';
 import type { UnresolvedLine } from '@/engine/text';
+import type { Deck, Format } from '@/engine/types';
 import { PHYSICAL_COLLECTION } from './db';
 import { HttpError } from './http';
 import { findPrinting } from './printings';
@@ -30,6 +31,38 @@ export function activeCollectionId(): string {
   });
 }
 
+/** A collection's kind ('manual' or 'arena'), or null when there is no such collection. */
+export function collectionKind(id: string): 'manual' | 'arena' | null {
+  const row = getDb().prepare('SELECT kind FROM collections WHERE id = ?').get(id) as { kind: string } | undefined;
+  return row ? (row.kind === 'arena' ? 'arena' : 'manual') : null;
+}
+
+export type ArenaFormat = NonNullable<Deck['arenaFormat']>;
+
+/** `arenaFormat` from a request or a stored deck: 'standardbrawl', else 'brawl' (what a missing one means). */
+export const readArenaFormat = (value: unknown): ArenaFormat => (value === 'standardbrawl' ? 'standardbrawl' : 'brawl');
+
+/**
+ * The format a collection's decks are built in: for an Arena collection MTG Arena's Brawl, or
+ * Standard Brawl when `arena` says so; else Commander.
+ */
+export const collectionFormat = (id: string, arena?: unknown): Format => (collectionKind(id) === 'arena' ? readArenaFormat(arena) : 'commander');
+
+/** The format for what is built while the active collection is active: `arena` is the Brawl or Standard Brawl choice made in the app. */
+export const activeFormat = (arena?: unknown): Format => collectionFormat(activeCollectionId(), arena);
+
+/**
+ * The collection a deck belongs to: its own `collectionId`, else the active collection (a deck
+ * that was never saved, like the one on the New deck page, is built for what is active).
+ */
+export const deckCollection = (deck: Deck): string => deck.collectionId ?? activeCollectionId();
+
+/**
+ * The format a deck is checked and built in: for a deck of an Arena collection its `arenaFormat`
+ * (Brawl when missing), else Commander.
+ */
+export const deckFormat = (deck: Deck): Format => collectionFormat(deckCollection(deck), deck.arenaFormat);
+
 /** Makes another collection the active one. */
 export function setActiveCollection(id: string): void {
   const db = getDb();
@@ -49,8 +82,10 @@ export function listCollections(): CollectionInfo[] {
       `SELECT c.id, c.name, c.kind, c.synced_at AS syncedAt, count(k.oracle_id) AS count, coalesce(sum(k.qty), 0) AS totalQty,
          (SELECT count(*) FROM collection_boxes b WHERE b.collection_id = c.id
             AND EXISTS (SELECT 1 FROM collection_box_cards x WHERE x.box_id = b.id AND x.qty >= 1)
-            AND NOT EXISTS (SELECT 1 FROM decks d WHERE d.id = b.deck_id AND json_extract(d.json, '$.built') = 1))
-          + CASE WHEN c.kind = 'manual' THEN (SELECT count(*) FROM decks WHERE json_extract(json, '$.built') = 1) ELSE 0 END AS holders
+            AND NOT EXISTS (SELECT 1 FROM decks d WHERE d.id = b.deck_id AND json_extract(d.json, '$.built') = 1
+              AND coalesce(json_extract(d.json, '$.collectionId'), '${PHYSICAL_COLLECTION}') = c.id))
+          + CASE WHEN c.kind = 'manual' THEN (SELECT count(*) FROM decks WHERE json_extract(json, '$.built') = 1
+              AND coalesce(json_extract(json, '$.collectionId'), '${PHYSICAL_COLLECTION}') = c.id) ELSE 0 END AS holders
        FROM collections c LEFT JOIN collection_cards k ON k.collection_id = c.id AND k.qty >= 1
        GROUP BY c.id ORDER BY c.position, c.name`,
     )
@@ -76,6 +111,14 @@ export function ownedQuantities(): ReadonlyMap<string, number> {
 /** The owned oracle ids, as `BuildOptions.owned` wants them. Same Set until the active collection changes. */
 export function ownedSet(): Set<string> {
   return cacheSlot('collection-set', () => new Set(ownedQuantities().keys()));
+}
+
+/**
+ * The owned oracle ids of one collection, active or not. An Arena deck's wildcards and "owned" count
+ * against its own collection (`deckCollection`), whichever collection is active.
+ */
+export function ownedSetOf(id: string): Set<string> {
+  return id === activeCollectionId() ? ownedSet() : new Set(quantitiesOf(id).keys());
 }
 
 function totals(): { count: number; totalQty: number } {

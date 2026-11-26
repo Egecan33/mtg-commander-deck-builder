@@ -1,7 +1,8 @@
 import type { CardLookup, ClientCard, CommanderCard } from '@/app/lib/api';
 import { cardSlug } from '@/engine/text/slug';
 import { normalizeName } from '@/engine/carddb';
-import { isCommanderEligible, needsColorChoice, partnerKind, requiresColorChoice } from '@/engine/rules';
+import { formatOf } from '@/engine/format';
+import { canLead, needsColorChoice, partnerKind, requiresColorChoice } from '@/engine/rules';
 import type { Card, CardDb } from '@/engine/types';
 import type { ServerCardDb } from './carddb';
 import { ownedSet } from './collection';
@@ -29,7 +30,7 @@ export function toClientCard(card: Card, db: CardDb, owned: ReadonlySet<string>)
     ...(slug ? { slug } : {}),
     oracleId: card.oracleId, name: card.name, frontName: card.frontName, manaCost: card.manaCost, cmc: card.cmc,
     typeLine: card.typeLine, colorIdentity: card.colorIdentity, imageFaces: card.imageFaces,
-    gameChanger: card.gameChanger, priceUsd: card.priceUsd,
+    gameChanger: card.gameChanger, priceUsd: card.priceUsd, arenaRarity: card.arenaRarity ?? null,
     roles: db.features(card.oracleId)?.roles ?? [],
     owned: owned.has(card.oracleId),
   };
@@ -68,15 +69,16 @@ export interface PoolIndex {
   typeLines: string[];
   /** Popularity order key: EDHREC rank, unranked cards last. */
   ranks: Float64Array;
-  /** Eligible commanders, most popular first. */
+  /** Commanders that can lead a deck in the pool's format (Brawl adds planeswalkers), most popular first. */
   commanders: Card[];
 }
 
 const rankOf = (c: Card): number => (typeof c.edhrecRank === 'number' && c.edhrecRank > 0 ? c.edhrecRank : Number.MAX_SAFE_INTEGER);
 
-/** Search and sort data over the whole pool, built once per loaded CardDb. */
+/** Search and sort data over the whole pool (of the database's format), built once per loaded CardDb. */
 export function poolIndex(db: ServerCardDb = getCardDb()): PoolIndex {
-  const slot = cacheSlot<{ db: ServerCardDb; index: PoolIndex } | { db: null }>('pool-index', () => ({ db: null }));
+  const format = formatOf(db);
+  const slot = cacheSlot<{ db: ServerCardDb; index: PoolIndex } | { db: null }>(`pool-index:${format}`, () => ({ db: null }));
   if (slot.db === db) return slot.index;
   const cards = db.all();
   const position = new Map<string, number>();
@@ -92,7 +94,7 @@ export function poolIndex(db: ServerCardDb = getCardDb()): PoolIndex {
     haystacks.push(`${name}\n${c.typeLine.toLowerCase()}\n${c.oracleText.toLowerCase()}`);
     ranks[i] = rankOf(c);
   });
-  const commanders = cards.filter(isCommanderEligible).sort((a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name));
+  const commanders = cards.filter((c) => canLead(c, format)).sort((a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name));
   const index: PoolIndex = { cards, position, names, haystacks, typeLines, ranks, commanders };
   Object.assign(slot, { db, index });
   return index;

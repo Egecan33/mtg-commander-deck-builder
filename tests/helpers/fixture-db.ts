@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createCardDb } from '@/engine/carddb';
 import { computeFeatures } from '@/engine/features';
+import { formatCardDb } from '@/engine/format';
 import type { Card, CardDb, CardFeatures, Combo } from '@/engine/types';
 
 const FIXTURES = fileURLToPath(new URL('../fixtures/', import.meta.url));
@@ -42,6 +43,16 @@ export function fixtureDb(): FixtureDb {
   return cached;
 }
 
+let brawl: FixtureDb | null = null;
+
+/** The fixture as a Brawl database (`formatCardDb`): its pool is the fixture cards on Arena and legal in Brawl. */
+export function brawlFixtureDb(): FixtureDb {
+  if (brawl) return brawl;
+  const { cards } = JSON.parse(readFileSync(FIXTURES + 'cards.json', 'utf8')) as { cards: Card[] };
+  brawl = formatCardDb(fixtureDb(), cards, 'brawl');
+  return brawl;
+}
+
 /** Fixture card by name (full or front, any case). Throws when the fixture lacks it. */
 export function card(name: string): Card {
   const c = fixtureDb().byName(name);
@@ -52,4 +63,14 @@ export function card(name: string): Card {
 /** Raw text of tests/fixtures/decks/<name>.txt. */
 export function deckText(name: 'precon' | 'upgraded' | 'cedh'): string {
   return readFileSync(`${FIXTURES}decks/${name}.txt`, 'utf8');
+}
+
+let standard: FixtureDb | null = null;
+
+/** The fixture as a Standard Brawl database: its pool is the fixture cards on Arena and legal in Standard Brawl. */
+export function standardBrawlFixtureDb(): FixtureDb {
+  if (standard) return standard;
+  const { cards } = JSON.parse(readFileSync(FIXTURES + 'cards.json', 'utf8')) as { cards: Card[] };
+  standard = formatCardDb(fixtureDb(), cards, 'standardbrawl');
+  return standard;
 }

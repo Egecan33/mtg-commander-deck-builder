@@ -2,21 +2,31 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NetworkResponse } from '@/app/lib/api';
-import { settle, toGraphData } from '@/engine/network/layout';
+// d3-free: the force layout (d3-force-3d) is loaded only where it runs, the 2D fallback (review M4).
+import { DRAWN_FEEDS, drawnEdges, toGraphData } from '@/engine/network/draw';
+import type { Vec3 } from '@/engine/network/layout';
 import type { NetworkEdgeKind } from '@/engine/types';
 import { EmptyState } from '../EmptyState';
 import { NetworkSvg } from './NetworkSvg';
 import type { NetworkScene } from './scene';
 import { EDGE_COLOR, EDGE_KINDS, EDGE_LABEL, nodeReasons } from './style';
 
+/** Whether WebGL works here. The probe's own context is given back at once (review M3). */
 const hasWebgl = (): boolean => {
   try {
     const canvas = document.createElement('canvas');
-    return !!(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
+    const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!gl) return false;
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return true;
   } catch {
     return false;
   }
 };
+
+/** The hover card's widest size (18rem) and a height that fits three reasons, for keeping it inside the view. */
+const HOVER_W = 288;
+const HOVER_H = 132;
 
 /**
  * The deck's cards as a network: 3d-force-graph for layout and interaction, our own three.js objects
@@ -33,9 +43,12 @@ export function NetworkView({
   onEmpty?(): void;
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<NetworkScene | null>(null);
   const [renderer, setRenderer] = useState<'webgl' | 'svg' | null>(null);
   const [kinds, setKinds] = useState<ReadonlySet<NetworkEdgeKind>>(new Set(EDGE_KINDS));
+  const kindsRef = useRef(kinds);
+  kindsRef.current = kinds;
   const [settled, setSettled] = useState(false);
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
   const [visible, setVisible] = useState(0);
@@ -48,14 +61,28 @@ export function NetworkView({
     setRenderer(!two && hasWebgl() ? 'webgl' : 'svg');
   }, []);
 
+  // What is drawn: each card's strongest few feeds links and every other link; the legend shows drawn of total.
+  const drawn = useMemo(() => (network ? drawnEdges(network.edges) : new Set<number>()), [network]);
   const counts = useMemo(() => {
-    const c: Record<NetworkEdgeKind, number> = { combo: 0, feeds: 0, typal: 0, commander: 0 };
-    for (const e of network?.edges ?? []) c[e.kind]++;
-    return c;
-  }, [network]);
-  useEffect(() => { setVisible(network ? network.edges.filter((e) => kinds.has(e.kind)).length : 0); }, [network, kinds]);
+    const zero = (): Record<NetworkEdgeKind, number> => ({ combo: 0, feeds: 0, typal: 0, commander: 0, package: 0 });
+    const total = zero();
+    const shown = zero();
+    (network?.edges ?? []).forEach((e, i) => { total[e.kind]++; if (drawn.has(i)) shown[e.kind]++; });
+    return { total, shown };
+  }, [network, drawn]);
+  useEffect(() => {
+    setVisible(network ? network.edges.filter((e, i) => drawn.has(i) && kinds.has(e.kind)).length : 0);
+  }, [network, kinds, drawn]);
 
-  const positions = useMemo(() => (network && renderer === 'svg' && !empty ? settle(network) : null), [network, renderer, empty]);
+  // The 2D fallback settles the layout here; the layout code is loaded only then.
+  const [positions, setPositions] = useState<Map<string, Vec3> | null>(null);
+  useEffect(() => {
+    setPositions(null);
+    if (!network || renderer !== 'svg' || empty) return;
+    let cancelled = false;
+    void import('@/engine/network/layout').then(({ settle }) => { if (!cancelled) setPositions(settle(network)); });
+    return () => { cancelled = true; };
+  }, [network, renderer, empty]);
 
   // The three.js scene, rebuilt when the network changes.
   useEffect(() => {
@@ -67,7 +94,7 @@ export function NetworkView({
     const names = (id: string) => network.cards[id]?.name ?? id;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     import('./scene')
-      .then(({ createNetworkScene }) => createNetworkScene(el, { network, names, reducedMotion: reduced }, {
+      .then(({ createNetworkScene }) => createNetworkScene(el, { network, names, reducedMotion: reduced, kinds: kindsRef.current }, {
         hover: (id, at) => setHover(id && at ? { id, x: at.x, y: at.y } : null),
         open: (id) => onOpenRef.current(id),
         contextLost: () => setRenderer('svg'),
@@ -137,8 +164,18 @@ export function NetworkView({
 
   const hoverCard = hover ? network.cards[hover.id] : null;
   const hoverNode = hover ? network.nodes.find((n) => n.oracleId === hover.id) : null;
+  // The hover card stays inside the view (review M2): flipped to the pointer's left or above near an edge.
+  const place = (() => {
+    if (!hover) return { left: 0, top: 0 };
+    const w = frame.current?.clientWidth ?? 0;
+    const h = frame.current?.clientHeight ?? 0;
+    const left = hover.x + 14 + HOVER_W > w ? hover.x - 14 - HOVER_W : hover.x + 14;
+    const top = hover.y + 14 + HOVER_H > h ? hover.y - 14 - HOVER_H : hover.y + 14;
+    return { left: Math.max(8, Math.min(left, w - HOVER_W - 8)), top: Math.max(8, Math.min(top, h - HOVER_H - 8)) };
+  })();
   return (
     <div
+      ref={frame}
       className="relative overflow-hidden rounded-[6px] border border-slag bg-anvil"
       style={{ height: 'min(74vh, 780px)', minHeight: 420 }}
       data-testid="network-view"
@@ -155,18 +192,19 @@ export function NetworkView({
         />
       )}
       <div className="absolute left-3 top-3 flex flex-wrap gap-1.5" role="group" aria-label="Link kinds">
-        {EDGE_KINDS.map((kind) => (
+        {EDGE_KINDS.filter((kind) => kind !== 'package' || counts.total.package > 0).map((kind) => (
           <button
             key={kind}
             type="button"
             className={`chip gap-1.5 ${kinds.has(kind) ? 'text-bone' : 'text-smoke'}`}
             aria-pressed={kinds.has(kind)}
             onClick={() => toggle(kind)}
-            title={`${kinds.has(kind) ? 'Hide' : 'Show'} ${EDGE_LABEL[kind].toLowerCase()} links`}
+            title={`${kinds.has(kind) ? 'Hide' : 'Show'} ${EDGE_LABEL[kind].toLowerCase()} links${counts.shown[kind] < counts.total[kind] ? `. ${counts.shown[kind]} of ${counts.total[kind]} are drawn: each card's strongest ${DRAWN_FEEDS}; every link counts in the numbers` : ''}`}
             data-testid={`network-legend-${kind}`}
           >
             <span className="inline-block h-0.5 w-3" style={{ background: EDGE_COLOR[kind], opacity: kinds.has(kind) ? 1 : 0.35 }} />
-            {EDGE_LABEL[kind]} <span className="tabular-nums">{counts[kind]}</span>
+            {EDGE_LABEL[kind]}{' '}
+            <span className="tabular-nums">{counts.shown[kind] < counts.total[kind] ? `${counts.shown[kind]}/${counts.total[kind]}` : counts.total[kind]}</span>
           </button>
         ))}
       </div>
@@ -176,7 +214,7 @@ export function NetworkView({
       {hover && hoverCard && hoverNode && (
         <div
           className="pointer-events-none absolute z-10 max-w-[18rem] rounded-[6px] border border-slag bg-iron px-3 py-2 text-[0.86rem] shadow-lg"
-          style={{ left: Math.min(hover.x + 14, 9999), top: hover.y + 14 }}
+          style={place}
           data-testid="network-hover"
         >
           <p className="font-medium text-bone">{hoverCard.name}</p>

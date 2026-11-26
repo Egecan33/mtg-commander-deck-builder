@@ -1,10 +1,9 @@
+import { deckSizeFor, formatLabel, formatOf, isBrawlFormat } from '../format';
 import type { CardDb, Deck, Violation } from '../types';
-import { canPair, isCommanderEligible, partnerKind } from './commander';
+import { canLead, canPair, partnerKind } from './commander';
 import { companionViolation } from './companion';
 import { commanderCards, copyLimit, deckCounts, deckSize } from './copies';
 import { cardFitsDeck, requiresColorChoice, rulebreakersOf } from './identity';
-
-const DECK_SIZE = 100;
 
 /**
  * Every rule the deck breaks; an empty array means it is legal. Never throws: unknown cards are
@@ -13,6 +12,7 @@ const DECK_SIZE = 100;
  */
 export function validateDeck(deck: Deck, db: CardDb): Violation[] {
   const out: Violation[] = [];
+  const DECK_SIZE = deckSizeFor(db);
   const counts = deckCounts(deck);
 
   for (const id of counts.keys()) {
@@ -25,8 +25,8 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
     out.push({ code: 'no-commander', message: 'The deck has no commander.', oracleIds: [] });
   } else if (deck.commanders.length === 1) {
     const c = commanders[0];
-    if (c && !isCommanderEligible(c)) {
-      const background = partnerKind(c).some((k) => k.kind === 'background');
+    if (c && !canLead(c, formatOf(db))) {
+      const background = !isBrawlFormat(formatOf(db)) && partnerKind(c).some((k) => k.kind === 'background');
       out.push({
         code: 'bad-commander',
         message: background
@@ -35,6 +35,9 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
         oracleIds: [c.oracleId],
       });
     }
+  } else if (isBrawlFormat(formatOf(db))) {
+    // Arena publishes "1 commander card" for Brawl: no partners or backgrounds.
+    out.push({ code: 'bad-pair', message: `A ${formatLabel(formatOf(db))} deck has one commander.`, oracleIds: [...deck.commanders] });
   } else if (deck.commanders.length > 2) {
     out.push({ code: 'bad-pair', message: 'A deck can have at most two commanders.', oracleIds: [...deck.commanders] });
   } else if (commanders.length === 2 && !canPair(commanders[0], commanders[1])) {
@@ -46,7 +49,7 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
   }
   for (const c of commanders) {
     const v = cardFitsDeck(c, deck, db);
-    if (v?.code === 'banned') out.push(v);
+    if (v?.code === 'banned' || v?.code === 'not-on-arena') out.push(v);
   }
   // Only the mandatory choice (CR 903.4b) is a violation; Tolabow's extra colour is optional.
   if (requiresColorChoice(commanders) && !deck.chosenColor) {

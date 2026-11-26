@@ -6,14 +6,22 @@ import { useEffect, useRef, useState } from 'react';
 import type { Bracket } from '@/engine/types';
 import { CardImage } from '../components/card';
 import { useFreeOnly } from '../components/held';
-import { useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
+import { useBuildFormat, useCollections, useNotify, useProxies, useStatus } from '../components/Shell';
 import { createDeck, getDiscover, getDiscoverTiers, startDiscover, type CardLookup, type DiscoverEntry, type DiscoverScope, type DiscoverState, type DiscoverTier } from '../lib/api';
 import { commanderHref } from '../lib/links';
 import { BAND_VAR, BRACKETS, bandOf, bracketName, fmtPrice } from '../lib/ui';
 
-const tierLabel = (t: DiscoverTier) => (t.cap === null ? 'Unlimited' : t.cap === 0 ? 'Owned only' : `Up to ${t.cap} buys`);
-const priceText = (t: DiscoverTier) => (t.buys.length === 0 ? 'nothing to buy' : `$${t.price.toFixed(t.price < 100 ? 2 : 0)}${t.unpriced ? ` + ${t.unpriced} unpriced (?)` : ''}`);
-const tierKey = (t: DiscoverTier) => String(t.cap);
+const tierLabel = (t: DiscoverTier) =>
+  t.kind === 'crafted' ? 'Within your wildcards' : t.kind === 'unlimited' ? 'Whole Arena pool' : t.cap === null ? 'Unlimited' : t.cap === 0 ? 'Owned only' : `Up to ${t.cap} buys`;
+/** MTG Arena tiers: the wildcards the deck needs per rarity, in place of a price. */
+const wildcardText = (t: DiscoverTier) => {
+  const w = t.wildcards;
+  const parts = w ? (['mythic', 'rare', 'uncommon', 'common'] as const).filter((r) => w[r] > 0).map((r) => `${w[r]} ${r}`) : [];
+  return parts.length ? `wildcards: ${parts.join(', ')}` : 'no wildcards';
+};
+const priceText = (t: DiscoverTier) =>
+  t.wildcards ? wildcardText(t) : t.buys.length === 0 ? 'nothing to buy' : `$${t.price.toFixed(t.price < 100 ? 2 : 0)}${t.unpriced ? ` + ${t.unpriced} unpriced (?)` : ''}`;
+const tierKey = (t: DiscoverTier) => t.kind ?? String(t.cap);
 
 export default function DiscoverPage() {
   const notify = useNotify();
@@ -24,6 +32,9 @@ export default function DiscoverPage() {
   const [freeOnlyPref, setFreeOnly] = useFreeOnly();
   // Boxes and built decks only exist in a collection kept by hand. null until known, so the search starts once.
   const manual = active?.kind === 'manual';
+  // The MTG Arena collection: Brawl commanders, Arena cards, and tiers by wildcards instead of buys.
+  const brawl = active?.kind === 'arena';
+  const buildFormat = useBuildFormat() ?? undefined;
   const freeOnly = freeOnlyPref === null ? null : manual && freeOnlyPref;
   const [bracket, setBracket] = useState<Bracket>(3);
   const [scope, setScope] = useState<DiscoverScope>('owned');
@@ -47,33 +58,34 @@ export default function DiscoverPage() {
       // result): start it again, once, instead of showing an empty page.
       if (s.status === 'idle' && !restarted) {
         restarted = true;
-        startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
+        startDiscover(bracket, scope, freeOnly, buildFormat).then(take, (e) => notify.error(e));
         return;
       }
       setState(s);
       setLookup((cur) => ({ ...cur, ...s.cards }));
-      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e)), 700);
+      if (s.status === 'running') timer = setTimeout(() => getDiscover(bracket, scope, freeOnly, undefined, buildFormat).then(take, (e) => notify.error(e)), 700);
     };
     setState(null);
     setOpen(null);
     setLazy({});
-    startDiscover(bracket, scope, freeOnly).then(take, (e) => notify.error(e));
+    startDiscover(bracket, scope, freeOnly, buildFormat).then(take, (e) => notify.error(e));
     return () => {
       run.current++;
       if (timer) clearTimeout(timer);
     };
-  }, [ready, bracket, scope, freeOnly, notify]);
+  }, [ready, bracket, scope, freeOnly, buildFormat, notify]);
 
   const lazyKey = (id: string) => `${bracket}:${scope}:${freeOnly ? 'free' : 'all'}:${id}`;
   const expand = (entry: DiscoverEntry) => {
     const id = entry.commander.oracleId;
     if (open === id) return setOpen(null);
     setOpen(id);
-    setPicked('0');
+    setPicked(tierKey(entry.tiers[0]));
     const key = lazyKey(id);
-    if (lazy[key] || state?.status !== 'done') return;
+    // On Arena every tier comes with the entry.
+    if (lazy[key] || state?.status !== 'done' || entry.tiers.some((t) => t.kind)) return;
     setLazy((l) => ({ ...l, [key]: 'loading' }));
-    getDiscoverTiers(bracket, id, scope, !!freeOnly).then(
+    getDiscoverTiers(bracket, id, scope, !!freeOnly, buildFormat).then(
       (res) => {
         setLookup((cur) => ({ ...cur, ...res.cards }));
         setLazy((l) => ({ ...l, [key]: res.tiers }));
@@ -92,8 +104,8 @@ export default function DiscoverPage() {
   const create = async (entry: DiscoverEntry, t: DiscoverTier) => {
     setCreating(true);
     try {
-      const name = `${entry.commander.frontName} (${t.cap === null ? 'best build' : t.cap === 0 ? 'from my collection' : `${t.buys.length} buys`})`;
-      const saved = await createDeck({ ...t.deck, id: null, name });
+      const name = `${entry.commander.frontName} (${t.kind === 'crafted' ? 'within my wildcards' : t.cap === null ? 'best build' : t.cap === 0 ? 'from my collection' : `${t.buys.length} buys`})`;
+      const saved = await createDeck({ ...t.deck, id: null, name, ...(buildFormat === 'standardbrawl' ? { arenaFormat: 'standardbrawl' as const } : {}) });
       router.push(`/deck/${saved.deck.id}`);
     } catch (e) {
       notify.error(e);
@@ -121,6 +133,7 @@ export default function DiscoverPage() {
               ? 'Which commanders you own make the best deck out of cards you already have, and how much better each gets with a few purchases.'
               : 'Which commanders you do not have would work best with the cards you already own. The commander is the one card to get; open a row to see what a few more would add.'}{' '}
             Basic lands count as owned. Only single commanders are looked at, not partner pairs.
+            {brawl && ` On MTG Arena: ${buildFormat === 'standardbrawl' ? 'Standard Brawl' : 'Brawl'} commanders (planeswalkers too) and cards on Arena only; the budget is your wildcards, set on the Collection page. Arena-only digital cards are not in the card data.`}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <div className="seg" role="group" aria-label="Whose commanders">
@@ -135,6 +148,7 @@ export default function DiscoverPage() {
             )}
           </div>
         </div>
+        {buildFormat !== 'standardbrawl' && (
         <div className="shrink-0">
           <div className="mb-1 text-[0.75rem] text-ash">Bracket: {bracketName(bracket)}</div>
           <div className="seg" role="group" aria-label="Bracket">
@@ -143,6 +157,7 @@ export default function DiscoverPage() {
             ))}
           </div>
         </div>
+        )}
       </div>
 
       {state?.status === 'empty' && (
@@ -178,7 +193,7 @@ export default function DiscoverPage() {
         {(state?.entries ?? []).map((entry, i) => {
           const id = entry.commander.oracleId;
           const extra = lazy[lazyKey(id)];
-          const tiers = [entry.tiers[0], ...(Array.isArray(extra) ? extra : []), entry.tiers[1]];
+          const tiers = entry.tiers.some((t) => t.kind) ? entry.tiers : [entry.tiers[0], ...(Array.isArray(extra) ? extra : []), entry.tiers[1]];
           const isOpen = open === id;
           const shown = tiers.find((t) => tierKey(t) === picked) ?? tiers[0];
           // Free copies only: a commander you own whose every copy is held counts as one to get.
@@ -194,13 +209,17 @@ export default function DiscoverPage() {
                 <span className="min-w-0 flex-1">
                   <span className="display block truncate text-[1.15rem]">{entry.commander.name}</span>
                   {heldCommander && <span className="block text-[0.8rem] text-ember" data-testid="discover-held-note">Owned, but held by a box or a built deck</span>}
-                  <span className="text-[0.8rem] text-smoke">{isOpen ? 'Pick a tier to see what to buy' : 'Click for the 5, 10, 15 and 20-buy tiers'}</span>
+                  <span className="text-[0.8rem] text-smoke">
+                    {entry.tiers.some((t) => t.kind)
+                      ? isOpen ? 'Pick a tier to see what to craft' : 'Click for the deck from the whole Arena pool'
+                      : isOpen ? 'Pick a tier to see what to buy' : 'Click for the 5, 10, 15 and 20-buy tiers'}
+                  </span>
                 </span>
                 {[entry.tiers[0], entry.tiers[1]].map((t) => (
                   <span key={tierKey(t)} className="w-[10.5rem] shrink-0 rounded-md border border-slag bg-soot px-3 py-1.5">
                     <span className="block text-[0.75rem] text-ash">{tierLabel(t)}</span>
                     <span className="display text-[1.35rem] font-bold leading-none" style={{ color: BAND_VAR[bandOf(t.rating)] }}>{t.rating}</span>
-                    <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length ? `${t.buys.length} to buy` : 'no buys'}</span>
+                    <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length ? `${t.buys.length} to ${t.kind ? 'craft' : 'buy'}` : t.kind ? 'nothing to craft' : 'no buys'}</span>
                     <span className="mt-0.5 block text-[0.7rem] text-smoke" data-testid="discover-basis">{entry.basis === 'edhrec' ? 'Scored with EDHREC data' : 'Scored from card text'}</span>
                   </span>
                 ))}
@@ -222,7 +241,7 @@ export default function DiscoverPage() {
                       <button key={tierKey(t)} type="button" aria-pressed={shown === t} onClick={() => setPicked(tierKey(t))} className={`rounded-md border px-3 py-1.5 text-left ${shown === t ? 'border-brass bg-iron' : 'border-slag bg-soot hover:border-smoke'}`} data-testid="discover-tier" data-cap={tierKey(t)}>
                         <span className="block text-[0.75rem] text-ash">{tierLabel(t)}</span>
                         <span className="display text-[1.15rem] font-bold" style={{ color: BAND_VAR[bandOf(t.rating)] }}>{t.rating}</span>
-                        <span className="ml-2 text-[0.75rem] text-smoke">{t.buys.length} to buy, {priceText(t)}</span>
+                        <span className="ml-2 text-[0.75rem] text-smoke" data-testid="discover-tier-cost">{t.buys.length} to {t.kind ? 'craft' : 'buy'}, {priceText(t)}</span>
                       </button>
                     ))}
                     {extra === 'loading' && <span className="self-center text-[0.86rem] text-ash">Working out the 5 to 20-buy tiers</span>}
@@ -232,14 +251,16 @@ export default function DiscoverPage() {
                     <button type="button" className="btn btn-primary btn-sm" disabled={creating} onClick={() => void create(entry, shown)} data-testid="discover-create">Create this deck</button>
                     <button type="button" className="btn btn-sm" disabled={shown.buys.length === 0} onClick={() => void proxies.add(shown.buys.map((oracleId) => ({ oracleId, qty: 1 })))} data-testid="discover-proxy">Add buys to proxy list</button>
                     <button type="button" className="btn btn-sm" disabled={shown.buys.length === 0} onClick={() => void copy(shown)} data-testid="discover-copy">Copy buy list</button>
-                    <span className="text-[0.84rem] text-ash">{tierLabel(shown)}: rating {shown.rating}, {shown.buys.length} to buy, {priceText(shown)}</span>
+                    <span className="text-[0.84rem] text-ash">{tierLabel(shown)}: rating {shown.rating}, {shown.buys.length} to {shown.kind ? 'craft' : 'buy'}, {priceText(shown)}</span>
                   </div>
                   {shown.buys.length > 0 && (
                     <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2.5" data-testid="discover-buys">
                       {shown.buys.map((b) => (
                         <li key={b}>
                           <div className="card" title={lookup[b]?.name}><CardImage id={b} name={lookup[b]?.frontName ?? 'Card'} known={!!lookup[b]} /></div>
-                          <div className="mt-1 truncate text-center text-[0.75rem] text-ash">{lookup[b] ? (lookup[b].priceUsd === null ? '?' : fmtPrice(lookup[b].priceUsd)) : '?'}</div>
+                          <div className="mt-1 truncate text-center text-[0.75rem] text-ash">
+                            {!lookup[b] ? '?' : shown.kind ? (lookup[b].arenaRarity ?? 'not on Arena') : lookup[b].priceUsd === null ? '?' : fmtPrice(lookup[b].priceUsd)}
+                          </div>
                         </li>
                       ))}
                     </ul>

@@ -5,9 +5,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   addProxies, getArena, getCollections, getProxies, getStatus, readArenaMemory, setActiveCollection, syncArena,
-  type ArenaStatus, type CollectionInfo, type ProxyItem, type ProxyListResponse, type StatusResponse,
+  type ArenaFormat, type ArenaStatus, type CollectionInfo, type ProxyItem, type ProxyListResponse, type StatusResponse,
 } from '../lib/api';
-import { errText, fmtDate, isAbort } from '../lib/ui';
+import { useFilters } from '../lib/filters';
+import { NO_STANDARD_BRAWL, errText, fmtDate, isAbort } from '../lib/ui';
+import { Menu } from './Menu';
 
 // ---------------------------------------------------------------------------------------------
 // Messages: API errors and confirmations. Errors stay until dismissed.
@@ -64,7 +66,7 @@ interface CollectionsValue {
   collections: CollectionInfo[];
   active: CollectionInfo | null;
   /** Makes another collection the active one; every page then reloads its data. */
-  switchTo: (id: string) => Promise<void>;
+  switchTo: (id: string, why?: string) => Promise<void>;
   /** Re-reads sizes after a page changed a collection. */
   refresh: () => Promise<void>;
   arena: ArenaStatus | null;
@@ -79,11 +81,19 @@ const CollectionsContext = createContext<CollectionsValue>({
 });
 export const useCollections = (): CollectionsValue => useContext(CollectionsContext);
 
+/** The MTG Arena format new decks are built in ('brawl' or 'standardbrawl'), or null while a Physical (Commander) collection is active. */
+export function useBuildFormat(): ArenaFormat | null {
+  const { active } = useCollections();
+  const { arenaFormat } = useFilters();
+  return active?.kind === 'arena' ? arenaFormat : null;
+}
+
 const NAV = [
   { href: '/', label: 'Decks' },
   { href: '/new', label: 'New deck' },
   { href: '/commanders', label: 'Commanders' },
   { href: '/collection', label: 'Collection' },
+  { href: '/packages', label: 'Packages' },
   { href: '/discover', label: 'Best from collection' },
   { href: '/proxies', label: 'Proxies' },
   { href: '/data', label: 'Card data' },
@@ -254,19 +264,29 @@ export function Shell({ children }: { children: ReactNode }) {
     arenaBusy,
     syncArena: () => runArenaSync(false),
     readArenaFull,
-    switchTo: async (id) => {
+    switchTo: async (id, why) => {
       try {
         const list = (await setActiveCollection(id)).collections;
         setCollections(list);
         setOwnedEpoch((n) => n + 1);
         const now = list.find((c) => c.active);
-        if (now) notify.info(`Using the ${now.name} collection: ${now.count.toLocaleString('en-US')} different cards`);
+        if (why) notify.info(why);
+        else if (now) notify.info(`Using the ${now.name} collection: ${now.count.toLocaleString('en-US')} different cards${now.kind === 'arena' ? ' (building for MTG Arena Brawl)' : ''}`);
       } catch (e) {
         notify.error(e);
       }
     },
   }), [collections, arena, arenaBusy, refreshCollections, runArenaSync, readArenaFull, notify]);
   const activeCollection = collectionsValue.active;
+  const { arenaFormat, set: setFilters } = useFilters();
+  const setArenaFormat = (f: 'brawl' | 'standardbrawl') => setFilters({ arenaFormat: f });
+  // A collection picked in the top bar while a deck was open: switched once the deck page has gone.
+  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingSwitch === null || pathname.startsWith('/deck/')) return;
+    setPendingSwitch(null);
+    void collectionsValue.switchTo(pendingSwitch);
+  }, [pendingSwitch, pathname, collectionsValue]);
   const showStale = status?.ready && status.stale && !staleHidden && pathname !== '/data';
 
   return (
@@ -300,13 +320,21 @@ export function Shell({ children }: { children: ReactNode }) {
               })}
             </nav>
             {collections.length > 0 && (
-              <label className="ml-auto flex items-center gap-2 text-[0.82rem] text-ash" title="Which collection counts as “owned”: green dots, owned filters, owned-only builds and Best from collection all follow it.">
+              <div className="ml-auto flex items-center gap-2">
+              <label className="flex items-center gap-2 text-[0.82rem] text-ash" title="Which collection counts as “owned”: green dots, owned filters, owned-only builds and Best from collection all follow it.">
                 Collection
                 <select
                   className="field h-7 py-0 text-[0.82rem]"
                   data-testid="collection-switcher"
                   value={activeCollection?.id ?? ''}
-                  onChange={(e) => void collectionsValue.switchTo(e.target.value)}
+                  onChange={(e) => {
+                    // An open deck belongs to the collection it was opened in (opening it switched there): a
+                    // switch made here leaves for the deck list first, then switches, instead of bouncing back.
+                    if (pathname.startsWith('/deck/')) {
+                      setPendingSwitch(e.target.value);
+                      router.push('/');
+                    } else void collectionsValue.switchTo(e.target.value);
+                  }}
                 >
                   {collections.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -315,6 +343,26 @@ export function Shell({ children }: { children: ReactNode }) {
                   ))}
                 </select>
               </label>
+              {activeCollection?.kind === 'arena' && (
+                <Menu
+                  label={arenaFormat === 'standardbrawl' ? 'Standard Brawl (60)' : 'Brawl (100)'}
+                  className="chip"
+                  title="The MTG Arena format new decks are built in and the Commanders list shows: Arena cards only, your wildcards as the budget"
+                  testId="mode-brawl"
+                  items={[
+                    { label: 'Brawl (100)', description: 'Arena Brawl: 100 cards, one commander.', onSelect: () => setArenaFormat('brawl'), testId: 'arena-format-brawl' },
+                    {
+                      label: 'Standard Brawl (60)',
+                      description: 'Standard cards only: 60 cards, one commander, one opponent.',
+                      onSelect: () => setArenaFormat('standardbrawl'),
+                      testId: 'arena-format-standardbrawl',
+                      disabled: status?.counts.standardBrawl === 0,
+                      title: status?.counts.standardBrawl === 0 ? NO_STANDARD_BRAWL : undefined,
+                    },
+                  ]}
+                />
+              )}
+              </div>
             )}
             <div className={`${collections.length > 0 ? '' : 'ml-auto '}text-[0.78rem] text-smoke`}>
               {status?.ready ? `${status.counts.legal.toLocaleString('en-US')} cards, synced ${fmtDate(status.cardsSyncedAt)}` : status ? 'No card data yet' : ''}

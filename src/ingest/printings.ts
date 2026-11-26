@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { DATA_DIR, writeSyncState, type Db } from '@/server/db';
 import type { Log } from './cards';
-import { downloadToFile, readJsonLines, resolveBulk } from './http';
+import { fetchBulk, readJsonLines } from './http';
 
 /* Scryfall objects are external JSON; they are read defensively through `any`. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,11 +27,9 @@ export function readPrinting(raw: any): { row: [string, string, string]; set: Se
  * "123a", "45★"). It is what lets a card be added to the collection by the code at its bottom.
  */
 export async function syncPrintings(db: Db, log: Log): Promise<void> {
-  const { url, updatedAt } = await resolveBulk('default_cards');
   const file = path.join(DATA_DIR, 'raw', 'default-cards.jsonl.gz');
-  log(`printings downloading ${url}`);
-  const bytes = await downloadToFile(url, file);
-  log(`printings downloaded ${bytes} bytes`);
+  // The cards step reads the same file for Arena data; it is downloaded once per Scryfall update.
+  const updatedAt = await fetchBulk('default_cards', file, log);
 
   const rows: [string, string, string][] = [];
   const sets = new Map<string, SetInfo>();

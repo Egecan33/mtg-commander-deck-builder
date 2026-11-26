@@ -1,18 +1,25 @@
 import { createHash } from 'node:crypto';
-import type { AnalyzeResponse, EdhrecStatus, NetworkResponse } from '@/app/lib/api';
+import type { AnalyzeResponse, ArenaReport, EdhrecStatus, NetworkResponse } from '@/app/lib/api';
 import { analyzeBracket } from '@/engine/brackets';
+import { isBrawlFormat } from '@/engine/format';
 import { deckNetwork } from '@/engine/network';
+import { packagePlan, withCohesion } from '@/engine/packages';
 import { rateDeck } from '@/engine/rating';
 import { createScorer } from '@/engine/scoring';
 import { focusThemeWeights, resolveThemeWeights, summarizeDeck, themeFocus } from '@/engine/summary';
-import { targetsFor } from '@/engine/targets';
-import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import { roleNeeds, targetsFor } from '@/engine/targets';
+import type { RoleNeed } from '@/engine/targets';
+import type { BracketReport, Card, CardScore, Deck, DeckNetwork, DeckRating, PackagePlan, DeckSummary, EngineContext, Targets } from '@/engine/types';
+import { overBudget, toCraft, wildcardsNeeded } from '@/engine/wildcards';
+import type { ServerCardDb } from './carddb';
 import { cardLookup, poolIndex } from './cards';
+import { deckCollection, deckFormat, ownedSetOf } from './collection';
 import { peekEdhrec } from './edhrec';
 import { boxMatchFor, deckConflicts } from './holders';
 import { getSettings } from './settings';
 import { cacheSlot } from './state';
 import { getCardDb } from './store';
+import { getWildcards } from './wildcards';
 
 /** Scored pools kept in memory. Each holds a CardScore per legal card, so the number stays small. */
 export const MAX_ANALYSES = 6;
@@ -20,9 +27,12 @@ export const MAX_ANALYSES = 6;
 /** Everything the engine needs for this deck. Never waits for the network. */
 export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecStatus } {
   const settings = getSettings();
-  const { data, status } = peekEdhrec(deck.commanders, deck.targetBracket);
+  // EDHREC has no data for Standard Brawl: it is off there, whatever the setting says.
+  const format = deckFormat(deck);
+  const { data, status } = format === 'standardbrawl' ? { data: null, status: 'off' as const } : peekEdhrec(deck.commanders, deck.targetBracket);
   return {
-    ctx: { db: getCardDb(), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
+    // An Arena deck is checked and built against its format's view of the card data (Brawl or Standard Brawl).
+    ctx: { db: getCardDb(format), edhrec: data, mldOverrides: settings.mldOverrides, extraTurnOverrides: settings.extraTurnOverrides },
     edhrec: status,
   };
 }
@@ -34,7 +44,8 @@ export function engineContext(deck: Deck): { ctx: EngineContext; edhrec: EdhrecS
 export function deckKey(deck: Deck): string {
   const theme = deck.themeWeights ? Object.entries(deck.themeWeights).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
   const wanted = deck.roleTargets ? Object.entries(deck.roleTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
-  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted];
+  const packages = deck.packageTargets ? Object.entries(deck.packageTargets).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)) : null;
+  const shape = [deck.commanders, deck.companion, deck.chosenColor, deck.targetBracket, deck.arenaFormat ?? null, theme, deck.main.map((e) => [e.oracleId, e.qty]), wanted, packages];
   return createHash('sha1').update(JSON.stringify(shape)).digest('hex');
 }
 
@@ -45,6 +56,10 @@ export interface Report {
   themeWeights: Record<string, number>;
   /** The themes the deck is focused on, whether it already is, and the weights Focus on these two saves. */
   themeFocus: { axes: string[]; focused: boolean; weights: Record<string, number> };
+  /** The deck's own plan: core packages, focused themes, pins, lands and offers, with cohesion. */
+  packages: PackagePlan;
+  /** Role coverage of the finished deck (`roleNeeds`): the numbers the rating, the scorer and the Packages tab share. */
+  roles: RoleNeed[];
   deckScores: Record<string, CardScore>;
   unknown: string[];
 }
@@ -73,11 +88,10 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
   let report: Report | null = null;
   let pool: ScoredPool | null = null;
   let network: DeckNetwork | null = null;
+  const getNetwork = (): DeckNetwork => (network ??= deckNetwork(deck, ctx, { scorer }));
   return {
     key, deck, ctx, edhrec, scorer,
-    network() {
-      return (network ??= deckNetwork(deck, ctx, { scorer }));
-    },
+    network: getNetwork,
     report() {
       if (report) return report;
       const { db } = ctx;
@@ -91,20 +105,23 @@ function makeAnalysis(key: string, deck: Deck, ctx: EngineContext, edhrec: Edhre
         if (card) deckScores[id] = scorer.score(card);
         else if (!unknown.includes(id)) unknown.push(id);
       }
+      const targets = targetsFor(deck, ctx, summary);
       return (report = {
         rating: rateDeck(deck, ctx),
         bracket: analyzeBracket(deck, ctx),
         summary,
-        targets: targetsFor(deck, ctx, summary),
-        defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targetsFor(deck, ctx, summary),
+        targets,
+        roles: roleNeeds(deck, ctx, { summary, targets }),
+        defaultTargets: deck.roleTargets ? targetsFor({ ...deck, roleTargets: null }, ctx, summary) : targets,
         themeWeights,
         themeFocus: { ...themeFocus(themeWeights), weights: focusThemeWeights(themeWeights) },
+        packages: withCohesion(packagePlan(deck, ctx, summary), getNetwork()),
         deckScores, unknown,
       });
     },
     pool() {
       if (pool) return pool;
-      const cards: readonly Card[] = poolIndex().cards;
+      const cards: readonly Card[] = poolIndex(ctx.db as ServerCardDb).cards;
       const scores = cards.map((c) => scorer.score(c));
       const orders = new Map<string, Int32Array>();
       return (pool = {
@@ -164,7 +181,23 @@ export function analyzeResponse(deck: Deck): AnalyzeResponse {
   }
   for (const reason of r.bracket.reasons) for (const id of reason.oracleIds) ids.add(id);
   for (const v of [...r.rating.violations, ...r.bracket.violationsOfTarget]) for (const id of v.oracleIds) ids.add(id);
-  return { ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck) };
+  return {
+    format: deckFormat(deck), ...r, cards: cardLookup(ids), edhrec: analysis.edhrec, conflicts: deckConflicts(deck), boxMatch: boxMatchFor(deck),
+    arena: arenaReport(deck, analysis.ctx),
+  };
+}
+
+/**
+ * A Brawl deck's wildcard line: what its cards not owned (in the deck's own collection, whichever is
+ * active) need per rarity, what that collection has, and the printing to craft each one. Null for a
+ * Commander deck.
+ */
+export function arenaReport(deck: Deck, ctx: EngineContext): ArenaReport | null {
+  if (!isBrawlFormat(deckFormat(deck))) return null;
+  const owned = ownedSetOf(deckCollection(deck));
+  const needed = wildcardsNeeded(deck, ctx.db, owned);
+  const have = getWildcards(deckCollection(deck)).wildcards;
+  return { needed, have, over: overBudget(needed, have), toCraft: toCraft(deck, ctx.db, owned), noData: ctx.db.all().length === 0 };
 }
 
 /** The body of POST /api/network: the deck's network and a card for every node. */

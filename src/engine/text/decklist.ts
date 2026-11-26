@@ -1,4 +1,4 @@
-import { canPair, copyLimit, isCommanderEligible } from '../rules';
+import { canPair, copyLimit, isBasicLand, isCommanderEligible } from '../rules';
 import type { Card, CardDb, Deck, DeckEntry } from '../types';
 
 export interface UnresolvedLine { line: number; text: string }
@@ -18,6 +18,8 @@ export interface ParseDecklistOptions {
    * `isCommanderEligible` from the rules engine.
    */
   isCommanderEligible?: (card: Card) => boolean;
+  /** Cards in a finished deck, commander(s) included (default 100; Standard Brawl is 60). */
+  size?: number;
 }
 
 /** Largest quantity a single line may carry; anything above is treated as a typo, not a count. */
@@ -156,6 +158,7 @@ export function parseCardLine(rawLine: string, db: CardDb): CardLine | null {
  */
 export function parseDecklist(text: string, db: CardDb, options: ParseDecklistOptions = {}): ParsedDecklist {
   const eligible = options.isCommanderEligible ?? isCommanderEligible;
+  const size = options.size ?? 100;
   const commanders: string[] = [];
   let companion: string | null = null;
   const main = new Map<string, DeckEntry>();
@@ -254,15 +257,15 @@ export function parseDecklist(text: string, db: CardDb, options: ParseDecklistOp
       const card = db.get(id);
       if (card && copyLimit(card) === 1) takeFromMain(card);
     }
-  } else if (side.length >= 1 && side.length <= 2 && canLead(side) && mainTotal() + side.length === 100
+  } else if (side.length >= 1 && side.length <= 2 && canLead(side) && mainTotal() + side.length === size
     && new Set(side.map((x) => x.card.oracleId)).size === side.length) {
-    // MTGO-style export: 99 (or 98) cards, then the commander(s) under "Sideboard".
+    // MTGO-style export: size - 1 (or size - 2) cards, then the commander(s) under "Sideboard".
     for (const x of side) {
       commanders.push(x.card.oracleId);
       ignored.splice(ignored.indexOf(x.at), 1);
     }
-  } else if (!sawZoneHeader && mainTotal() === 100) {
-    // No headers and exactly 100 cards: a commander set apart in a last block of its own,
+  } else if (!sawZoneHeader && mainTotal() === size) {
+    // No headers and exactly `size` cards: a commander set apart in a last block of its own,
     // otherwise the first eligible card.
     const apart = blocks >= 2 && block.length <= 2 && canLead(block)
       && block.every((x) => main.get(x.card.oracleId)?.qty === 1)
@@ -301,11 +304,18 @@ export function exportDecklist(deck: Deck, db: CardDb): string {
  * sections of "<qty> <name>" lines. Arena names a two-part card by its front part alone, except
  * split cards, which keep both halves ("Fire // Ice"). No set codes: Arena then picks a printing
  * the player owns. Cards the database does not know are left out.
+ *
+ * With `owned` (an Arena deck), a card that is not owned and not a basic land is written with its
+ * cheapest Arena printing ("1 Infernal Grasp (OMB) 18"), so Arena's import crafts that printing
+ * and spends the wildcard the deck page counted.
  */
-export function exportArenaDecklist(deck: Deck, db: CardDb): string {
+export function exportArenaDecklist(deck: Deck, db: CardDb, opts: { owned?: ReadonlySet<string> } = {}): string {
   const line = (oracleId: string, qty: number): string[] => {
     const card = db.get(oracleId);
-    return card && qty > 0 ? [`${qty} ${card.layout === 'split' ? card.name : card.frontName}`] : [];
+    if (!card || qty <= 0) return [];
+    const name = card.layout === 'split' ? card.name : card.frontName;
+    const printing = opts.owned && !opts.owned.has(oracleId) && !isBasicLand(card) ? card.arenaPrinting : null;
+    return [printing ? `${qty} ${name} (${printing.set}) ${printing.number}` : `${qty} ${name}`];
   };
   const sections: string[] = [];
   if (deck.commanders.length > 0) sections.push(['Commander', ...deck.commanders.flatMap((id) => line(id, 1))].join('\n'));

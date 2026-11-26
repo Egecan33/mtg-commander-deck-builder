@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, type RefObject } from 'react';
-import type { Deck } from '@/engine/types';
+import { CORE_PACKAGES, FUNCTIONAL_PACKAGES } from '@/engine/packages';
+import type { Deck, PackageId } from '@/engine/types';
 import { VirtualCardGrid } from '../../components/CardGrid';
 import { CardTile } from '../../components/CardTile';
 import { EmptyState } from '../../components/EmptyState';
@@ -9,6 +10,7 @@ import { ColorPip } from '../../components/card';
 import { useNotify } from '../../components/Shell';
 import { usePaged } from '../../components/VirtualGrid';
 import { browseCards, type CardSort, type HeldBy, type ScoredCard } from '../../lib/api';
+import { rarityStat } from './ArenaParts';
 import {
   AXIS_IDS, COLOR_NAME, COLOR_ORDER, DEFAULT_QUERY, ROLES, ROLE_LABEL, activeFilterCount, axisLabel, deckCount, entryOf, fmtInt, toFilters, type BrowserQuery,
 } from '../../lib/ui';
@@ -22,6 +24,15 @@ const SORTS: { id: CardSort; label: string }[] = [
   { id: 'price', label: 'Price' },
 ];
 
+/** A tile's stats: the Arena rarity on a Brawl deck (no prices there), else the price when sorting by it; then the deck's other packages. */
+const tileStats = (c: BrowserCard, price: boolean, brawl: boolean) => {
+  const out: { label: string; value: string; title?: string }[] = [];
+  if (brawl) out.push(rarityStat(c.arenaRarity));
+  else if (price && c.priceUsd !== null) out.push({ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' });
+  if (c.also && c.also.length > 0) out.push({ label: 'also', value: c.also.join(', '), title: 'Also in these packages of the deck' });
+  return out.length > 0 ? out : undefined;
+};
+
 /** A browser result. `held`: adding one more copy would take a copy a box or another built deck holds (their names). */
 export type BrowserCard = ScoredCard & { held?: string[] };
 
@@ -31,7 +42,7 @@ export type BrowserCard = ScoredCard & { held?: string[] };
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, onHide,
+  deck, settled, rev, query, setQuery, extraAxes, themePackages, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false, size = 100,
 }: {
   /** Hides the card search column (the deck gets its width). */
   onHide: () => void;
@@ -41,6 +52,8 @@ export function Browser({
   query: BrowserQuery;
   setQuery: (next: BrowserQuery | ((q: BrowserQuery) => BrowserQuery)) => void;
   extraAxes: string[];
+  /** The deck's planned theme packages, offered next to the core and functional ones in the role menu. */
+  themePackages: { id: PackageId; name: string }[];
   /** The deck's own conflicts: a card already in the deck shows its "!" from these. */
   held: HeldBy;
   /** "+" on a card. The deck page opens the card with what it could replace when the deck is full. */
@@ -48,6 +61,10 @@ export function Browser({
   onRemove: (id: string) => void;
   onOpen: (card: BrowserCard) => void;
   searchRef: RefObject<HTMLInputElement | null>;
+  /** An MTG Arena (Brawl) deck: the pool is Arena cards only and each card shows its Arena rarity, not a price. */
+  brawl?: boolean;
+  /** Cards in a full deck (60 in Standard Brawl). */
+  size?: number;
 }) {
   const notify = useNotify();
   const [text, setText] = useState(query.q);
@@ -75,11 +92,19 @@ export function Browser({
   );
 
   const set = <K extends keyof BrowserQuery>(k: K, v: BrowserQuery[K]) => setQuery((q) => ({ ...q, [k]: v, fromFix: k === 'q' ? q.fromFix : null }));
+  // The role menu also picks a package: choosing one clears the role and the other way round.
+  const pickRole = (v: string) =>
+    setQuery((q) => ({ ...q, role: v.startsWith('package:') ? '' : (v as BrowserQuery['role']), package: v.startsWith('package:') ? (v.slice(8) as PackageId) : '', fromFix: null }));
+  const packageChoices = useMemo(() => [
+    ...CORE_PACKAGES.map((p) => ({ id: p.id, name: p.name })),
+    ...FUNCTIONAL_PACKAGES.map((p) => ({ id: p.id, name: p.name })),
+    ...themePackages,
+  ], [themePackages]);
   const axes = useMemo(() => [...new Set([...extraAxes, ...AXIS_IDS])], [extraAxes]);
   const active = activeFilterCount(query);
   const clearFilters = () => setQuery({ ...DEFAULT_QUERY, legalOnly: query.legalOnly, hideInDeck: query.hideInDeck, sort: query.sort });
   // A full deck: "+" opens the card with the deck cards it could replace.
-  const full = deckCount(deck) >= 100;
+  const full = deckCount(deck) >= size;
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Card browser" data-testid="browser">
@@ -102,7 +127,7 @@ export function Browser({
 
         <div className="flex items-center gap-2">
           <select className="field h-7 w-[10.5rem] text-[0.8125rem]" value={query.sort} onChange={(e) => set('sort', e.target.value as CardSort)} aria-label="Sort cards" title="Order of the cards" data-testid="sort">
-            {SORTS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            {SORTS.filter((s) => !brawl || s.id !== 'price').map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
           <button type="button" className="btn btn-sm" aria-expanded={showFilters} onClick={() => setShowFilters((s) => !s)} title={showFilters ? 'Hide the filters' : 'Show the filters'}>
             Filters{active ? ` (${active})` : ''}
@@ -115,9 +140,12 @@ export function Browser({
 
         {showFilters && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5" data-testid="filters">
-            <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.role} onChange={(e) => set('role', e.target.value as BrowserQuery['role'])} aria-label="Role" data-testid="filter-role">
+            <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.role || (query.package ? `package:${query.package}` : '')} onChange={(e) => pickRole(e.target.value)} aria-label="Role" data-testid="filter-role">
               <option value="">Any role</option>
               {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              <optgroup label="Packages">
+                {packageChoices.map((p) => <option key={p.id} value={`package:${p.id}`}>{p.name}</option>)}
+              </optgroup>
             </select>
             <select className="field h-7 w-[9.5rem] text-[0.8125rem]" value={query.axis} onChange={(e) => set('axis', e.target.value)} aria-label="Theme" data-testid="filter-axis">
               <option value="">Any theme</option>
@@ -149,10 +177,12 @@ export function Browser({
               <input className="field h-7 w-10 px-1 text-center text-[0.8125rem]" inputMode="numeric" value={query.mvMax} onChange={(e) => set('mvMax', e.target.value)} placeholder="16" aria-label="Highest mana value" data-testid="filter-mvmax" />
             </label>
             <input className="field h-7 w-[6.5rem] text-[0.8125rem]" value={query.type} onChange={(e) => set('type', e.target.value)} placeholder="Type, e.g. elf" aria-label="Card type or subtype" />
-            <label className="flex items-center gap-1 text-ash">
-              <span>Up to $</span>
-              <input className="field h-7 w-12 px-1 text-center text-[0.8125rem]" inputMode="decimal" value={query.maxPrice} onChange={(e) => set('maxPrice', e.target.value)} placeholder="any" aria-label="Highest price in dollars" />
-            </label>
+            {!brawl && (
+              <label className="flex items-center gap-1 text-ash">
+                <span>Up to $</span>
+                <input className="field h-7 w-12 px-1 text-center text-[0.8125rem]" inputMode="decimal" value={query.maxPrice} onChange={(e) => set('maxPrice', e.target.value)} placeholder="any" aria-label="Highest price in dollars" />
+              </label>
+            )}
             <label className="flex cursor-pointer items-center gap-1.5 text-ash">
               <input type="checkbox" checked={query.owned} onChange={(e) => set('owned', e.target.checked)} /> Owned
             </label>
@@ -220,7 +250,7 @@ export function Browser({
                 status={commander ? 'Commander' : undefined}
                 qty={entry?.qty}
                 dim={!!gate}
-                stats={query.sort === 'price' && c.priceUsd !== null ? [{ label: '', value: `$${c.priceUsd.toFixed(2)}`, title: 'Price' }] : undefined}
+                stats={tileStats(c, query.sort === 'price', brawl)}
                 onOpen={() => onOpen(c)}
                 testId="browser-card"
                 data={{
@@ -245,7 +275,7 @@ export function Browser({
                           className="tile-btn tile-btn-add"
                           onClick={() => onAdd(c)}
                           aria-label={full ? `Put ${c.name} in instead of a deck card` : `Add ${c.name} to the deck`}
-                          title={full ? 'The deck has 100 cards: opens the card with the deck cards it could replace' : 'Add to the deck'}
+                          title={full ? `The deck has ${size} cards: opens the card with the deck cards it could replace` : 'Add to the deck'}
                           data-testid="browser-add"
                           data-full={full || undefined}
                         >
