@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { CardDetail } from '@/app/components/CardDetail';
 import { CardGrid } from '@/app/components/CardGrid';
 import { CardTile, type TileStat } from '@/app/components/CardTile';
@@ -112,10 +112,17 @@ export function RecsTab({ data, name, edhrecDecks }: { data: CommanderRecsRespon
         <JumpRail className="sticky top-[var(--cmd-bar,6rem)] self-start" />
         <div className="min-w-0">
           {sections.map((s) => (
-            <Section key={s.id} id={`rec-${s.id}`} title={s.title} count={s.total} cap={30} data={{ 'data-section': s.id }}>
-              {s.note && <p className="mb-2 text-[13px] text-ash">{s.note}</p>}
-              {body(s)}
+            <Fragment key={s.id}>
+              <Section id={`rec-${s.id}`} title={s.title} count={s.total} cap={30} data={{ 'data-section': s.id }}>
+                {s.note && <p className="mb-2 text-[13px] text-ash">{s.note}</p>}
+                {body(s)}
+              </Section>
+            {groupBy === 'category' && s.id === 'owned' && (
+            <Section id="rec-packages" title="Packages" data={{ 'data-section': 'packages' }}>
+              <EmptyState testId="rec-packages-pending" message="Packages of cards that work together arrive with the packages work." />
             </Section>
+          )}
+            </Fragment>
           ))}
         </div>
       </div>

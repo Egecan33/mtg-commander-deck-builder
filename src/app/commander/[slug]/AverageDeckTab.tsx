@@ -19,6 +19,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
   const notify = useNotify();
   const [detail, setDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<'cards' | 'network'>('cards');
   if (avg.error) return <EmptyState message={`Could not build the average deck: ${avg.error}`} />;
   if (avg.empty) {
     return (
@@ -56,14 +57,19 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
         <span className="text-ash tabular-nums">{rating.rating} / 100</span>
         <button type="button" className="btn btn-primary ml-auto" onClick={() => void open()} disabled={busy} data-testid="average-open">Open as a deck</button>
       </div>
-      <DeckView
+      <div className="seg mb-3" role="group" aria-label="Show the deck as">
+        <button type="button" aria-pressed={view === 'cards'} onClick={() => setView('cards')} data-testid="average-view-cards">Cards</button>
+        <button type="button" aria-pressed={view === 'network'} onClick={() => setView('network')} data-testid="average-view-network">Network</button>
+      </div>
+      {view === 'network' && <EmptyState testId="average-network-pending" message="The network view of this deck is not built yet. It arrives with the deck network work." />}
+      {view === 'cards' && <DeckView
         deck={deck}
         lookup={analysis.cards}
         scoreOf={(id) => analysis.deckScores[id]}
         weakest={NO_WEAK}
         held={analysis.conflicts.cards ?? NO_HELD}
         onOpen={setDetail}
-      />
+      />}
       {detail && <CardDetail id={detail} card={analysis.cards[detail]} score={analysis.deckScores[detail]} held={analysis.conflicts.cards?.[detail]} bracket={deck.targetBracket} onClose={() => setDetail(null)} />}
     </div>
   );
