@@ -706,6 +706,19 @@ const PARTS: Record<RatingKey, (f: Facts) => Part> = {
   interaction: interactionPart, wincons: winconsPart, consistency: consistencyPart, bracket: bracketPart,
 };
 
+/** Why a sub-score reads 0 when its own checks found nothing to fix (an empty or nearly empty deck). */
+const EMPTY_REASON: Record<RatingKey, string> = {
+  mana: "No lands yet: the mana base is rated on the deck's lands.",
+  roles: 'No ramp, card draw or interaction yet: add cards to fill the roles.',
+  synergy: "Nothing on theme yet: synergy is rated on cards that work with the commander's theme.",
+  quality: "No spells yet: card quality is rated on the deck's nonland cards.",
+  curve: "No spells yet: the curve is rated on the deck's nonland cards.",
+  interaction: 'No interaction yet: add removal or counterspells.',
+  wincons: 'No win condition yet: add ways to actually end the game.',
+  consistency: 'No cards yet besides the commander: consistency is rated on the library.',
+  bracket: 'Nothing to check against the bracket yet: add cards to the deck.',
+};
+
 /** Sub-scores that count cards: what the mana cannot cast is discounted from them (see `UNCASTABLE_COST`). */
 const CAST_DEPENDENT: ReadonlySet<RatingKey> = new Set(['roles', 'synergy', 'curve', 'interaction', 'wincons', 'consistency']);
 
@@ -761,6 +774,8 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
       .slice(0, MAX_FIXES)
       .map(({ text, filter, actionable }) => ({ text, filter, actionable }));
     const value = clamp01(part.value) * (CAST_DEPENDENT.has(key) ? uncastable : 1) * filled;
+    // A sub-score of 0 always says why (AGENTS rule 4); with nothing to swap yet it is advice.
+    if (Math.round(clamp01(value) * 1000) === 0 && fixes.length === 0) fixes.push({ text: EMPTY_REASON[key], filter: null, actionable: false });
     return { key, label: LABELS[key], weight: RATING_WEIGHTS[key], value: Math.round(clamp01(value) * 1000) / 1000, fixes };
   });
 

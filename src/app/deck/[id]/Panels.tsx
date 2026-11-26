@@ -911,7 +911,7 @@ export function ImprovePanel({
                   )}
                   {dissent > 0 && <span className="block text-band-mid">The engine disagrees with {dissent === items.length ? (dissent === 1 ? 'it' : 'all of them') : `${dissent} of them`}; its reasons are on the {dissent === 1 ? 'card' : 'cards'}.</span>}
                 </p>
-                {proposals.kind !== 'add' && <button type="button" className="btn btn-sm btn-primary" onClick={onApplyAll} data-testid="apply-all">Apply all</button>}
+                {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={onApplyAll} data-testid="apply-all">Apply all</button>}
               </div>
               <button type="button" className="btn btn-sm mb-3 w-full" onClick={() => onProxy([...new Set(items.map((p) => p.in))])} data-testid="proxy-incoming">
                 Add incoming cards to proxy list ({new Set(items.map((p) => p.in)).size})
@@ -938,7 +938,7 @@ export function ImprovePanel({
                         </div>
                         <Thumb id={p.in} lookup={lookup} onOpen={onOpen} width={78} held={held} />
                         <div className="ml-1 flex min-w-0 flex-1 flex-col gap-1.5">
-                          <button type="button" className="btn btn-sm btn-primary" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
+                          <button type="button" className="btn btn-sm" onClick={() => onAccept(p)} data-testid="proposal-accept">Accept</button>
                           {proposals.kind !== 'add' && <button type="button" className="btn btn-sm" onClick={() => onReject(p)} data-testid="proposal-reject">Reject</button>}
                           <button type="button" className="btn btn-sm btn-quiet" onClick={() => onProxy([p.in])} title={`Put ${lookup[p.in]?.name ?? 'the incoming card'} on the proxy list`} data-testid="proposal-proxy">Proxy</button>
                         </div>

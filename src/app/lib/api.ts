@@ -655,7 +655,9 @@ async function call<T>(method: string, url: string, body?: unknown, signal?: Abo
   let data: unknown = null;
   try {
     data = await res.json();
-  } catch {
+  } catch (err) {
+    // a request aborted while its body was read is an abort, not an empty answer
+    if (signal?.aborted) throw err;
     // an empty or non-JSON body is reported through the status below
   }
   if (!res.ok) {

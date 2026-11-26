@@ -682,6 +682,10 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
             { text: "No spells yet: card quality is rated on the deck's nonland cards.", filter: null, actionable: false },
           ]);
         }
+        // Every part that reads 0 says why (AGENTS rule 4).
+        for (const part of r.subscores) {
+          if (part.value === 0) expect(part.fixes.length, `${name} B${target} ${part.key}`).toBeGreaterThan(0);
+        }
       }
     }
   });
