@@ -131,6 +131,62 @@ export const CORE_BAND_ROLES: Record<CorePackageId, readonly Role[]> = {
 };
 export const CORE_PIN_ROLE: Record<CorePackageId, Role> = { ramp: 'ramp', draw: 'draw', removal: 'spot-removal', protection: 'protection' };
 export const WIPE_REASON = 'For when someone runs away with the game, or to clear blockers for your win.';
+export const CORE_PACKAGE_IDS: readonly CorePackageId[] = ['ramp', 'draw', 'removal', 'protection'];
+/**
+ * Who is in a core package (packages spec): a card with one of its roles or one of Scryfall's
+ * tagger tags. Roles are read through `bandRoles`, so the bracket rules of deck-theory.md §2.3 hold
+ * here too: nonland fast mana is Ramp and a cheap cantrip is Card draw from Bracket 4 up. The
+ * Packages tab, Complete package and the rating's role coverage all count by this.
+ */
+export const CORE_MEMBERS: Record<CorePackageId, { roles: readonly Role[]; tags: readonly string[] }> = {
+  ramp: { roles: ['ramp'], tags: ['ramp', 'mana-rock', 'mana-dork'] },
+  draw: { roles: ['draw'], tags: ['draw', 'card-advantage'] },
+  removal: { roles: ['spot-removal', 'counterspell', 'wipe'], tags: ['removal', 'sweeper', 'counterspell'] },
+  protection: { roles: ['protection'], tags: ['protection', 'protects-creature', 'gives-hexproof', 'gives-indestructible'] },
+};
+export const WIPE_TAG = 'sweeper';
+/**
+ * The rating's coverage entry each core package is counted under (`roleNeeds`): its pin role. The
+ * board-wipe slot inside Removal is the `wipe` entry; counterspells count inside Removal.
+ */
+export const CORE_NEED = CORE_PIN_ROLE;
+/** A core package's band runs from its target to this many cards over it before "over" costs anything. */
+export const PACKAGE_OVER = 4;
+
+/** A board wipe: the role, or Scryfall's `sweeper` tag. Lands never are. */
+export const isWipe = (f: CardFeatures, tags: readonly string[]): boolean => f.roles.includes('wipe') || tags.includes(WIPE_TAG);
+
+/** Is this card in the core package? A land is in no package. */
+export function inCorePackage(id: CorePackageId, card: Card, f: CardFeatures, tags: readonly string[], bracket: number): boolean {
+  if (isLandCard(f)) return false;
+  const m = CORE_MEMBERS[id];
+  if (m.roles.some((r) => f.roles.includes(r)) || bandRoles(card, f, bracket).some((r) => m.roles.includes(r))) return true;
+  return m.tags.some((t) => tags.includes(t));
+}
+
+const CORE_COVERED = new Set<Role>(['ramp', 'fast-mana', 'draw', 'spot-removal', 'counterspell', 'wipe', 'protection']);
+
+/**
+ * The role-coverage entries a card counts toward (`roleNeeds`, the scorer's role need, the builder's
+ * quotas): each core package it is in (overlaps count in every one), the board-wipe slot when it is
+ * a wipe, and its other band roles (recursion, tutors, win conditions, graveyard hate).
+ */
+export function coverageRoles(card: Card, f: CardFeatures, tags: readonly string[], bracket: number): Role[] {
+  const out: Role[] = [];
+  for (const id of CORE_PACKAGE_IDS) if (inCorePackage(id, card, f, tags, bracket)) out.push(CORE_NEED[id]);
+  if (!isLandCard(f) && isWipe(f, tags)) out.push('wipe');
+  for (const r of bandRoles(card, f, bracket)) if (!CORE_COVERED.has(r) && !out.includes(r)) out.push(r);
+  return out;
+}
+
+/**
+ * The `Deck.roleTargets` value that sets a coverage entry's target to `n`: the Removal package's
+ * pin is its spot-removal share (the counterspell band and the wipe slot make up the rest).
+ */
+export function pinFor(role: Role, n: number, targets: Targets): number {
+  if (role !== CORE_PIN_ROLE.removal || !targets.packages) return n;
+  return Math.max(0, n - (targets.roles.counterspell?.lo ?? 0) - targets.packages.wipes.lo);
+}
 
 export interface TargetPlan {
   targets: Targets;
@@ -155,11 +211,21 @@ export function wipeSlot(band: RoleBand | undefined, stax: boolean): { lo: numbe
 
 /** What the bands of a core package add up to at the bottom. */
 export function coreBase(targets: Targets, id: CorePackageId, stax: boolean): number {
+  return coreSum(targets, id, stax, 'lo');
+}
+
+function coreSum(targets: Targets, id: CorePackageId, stax: boolean, end: 'lo' | 'hi'): number {
   let sum = 0;
   for (const role of CORE_BAND_ROLES[id]) {
-    sum += role === 'wipe' ? wipeSlot(targets.roles.wipe, stax).lo : (targets.roles[role]?.lo ?? 0);
+    sum += role === 'wipe' ? wipeSlot(targets.roles.wipe, stax)[end] : (targets.roles[role]?.[end] ?? 0);
   }
   return sum;
+}
+
+/** A core package's band: its target (at least 8) up to four over it, or to its bands' own top when higher. */
+function coreBand(targets: Targets, id: CorePackageId, stax: boolean): RoleBand {
+  const lo = Math.max(PACKAGE_MIN, coreBase(targets, id, stax));
+  return { lo, hi: Math.max(lo + PACKAGE_OVER, coreSum(targets, id, stax, 'hi')) };
 }
 
 /**
@@ -311,13 +377,17 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
   }
 
   const finalLands = Math.min(LAND_MAX, Math.max(LAND_MIN, Math.round(lands)));
-  return {
-    targets: { lands: finalLands, roles, avgMv, themeCards: THEME_CARDS[i], taplandCap: TAPLAND_CAP[i] },
-    moves,
-    lands: { target: finalLands, reason, source },
-    stax,
-  };
+  const targets: Targets = { lands: finalLands, roles, avgMv, themeCards: THEME_CARDS[i], taplandCap: TAPLAND_CAP[i] };
+  // The core packages: at least 8 each (owner's rules 2-3), from the bands above, pins included.
+  const core = (id: CorePackageId) => coreBand(targets, id, stax);
+  targets.packages = { ramp: core('ramp'), draw: core('draw'), removal: core('removal'), protection: core('protection'), wipes: wipeSlot(roles.wipe, stax) };
+  return { targets, moves, lands: { target: finalLands, reason, source }, stax };
 }
+
+const scaleBand = (band: RoleBand, f: number): RoleBand => {
+  const lo = Math.round(band.lo * f);
+  return { lo, hi: Math.max(lo, Math.ceil(band.hi * f)) };
+};
 
 /**
  * Targets for a deck of `cardCount` cards: counts shrink linearly with cardCount / 100, never
@@ -326,17 +396,30 @@ export function targetPlan(deck: Deck, ctx: EngineContext, summary: DeckSummary)
 export function scaleTargets(t: Targets, cardCount: number): Targets {
   const f = Number.isFinite(cardCount) ? Math.min(1, Math.max(0, cardCount) / 100) : 0;
   const roles: Partial<Record<Role, RoleBand>> = {};
-  for (const [role, band] of Object.entries(t.roles) as [Role, RoleBand][]) {
-    const lo = Math.round(band.lo * f);
-    roles[role] = { lo, hi: Math.max(lo, Math.ceil(band.hi * f)) };
-  }
+  for (const [role, band] of Object.entries(t.roles) as [Role, RoleBand][]) roles[role] = scaleBand(band, f);
+  const p = t.packages;
   return {
     lands: Math.round(t.lands * f),
     roles,
     avgMv: { ...t.avgMv },
     themeCards: Math.round(t.themeCards * f),
     taplandCap: Math.ceil(t.taplandCap * f),
+    ...(p ? { packages: { ramp: scaleBand(p.ramp, f), draw: scaleBand(p.draw, f), removal: scaleBand(p.removal, f), protection: scaleBand(p.protection, f), wipes: scaleBand(p.wipes, f) } } : {}),
   };
+}
+
+/** The band a coverage entry is held to: a core package's (`Targets.packages`), the wipe slot, or the role's band. */
+function coverageBand(role: Role, full: Targets, f: number | null): RoleBand | undefined {
+  const scale = (b: RoleBand) => (f === null ? { ...b } : scaleBand(b, f));
+  const p = full.packages;
+  if (p) {
+    const id = CORE_PACKAGE_IDS.find((x) => CORE_NEED[x] === role);
+    if (id) return scale(p[id]);
+    if (role === 'wipe') return scale(p.wipes);
+    if (role === 'counterspell') return undefined; // counted inside Removal
+  }
+  const band = full.roles[role];
+  return band ? scale(band) : undefined;
 }
 
 // ---- role needs: the one count-against-band computation the scorer and the rating share --------
@@ -392,6 +475,8 @@ export interface RoleNeed {
   short: number;
   /** Cards past the band's top, 0 when inside it. */
   over: number;
+  /** The finished deck owes cards to this entry (its unscaled band starts at 1 or more). */
+  owed: boolean;
 }
 
 export interface RoleNeedOptions {
@@ -408,22 +493,26 @@ export interface RoleNeedOptions {
 
 /**
  * Role counts against their bands: THE numbers behind "3 short on ramp" (spec §11). The card
- * score's role part and the rating's role coverage both read this, so a shortfall the rating
- * reports is the one the scorer rewards filling. One entry per role that has a band for this
- * deck, in the order of `ROLE_LABEL`.
+ * score's role part, the rating's role coverage, the builder's quotas and the Packages tab all read
+ * this, so a shortfall the rating reports is the one the scorer rewards filling and the Packages tab
+ * shows. The four core packages are counted by membership (role or tag, `coverageRoles`) against
+ * their package targets (owner's rule 6): Ramp as `ramp`, Card draw as `draw`, Removal (counterspells
+ * and wipes in it) as `spot-removal`, Protection as `protection`, and the board-wipe slot as `wipe`.
+ * One entry per role that has a band for this deck, in the order of `ROLE_LABEL`.
  */
 export function roleNeeds(deck: Deck, ctx: EngineContext, opts: RoleNeedOptions = {}): RoleNeed[] {
   const bracket = bracketIndex(deck.targetBracket) + 1;
   const summary = opts.summary ?? summarizeDeck(deck, ctx.db);
   const full = opts.targets ?? targetsFor(deck, ctx, summary);
-  const targets = opts.scaled ? scaleTargets(full, summary.cardCount) : full;
+  const f = opts.scaled ? (Number.isFinite(summary.cardCount) ? Math.min(1, Math.max(0, summary.cardCount) / 100) : 0) : null;
   const counts: Partial<Record<Role, number>> = {};
   for (const { card, features, qty } of deckCards(deck, ctx.db).cards) {
-    for (const role of bandRoles(card, features, bracket)) counts[role] = (counts[role] ?? 0) + qty;
+    const tags = ctx.db.tagSlugs?.(card.oracleId) ?? [];
+    for (const role of coverageRoles(card, features, tags, bracket)) counts[role] = (counts[role] ?? 0) + qty;
   }
   const out: RoleNeed[] = [];
   for (const role of Object.keys(ROLE_LABEL) as Role[]) {
-    const band = targets.roles[role];
+    const band = coverageBand(role, full, f);
     if (!band) continue;
     const count = counts[role] ?? 0;
     out.push({
@@ -431,6 +520,7 @@ export function roleNeeds(deck: Deck, ctx: EngineContext, opts: RoleNeedOptions 
       band: { lo: band.lo, hi: band.hi },
       short: Math.max(0, band.lo - count),
       over: Math.max(0, count - band.hi),
+      owed: (f === null ? band.lo : (coverageBand(role, full, null)?.lo ?? 0)) >= 1,
     });
   }
   return out;

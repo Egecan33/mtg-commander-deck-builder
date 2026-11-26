@@ -24,7 +24,7 @@ function sacrificeDecks(): { a: Deck; b: Deck; x: Card; y: Card } {
   };
   const pool = db.all().filter((c) => {
     const f = db.features(c.oracleId);
-    return !!f && !isLandCard(f) && !isRingCard(f) && copyLimit(c) === 1 && cardFitsDeck(c, upgraded, db) === null && !base.main.some((e) => e.oracleId === c.oracleId);
+    return !!f && !isLandCard(f) && !isRingCard(f, c, 3, db.tagSlugs(c.oracleId)) && copyLimit(c) === 1 && cardFitsDeck(c, upgraded, db) === null && !base.main.some((e) => e.oracleId === c.oracleId);
   });
   const enablers = pool.filter((c) => (db.features(c.oracleId)!.axes.sacrifice?.e ?? 0) >= 0.9);
   const payoffs = pool.filter((c) => (db.features(c.oracleId)!.axes.sacrifice?.p ?? 0) >= 0.9);
@@ -59,7 +59,7 @@ describe('the connection term', () => {
       const deck = fixtureDeck(name, name === 'precon' ? 2 : name === 'upgraded' ? 3 : 5);
       const scorer = createScorer(deck, ctx);
       for (const { card: c, features } of deckCards(deck, db).cards) {
-        if (!isRingCard(features) && !isLandCard(features) && !deck.commanders.includes(c.oracleId)) continue;
+        if (!isRingCard(features, c, deck.targetBracket, db.tagSlugs(c.oracleId)) && !isLandCard(features) && !deck.commanders.includes(c.oracleId)) continue;
         expect(scorer.score(c).reasons.some((r) => REASON.test(r)), c.name).toBe(false);
       }
     }

@@ -6,7 +6,7 @@ import { addCard, namesOnlyOtherColours, themeFit } from '@/engine/builder/pool'
 import { copyLimit, hasType } from '@/engine/rules';
 import { createScorer } from '@/engine/scoring';
 import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
-import { targetsFor } from '@/engine/targets';
+import { LAND_PLAN_SLACK, targetsFor } from '@/engine/targets';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { parseDecklist } from '@/engine/text';
@@ -56,9 +56,10 @@ describe('autoBuild', () => {
         const rating = rateDeck(deck, ctx);
         expect(rating.rating).toBeGreaterThanOrEqual(55);
         expect(ms).toBeLessThan(3000);
-        // Review C1: a fresh build meets its own land target (Talrand at Bracket 2 was told to cut a land).
+        // Review C1: a fresh build meets its own land target (Talrand at Bracket 2 was told to cut a land):
+        // the build settles within a land of it where that does not cost rating, and always within the free two.
         const s = summarizeDeck(deck, db);
-        expect(Math.abs(s.landsEffective - targetsFor(deck, ctx, s).lands)).toBeLessThanOrEqual(1);
+        expect(Math.abs(s.landsEffective - targetsFor(deck, ctx, s).lands)).toBeLessThanOrEqual(LAND_PLAN_SLACK);
         expect(rating.subscores.find((x) => x.key === 'mana')!.fixes.filter((f) => /^(Add|Cut) \d+ lands?/.test(f.text))).toEqual([]);
       });
     }

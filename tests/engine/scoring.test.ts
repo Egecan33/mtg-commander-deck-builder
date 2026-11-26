@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createCardDb } from '@/engine/carddb';
 import { cardFitsDeck } from '@/engine/rules';
 import { STAPLE_FLOOR, createScorer } from '@/engine/scoring';
+import { coverageRoles } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, Card, CardFeatures, CardScore, Deck, DeckEntry, EdhrecData, EngineContext } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -373,8 +374,9 @@ describe('createScorer: review fixes', () => {
   });
 
   it('pays the staple share while the deck wants the role, and to the best cards of a full role', () => {
+    // (The Ramp package runs to four past its target before it is full, so the full deck carries two more rocks than it used to.)
     const rocks = ['Arcane Signet', 'Mind Stone', 'Fellwar Stone', 'Thought Vessel', 'Cultivate', "Kodama's Reach", 'Rampant Growth', 'Farseek',
-      "Nature's Lore", 'Three Visits', 'Elvish Mystic', 'Birds of Paradise', "Commander's Sphere"];
+      "Nature's Lore", 'Three Visits', 'Elvish Mystic', 'Birds of Paradise', "Commander's Sphere", 'Talisman of Resilience', "Wayfarer's Bauble"];
     const hungry = createScorer(lathril(), ctx).score(card('Sol Ring'));
     const fullDeck = lathril({}, [...lathrilMain(), ...rocks.map((n) => e(n))]);
     const full = createScorer(fullDeck, ctx).score(card('Sol Ring'));
@@ -383,11 +385,15 @@ describe('createScorer: review fixes', () => {
     expect(full.reasons.join(' ')).toMatch(/format staple/);
     expect(full.reasons.join(' ')).toMatch(/role: stronger than all \d+ ramp cards beside it/);
     expect(full.score).toBeGreaterThanOrEqual(hungry.score - 3);
-    // The weakest ramp card of the full deck is the surplus one: no role need, no staple share.
-    const ramp = fullDeck.main.map((x) => db.get(x.oracleId)!).filter((c) => db.features(c.oracleId)!.roles.includes('ramp') && db.features(c.oracleId)!.landWeight === 0);
-    // (Not an Elf: a mana elf is a theme piece for Lathril whatever the ramp count.)
-    const weakest = [...ramp].filter((c) => !/Elf/.test(c.typeLine)).sort((x, y) => (y.edhrecRank ?? Infinity) - (x.edhrecRank ?? Infinity))[0];
-    const last = createScorer(fullDeck, ctx).score(weakest);
+    // The weakest card that is only ramp (the Ramp package by role or tag, the rating's own count) is the
+    // surplus one: no role need, no staple share. Weakest as the scorer ranks a role: by quality, then play rank.
+    // (Not an Elf: a mana elf is a theme piece for Lathril whatever the ramp count; not Commander's Sphere,
+    // which is card draw too and the deck is short of draw.)
+    const scorer = createScorer(fullDeck, ctx);
+    const ramp = fullDeck.main.map((x) => db.get(x.oracleId)!)
+      .filter((c) => !/Elf/.test(c.typeLine) && coverageRoles(c, db.features(c.oracleId)!, db.tagSlugs(c.oracleId), 3).join() === 'ramp');
+    const weakest = [...ramp].sort((x, y) => scorer.quality(x)! - scorer.quality(y)! || (y.edhrecRank ?? Infinity) - (x.edhrecRank ?? Infinity))[0];
+    const last = scorer.score(weakest);
     expect(last.reasons.join(' ')).not.toMatch(/format staple/);
     expect(last.score).toBeLessThan(full.score);
     expect(full.score).toBeGreaterThanOrEqual(STAPLE_FLOOR);

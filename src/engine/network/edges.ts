@@ -1,7 +1,7 @@
 import { axisLabel } from '../features';
 import { cardFitsDeck } from '../rules';
 import { AXIS_MEMBER, deckCards, isLandCard, namedTypes } from '../summary';
-import { ROLE_LABEL, bandRoles } from '../targets';
+import { ROLE_LABEL, coverageRoles } from '../targets';
 import type { AxisId, Card, CardDb, CardFeatures, Combo, Deck, NetworkEdge, Role } from '../types';
 
 /**
@@ -24,11 +24,12 @@ export const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 const num = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
 
 /**
- * A staple: a card with a ring role. Given the card and the deck's bracket, the bracket's own band
- * roles count too (a cheap cantrip is card draw at Brackets 4-5).
+ * A staple: a card with a ring role. Given the card, the deck's bracket and the card's tags, every
+ * entry of the rating's role coverage counts too (`coverageRoles`: a core package by role or tag, a
+ * cheap cantrip as card draw at Brackets 4-5).
  */
-export const isRingCard = (f: CardFeatures, card?: Card, bracket?: number): boolean =>
-  f.roles.some((r) => RING_ROLES.includes(r)) || (!!card && bracket !== undefined && bandRoles(card, f, bracket).length > 0);
+export const isRingCard = (f: CardFeatures, card?: Card, bracket?: number, tags: readonly string[] = []): boolean =>
+  f.roles.some((r) => RING_ROLES.includes(r)) || (!!card && bracket !== undefined && coverageRoles(card, f, tags, bracket).length > 0);
 
 /** The name without its epithet: Ezuri, Claw of Progress -> Ezuri. */
 export function shortName(card: Card): string {

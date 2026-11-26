@@ -1,15 +1,16 @@
 import { AXES, axisLabel } from '../features';
 import { AXIS_MEMBER, deckCards, isLandCard } from '../summary';
-import { bandRoles } from '../targets';
+import { CORE_MEMBERS, WIPE_TAG, bandRoles, isWipe } from '../targets';
 import type { AxisId, Card, CardDb, CardFeatures, Deck, PackageId, PackageKind, Role } from '../types';
 
 export interface PackageDef { id: PackageId; name: string; kind: PackageKind; roles: readonly Role[]; tags: readonly string[]; axis: AxisId | null }
 
+/** The four core packages. Who is in them is `CORE_MEMBERS` (targets.ts), the rating's own count. */
 export const CORE_PACKAGES: readonly PackageDef[] = [
-  { id: 'ramp', name: 'Ramp', kind: 'core', roles: ['ramp', 'fast-mana'], tags: ['ramp', 'mana-rock', 'mana-dork'], axis: null },
-  { id: 'draw', name: 'Card draw', kind: 'core', roles: ['draw'], tags: ['draw', 'card-advantage'], axis: null },
-  { id: 'removal', name: 'Removal', kind: 'core', roles: ['spot-removal', 'counterspell', 'wipe'], tags: ['removal', 'sweeper', 'counterspell'], axis: null },
-  { id: 'protection', name: 'Protection', kind: 'core', roles: ['protection'], tags: ['protection', 'protects-creature', 'gives-hexproof', 'gives-indestructible'], axis: null },
+  { id: 'ramp', name: 'Ramp', kind: 'core', ...CORE_MEMBERS.ramp, axis: null },
+  { id: 'draw', name: 'Card draw', kind: 'core', ...CORE_MEMBERS.draw, axis: null },
+  { id: 'removal', name: 'Removal', kind: 'core', ...CORE_MEMBERS.removal, axis: null },
+  { id: 'protection', name: 'Protection', kind: 'core', ...CORE_MEMBERS.protection, axis: null },
 ];
 
 export const FUNCTIONAL_PACKAGES: readonly PackageDef[] = [
@@ -18,7 +19,7 @@ export const FUNCTIONAL_PACKAGES: readonly PackageDef[] = [
   { id: 'fn:max-hand-size', name: 'Max hand size', kind: 'functional', roles: [], tags: ['hand-size-increase', 'hand-size-matters'], axis: null },
 ];
 
-export const WIPE_TAG = 'sweeper';
+export { WIPE_TAG, isWipe };
 export const ONE_SIDED_WIPE_TAG = 'sweeper-one-sided';
 
 export function themePackage(axis: AxisId): PackageDef {
@@ -58,7 +59,6 @@ export function inPackage(def: PackageDef, card: Card, f: CardFeatures, tags: re
   return def.tags.some((t) => tags.includes(t));
 }
 
-export const isWipe = (f: CardFeatures, tags: readonly string[]): boolean => f.roles.includes('wipe') || tags.includes(WIPE_TAG);
 
 /** The deck's cards in a package (commanders in, the companion out). `count` is the sum of copies. */
 export function packageMembers(deck: Deck, db: CardDb, def: PackageDef): { ids: string[]; count: number } {

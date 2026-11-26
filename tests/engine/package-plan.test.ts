@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { packagePlan, pinPackage } from '@/engine/packages';
+import { rateDeck } from '@/engine/rating';
 import { resolveThemeWeights, summarizeDeck } from '@/engine/summary';
 import { WIPE_REASON, roleNeeds, targetPlan, targetsFor } from '@/engine/targets';
 import type { Bracket, Deck, EngineContext } from '@/engine/types';
@@ -90,7 +91,28 @@ describe('packagePlan', () => {
     const get = (id: string) => p.packages.find((x) => x.id === id)!;
     expect(get('ramp').target).toBe(Math.max(8, t.roles.ramp!.lo));
     expect(get('removal').target).toBe(Math.max(8, t.roles['spot-removal']!.lo + (t.roles.counterspell?.lo ?? 0) + get('removal').wipes!.lo));
-    expect(roleNeeds(upgraded, ctx).find((n) => n.role === 'ramp')!.band).toEqual(t.roles.ramp);
+  });
+  // Review C3 (owner rule 6): "Ramp 8 of 10" in the Packages tab beside "have 6, want 10-13" in the rating.
+  it("the Packages tab's count and target are the rating's for the core four", () => {
+    const decks = [precon, upgraded, cedh, { ...upgraded, targetBracket: 5 as Bracket }, { ...precon, main: precon.main.slice(0, 50) }, { ...upgraded, roleTargets: { protection: 10 } }];
+    for (const d of decks) {
+      const p = plan(d);
+      const needs = new Map(roleNeeds(d, ctx).map((n) => [n.role, n]));
+      for (const [id, key] of [['ramp', 'ramp'], ['draw', 'draw'], ['removal', 'spot-removal'], ['protection', 'protection']] as const) {
+        const x = p.packages.find((q) => q.id === id)!;
+        expect(needs.get(key)!.count, `${d.name} ${id}`).toBe(x.count);
+        expect(needs.get(key)!.band.lo, `${d.name} ${id}`).toBe(x.target);
+        expect(needs.get(key)!.band.hi, `${d.name} ${id}`).toBeGreaterThanOrEqual(x.target + 4); // no "over" until 4 past the target
+      }
+      const w = p.packages.find((q) => q.id === 'removal')!.wipes!;
+      expect(needs.get('wipe'), d.name).toMatchObject({ count: w.count, band: { lo: w.lo, hi: w.hi } });
+      expect(needs.has('counterspell')).toBe(false);
+    }
+    // the rating quotes the same numbers
+    const protection = plan(upgraded).packages.find((q) => q.id === 'protection')!;
+    const fix = rateDeck(upgraded, ctx).subscores.find((s) => s.key === 'roles')!.fixes.map((f) => f.text).find((t) => /on protection/.test(t));
+    if (protection.count < protection.target) expect(fix).toMatch(new RegExp(`short on protection: have ${protection.count}, want ${protection.target}-\\d+`));
+    else expect(fix).toBeUndefined();
   });
   it('board wipes are a 1-2 slot inside Removal', () => {
     for (const d of [precon, upgraded, cedh]) for (const b of [1, 2, 3, 4, 5] as Bracket[]) {

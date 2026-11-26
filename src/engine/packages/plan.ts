@@ -1,6 +1,6 @@
 import { themeFocus, resolveThemeWeights, summarizeDeck } from '../summary';
 import {
-  CORE_BAND_ROLES, CORE_PIN_ROLE, PACKAGE_MIN, PACKAGE_PIN_MAX, WIPE_REASON, coreBase, targetPlan, wipeSlot,
+  CORE_BAND_ROLES, CORE_PIN_ROLE, PACKAGE_MIN, PACKAGE_PIN_MAX, WIPE_REASON, coreBase, pinFor, targetPlan, wipeSlot,
 } from '../targets';
 import type {
   AxisId, Card, CorePackageId, Deck, DeckSummary, EngineContext, PackageId, PackageOffer, PackagePlan, PlannedPackage, Role, Targets,
@@ -28,11 +28,11 @@ export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary
     return { id: def.id, name: def.name, kind: def.kind, target, count: m.count, cards: m.ids, reason, moves, pinned, wipes: null, cohesion: null };
   };
 
-  // core: always there, never under 8
+  // core: always there, never under 8; the targets are the rating's (`Targets.packages`)
   for (const def of CORE_PACKAGES) {
     const id = def.id as CorePackageId;
     const base = coreBase(t, id, tp.stax);
-    const target = Math.max(PACKAGE_MIN, base);
+    const target = t.packages?.[id].lo ?? Math.max(PACKAGE_MIN, base);
     const moves = tp.moves.filter((m) => CORE_BAND_ROLES[id].includes(m.role));
     const pinned = typeof deck.roleTargets?.[CORE_PIN_ROLE[id]] === 'number';
     const start = base - moves.reduce((n, m) => n + m.delta, 0);
@@ -45,7 +45,7 @@ export function packagePlan(deck: Deck, ctx: EngineContext, summary: DeckSummary
         const f = db.features(eid);
         if (f && isWipe(f, tagsOf(db, eid))) count += deckQty(deck, eid);
       }
-      pkg.wipes = { ...wipeSlot(t.roles.wipe, tp.stax), count, reason: WIPE_REASON };
+      pkg.wipes = { ...(t.packages?.wipes ?? wipeSlot(t.roles.wipe, tp.stax)), count, reason: WIPE_REASON };
     }
     planned.push(pkg);
   }
@@ -124,12 +124,7 @@ export function pinPackage(deck: Deck, plan: PackagePlan, targets: Targets, id: 
     const role: Role = CORE_PIN_ROLE[id as CorePackageId];
     const next = { ...(deck.roleTargets ?? {}) };
     if (n === null) delete next[role];
-    else {
-      const size = clampPin(n);
-      next[role] = id === 'removal'
-        ? Math.max(0, size - (targets.roles.counterspell?.lo ?? 0) - (plan.packages.find((p) => p.id === 'removal')?.wipes?.lo ?? 0))
-        : size;
-    }
+    else next[role] = pinFor(role, clampPin(n), targets);
     return { ...deck, roleTargets: Object.keys(next).length > 0 ? next : null };
   }
   const next = { ...(deck.packageTargets ?? {}) };

@@ -113,7 +113,19 @@ export interface Targets {
   avgMv: RoleBand;
   themeCards: number;
   taplandCap: number;
+  /**
+   * The four core packages' targets (at least 8 each) and the board-wipe slot inside Removal: the
+   * one set of numbers the Packages tab, Complete package, the scorer and the rating's role coverage
+   * hold the deck to (packages spec, owner's rule 6). Set by `targetsFor`.
+   */
+  packages?: CorePackageTargets;
 }
+/**
+ * Each core package as a band: `lo` is its target (at least 8), `hi` the top before "over" costs
+ * anything (four over the target, or the bands' own top when that is higher, as for Kinnan's ramp).
+ * `wipes` is the board-wipe slot inside Removal.
+ */
+export interface CorePackageTargets { ramp: RoleBand; draw: RoleBand; removal: RoleBand; protection: RoleBand; wipes: RoleBand }
 
 export interface FoundCombo { combo: Combo; missing: string[]; twoCard: boolean; early: boolean; relevant: boolean }
 export interface BracketReport {

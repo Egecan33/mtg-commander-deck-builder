@@ -215,7 +215,8 @@ describe('deckNetwork', () => {
     const net = deckNetwork({ ...upgraded, main: [...upgraded.main, ...dragons] }, ctx);
     expect(net.clusters.length).toBeGreaterThanOrEqual(2);
     expect(net.clusters.map((c) => c.name)).toEqual(expect.arrayContaining(['Elf typal', 'Dragon typal']));
-    expect(biggest(net)).toBeLessThan(nonStaple(net) / 2);
+    // "most" is more than half (package cards count as staples since the core packages count tags)
+    expect(biggest(net)).toBeLessThanOrEqual(nonStaple(net) / 2);
   });
 
   it('clusters use only theme edges of at least the minimum weight, never a commander spoke', () => {

@@ -3,7 +3,7 @@ import { deckNetwork } from '@/engine/network';
 import { settle, toGraphData } from '@/engine/network/layout';
 import type { DeckNetwork, EngineContext } from '@/engine/types';
 import { fixtureDb } from '../helpers/fixture-db';
-import { fixtureDeck, oddDeck, withTenRandom } from '../helpers/network';
+import { fixtureDeck, oddDeck, withFiveUnconnected } from '../helpers/network';
 
 const db = fixtureDb();
 const ctx: EngineContext = { db, edhrec: null, mldOverrides: {}, extraTurnOverrides: {} };
@@ -28,7 +28,8 @@ describe('network layout (d3-force-3d, shared with 3d-force-graph)', () => {
   });
 
   it('unconnected cards settle farther out than the rest', () => {
-    const net = deckNetwork(withTenRandom(fixtureDeck('precon', 2)), ctx);
+    // (Ten random cards are mostly package cards, staples, since the core packages count tags; five chosen unconnected stand in.)
+    const net = deckNetwork(withFiveUnconnected(fixtureDeck('precon', 2), ctx).deck, ctx);
     const pos = settle(net);
     const out = net.nodes.filter((n) => n.unconnected);
     expect(out.length).toBeGreaterThanOrEqual(3);

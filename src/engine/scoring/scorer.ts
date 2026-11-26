@@ -7,7 +7,7 @@ import { BASIC_LAND_QUALITY, rankQuality, rawQuality } from './quality';
 import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
-import { ROLE_LABEL, bandRoles, roleNeeds, targetsFor } from '../targets';
+import { ROLE_LABEL, coverageRoles, roleNeeds, targetsFor } from '../targets';
 import type {
   AxisId, Bracket, Card, CardDb, CardFeatures, CardScore, Color, Combo, Deck, DeckSummary, EdhrecData, EngineContext, Role,
   ScorePart, Targets,
@@ -388,7 +388,10 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
   quality = clamp01(quality);
 
-  const needRoles = f ? bandRoles(card, f, bracket).filter((r) => roleValue(r, bracket) !== undefined && !(noMana && r === 'ramp')) : [];
+  // The coverage entries the card counts toward (`roleNeeds`): its core packages by role or tag, the
+  // wipe slot, other band roles. A mana card that makes no mana for this commander fills no slot.
+  const tags = db.tagSlugs?.(card.oracleId) ?? [];
+  const needRoles = f && !noMana ? coverageRoles(card, f, tags, bracket).filter((r) => roleValue(r, bracket) !== undefined) : [];
   let synText = synAxis ? `${axisLabel(synAxis)} ${synSide === 'p' ? 'payoff' : 'piece'}${second ? ', fits a second theme' : ''}` : '';
   const themeMember = !land && syn >= THEME_MEMBER;
   if (land) syn *= LAND_THEME_SHARE;
@@ -885,7 +888,7 @@ export function createScorer(deck: Deck, ctx: EngineContext): {
 
     // A spell with no partner in the deck, no ring role and little synergy with the commander loses
     // up to CONNECTION_LOSS synergy points (the same test the network uses for "unconnected").
-    if (!stat.land && stat.f && !isRingCard(stat.f, card, bracket) && !commanderSlots.has(card.oracleId)) {
+    if (!stat.land && stat.f && !isRingCard(stat.f, card, bracket, db.tagSlugs?.(card.oracleId) ?? []) && !commanderSlots.has(card.oracleId)) {
       const link = commanderLink(card) ?? 0;
       if (link < UNCONNECTED_LINK) {
         const strongest = connectionIndex().strongest(card)?.weight ?? 0;

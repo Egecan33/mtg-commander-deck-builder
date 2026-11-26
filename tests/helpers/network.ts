@@ -58,11 +58,11 @@ export function oddDeck(): Deck {
 export function withFiveUnconnected(deck: Deck, ctx: EngineContext): { deck: Deck; added: string[] } {
   const start = deckNetwork(deck, ctx);
   const cut = new Set(start.unconnected);
-  const spells = deck.main.filter((e) => e.qty === 1 && !e.locked && !isLand(e.oracleId) && !deck.commanders.includes(e.oracleId) && !isRingCard(db.features(e.oracleId)!));
+  const spells = deck.main.filter((e) => e.qty === 1 && !e.locked && !isLand(e.oracleId) && !deck.commanders.includes(e.oracleId) && !isRingCard(db.features(e.oracleId)!, db.get(e.oracleId)!, deck.targetBracket, db.tagSlugs(e.oracleId)));
   for (const e of spells) { if (cut.size >= 5) break; cut.add(e.oracleId); }
   const base: Deck = { ...deck, main: deck.main.filter((e) => !cut.has(e.oracleId)) };
   const inDeck = new Set([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
-  const pool = db.all().filter((c) => !inDeck.has(c.oracleId) && !isLand(c.oracleId) && !isRingCard(db.features(c.oracleId)!) && copyLimit(c) === 1 && cardFitsDeck(c, deck, db) === null);
+  const pool = db.all().filter((c) => !inDeck.has(c.oracleId) && !isLand(c.oracleId) && !isRingCard(db.features(c.oracleId)!, c, deck.targetBracket, db.tagSlugs(c.oracleId)) && copyLimit(c) === 1 && cardFitsDeck(c, deck, db) === null);
   const added: string[] = [];
   let current = base;
   for (const c of pool) {

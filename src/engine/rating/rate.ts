@@ -7,7 +7,7 @@ import { createScorer } from '../scoring';
 import type { Scorer } from '../scoring';
 import { AXIS_MEMBER, deckCards, isLandCard, resolveTheme, summarizeDeck } from '../summary';
 import type { DeckCard } from '../summary';
-import { LAND_PLAN_SLACK, roleNeeds, scaleTargets, targetPlan } from '../targets';
+import { LAND_PLAN_SLACK, coverageRoles, roleNeeds, scaleTargets, targetPlan } from '../targets';
 import type { RoleNeed } from '../targets';
 import type {
   AxisId, Bracket, BracketReport, Color, Deck, DeckNetwork, DeckRating, DeckSummary, EngineContext, Fix, Role, SubScore, Targets, Violation,
@@ -51,11 +51,13 @@ const COLOR_NAME: Record<Color, string> = { W: 'white', U: 'blue', B: 'black', R
 
 /**
  * Role coverage weights (deck-theory.md §7). The counts and bands come from `roleNeeds`
- * (targets.ts), the same numbers the card scorer rewards filling. Win conditions have a sub-score
- * of their own.
+ * (targets.ts), the same numbers the card scorer rewards filling and the Packages tab shows: the
+ * four core packages (Ramp, Card draw, Removal with its counterspells, Protection) against their
+ * package targets, the board-wipe slot, and the other bands. Win conditions have a sub-score of
+ * their own.
  */
 const COVERAGE: Partial<Record<Role, number>> = {
-  ramp: 3, draw: 3, 'spot-removal': 3, counterspell: 1.5, wipe: 2, protection: 2, recursion: 1.5, 'graveyard-hate': 1.5, tutor: 1,
+  ramp: 3, draw: 3, 'spot-removal': 3, wipe: 2, protection: 2, recursion: 1.5, 'graveyard-hate': 1.5, tutor: 1,
 };
 /** Total interaction (spot + counters + wipes) per bracket (§7). */
 const INTERACTION_BAND: PerBracket<readonly [number, number]> = [[9, 16], [11, 17], [12, 18], [13, 18], [14, 20]];
@@ -159,6 +161,8 @@ interface Facts {
   /** Cards outside the commander's colours: the rule violation names them, the mana base is not asked to cast them. */
   offIdentity: Set<string>;
   count(pred: (c: DeckCard) => boolean): number;
+  /** The role-coverage entries a card counts toward (`coverageRoles`: core packages by role or tag). */
+  covers(c: DeckCard): Role[];
   /** The deck's scorer, built once per rating. */
   scorer(): Scorer;
   /** The deck's network, built once per rating from the same scorer. */
@@ -282,7 +286,7 @@ function rolesPart(f: Facts): Part {
     const weight = COVERAGE[role];
     if (!weight) continue;
     const { count: n, band: b, label } = need;
-    const owed = (f.fullTargets.roles[role]?.lo ?? 0) >= 1;
+    const owed = need.owed;
     // Short of the band costs quickly; over it costs slowly and never more than half the marks
     // (a deck drowning in ramp is still better off than one with none). A role the finished deck
     // owes cards to is never "met" by an empty slot, however small the deck is so far.
@@ -659,8 +663,9 @@ function consistencyPart(f: Facts): Part {
   const sum = (pred: (c: DeckCard) => boolean) => libraryCards.reduce((n, c) => n + (pred(c) ? c.qty : 0), 0);
 
   // Fast decks keep hands on cheap mana as well as lands, so a mana rock or dork counts as half a land.
+  // Ramp and card draw are the Ramp and Card draw packages (role or tag), as everywhere else.
   const fastDeck = f.bracket >= 4;
-  const cheapMana = sum((c) => nonland(c) && c.card.cmc <= 2 && (has(c, 'ramp') || has(c, 'fast-mana')));
+  const cheapMana = sum((c) => nonland(c) && c.card.cmc <= 2 && (f.covers(c).includes('ramp') || has(c, 'fast-mana')));
   const landish = Math.round(libraryCards.reduce((n, c) => n + finite(c.features.landWeight) * c.qty, 0) + (fastDeck ? 0.5 * cheapMana : 0));
   const hand = Math.min(7, library);
 
@@ -685,7 +690,7 @@ function consistencyPart(f: Facts): Part {
     });
   }
 
-  const starters = sum((c) => nonland(c) && c.card.cmc <= 3 && (has(c, 'ramp') || has(c, 'draw') || has(c, 'fast-mana')));
+  const starters = sum((c) => nonland(c) && c.card.cmc <= 3 && (f.covers(c).includes('ramp') || f.covers(c).includes('draw') || has(c, 'fast-mana')));
   const early = pAtLeast(library, starters, Math.min(library, 10), 1);
   if (early < 0.85) {
     issues.push({
@@ -768,6 +773,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   let scorer: Scorer | null = null;
   let network: DeckNetwork | null = null;
+  const covered = new Map<string, Role[]>();
   const facts: Facts = {
     deck, ctx, cards, summary, bracket, fullTargets, landSlack, filled, commanderIds, offIdentity,
     bi: bracket - 1,
@@ -779,6 +785,11 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
     ),
     report: analyzeBracket(deck, ctx),
     count: (pred) => cards.reduce((n, c) => n + (pred(c) ? c.qty : 0), 0),
+    covers: (c) => {
+      let hit = covered.get(c.card.oracleId);
+      if (!hit) covered.set(c.card.oracleId, (hit = coverageRoles(c.card, c.features, db.tagSlugs?.(c.card.oracleId) ?? [], bracket)));
+      return hit;
+    },
     scorer: () => (scorer ??= createScorer(deck, ctx)),
     network: () => (network ??= deckNetwork(deck, ctx, { scorer: facts.scorer() })),
   };

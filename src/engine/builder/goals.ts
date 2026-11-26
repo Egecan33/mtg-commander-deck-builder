@@ -3,7 +3,7 @@ import { rateDeck } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
-import { ROLE_LABEL, ROLE_TARGET_MAX, roleNeeds, scaleTargets, targetsFor } from '../targets';
+import { ROLE_LABEL, ROLE_TARGET_MAX, pinFor, roleNeeds, scaleTargets, targetsFor } from '../targets';
 import type { AxisId, Bracket, BuildOptions, CardFeatures, Color, Deck, EngineContext, ImproveGoals, Role, SwapProposal } from '../types';
 import {
   COLOR_NAME, MAX_PROPOSALS, applySwaps, basicCandidates, bestOf, bestReplacement, colourBalance, comboPieces, cuttable, improveDeck as improvePlain,
@@ -76,9 +76,10 @@ export function goalDeck(deck: Deck, ctx: EngineContext, goals: ImproveGoals): D
     const roleTargets: NonNullable<Deck['roleTargets']> = { ...(d.roleTargets ?? {}) };
     for (const role of g.roles) {
       const need = needs.find((x) => x.role === role);
-      if (!need) continue; // no band for this deck (counterspells outside blue)
+      if (!need) continue; // no band for this deck (counterspells count inside Removal)
       const top = need.band.hi + EMPHASIS_RAISE;
-      roleTargets[role] = Math.min(ROLE_TARGET_MAX, top, Math.max(need.band.lo + EMPHASIS_RAISE, need.count + EMPHASIS_STEP));
+      // The want is in the entry's own count (the Removal package for removal); the pin is its spot-removal share.
+      roleTargets[role] = pinFor(role, Math.min(ROLE_TARGET_MAX, top, Math.max(need.band.lo + EMPHASIS_RAISE, need.count + EMPHASIS_STEP)), targets);
     }
     d = { ...d, roleTargets };
   }

@@ -159,7 +159,8 @@ describe('rateDeck shortfalls become fixes', () => {
     const none = { ...d, main: [...kept, { oracleId: card('Island').oracleId, qty: cut, locked: false }] };
     const over = sub(rateDeck(d, ctx), 'roles');
     const short = sub(rateDeck(none, ctx), 'roles');
-    expect(over.fixes.some((f) => /over on ramp/.test(f.text))).toBe(true);
+    // (The over-ramp note is still made; the three larger package shortfalls show first.)
+    expect(roleNeeds(d, ctx).find((n) => n.role === 'ramp')!.over).toBeGreaterThan(10);
     expect(short.fixes.some((f) => f.filter?.role === 'ramp')).toBe(true);
     expect(over.value).toBeGreaterThan(short.value);
   });
@@ -513,10 +514,13 @@ describe('rateDeck: quality pass 2', () => {
       });
     }
 
-    it('counterspells are a band of their own in a blue deck, as in the scorer', () => {
+    it('counterspells count inside the Removal package in a blue deck, as in the scorer and the Packages tab', () => {
       const d = fixtureDeck('cedh', 5);
       const needs = roleNeeds(d, ctx, { scaled: true });
-      expect(needs.some((n) => n.role === 'counterspell')).toBe(true);
+      expect(needs.some((n) => n.role === 'counterspell')).toBe(false);
+      const counters = d.main.filter((e) => hasRole(e.oracleId, 'counterspell')).reduce((n, e) => n + e.qty, 0);
+      expect(counters).toBeGreaterThan(0);
+      expect(needs.find((n) => n.role === 'spot-removal')!.count).toBeGreaterThanOrEqual(counters);
       const all = allFixes(rateDeck(d, ctx)).map((f) => f.text).join('\n');
       expect(all).not.toMatch(/targeted interaction/);
     });
