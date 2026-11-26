@@ -62,3 +62,48 @@ describe('Standard Brawl rating', () => {
     }
   });
 });
+
+describe('Standard Brawl rating: one-on-one tuning (not the Bracket 3 table)', () => {
+  const std = standardBrawlFixtureDb();
+  const texts = (r: ReturnType<typeof rateDeck>) => r.subscores.flatMap((s) => s.fixes.map((f) => f.text));
+
+  /**
+   * A mono-red deck of the cheapest cards in the pool (average mana value about 1.5, so it threatens
+   * a win around turn 4), with two of them read as win conditions so the speed check runs.
+   */
+  const fast = () => {
+    const base = redDeck(std);
+    const cheap = std.all()
+      .filter((c) => c.oracleId !== base.commanders[0] && c.colorIdentity.every((x) => x === 'R') && !/\bLand\b/.test(c.typeLine) && c.cmc <= 2);
+    const mountain = base.main.find((e) => e.qty > 1)!;
+    const wins = new Set(cheap.slice(0, 2).map((c) => c.oracleId));
+    const db = {
+      ...std,
+      features: (id: string) => {
+        const f = std.features(id);
+        return f && wins.has(id) ? { ...f, roles: [...f.roles, 'win-condition' as const] } : f;
+      },
+    };
+    const main = [...cheap.map((c) => ({ oracleId: c.oracleId, qty: 1, locked: false })), { ...mountain, qty: 59 - cheap.length }];
+    return { deck: { ...base, main }, db };
+  };
+
+  it('never tells a fast deck to slow down or cites table expectations', () => {
+    const { deck, db } = fast();
+    const r = rateDeck(deck, ctxOf(db));
+    expect(r.complete).toBe(true);
+    for (const t of texts(r)) expect(t).not.toMatch(/Slow it down|expect games to reach|Bracket \d/);
+  });
+
+  it('takes its interaction band from the shared targets (spot removal + counterspells + wipes)', () => {
+    const ctx = ctxOf(std);
+    const r = rateDeck(redDeck(std), ctx);
+    const inter = r.subscores.find((s) => s.key === 'interaction');
+    expect(inter).toBeDefined();
+    const line = inter!.fixes.map((f) => f.text).find((t) => /short on interaction/.test(t));
+    if (line) {
+      const m = /want (\d+)-(\d+)/.exec(line)!;
+      expect(Number(m[2])).toBeLessThanOrEqual(8); // 59-card one-on-one band, not the 12-18 Bracket 3 one
+    }
+  });
+});

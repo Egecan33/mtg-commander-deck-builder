@@ -74,6 +74,8 @@ const EARLY_PLAYS: PerBracket<number> = [18, 18, 18, 25, 25];
 /** Earliest turn a table of this bracket expects a win (§7), and the turn past which a deck is too slow for it. */
 const WIN_TURN_FLOOR: PerBracket<number> = [9, 8, 6, 4, 0];
 const WIN_TURN_LIMIT: PerBracket<number> = [12, 10.5, 9, 8, 6.5];
+/** Standard Brawl: no floor, and the turn past which a one-on-one deck is too slow. */
+const STD_WIN_TURN_LIMIT = 8;
 /** Tutors plus a third of the draw a full deck needs to find its plan reliably. */
 const REDUNDANCY_NEED: PerBracket<number> = [3, 4, 5, 7, 10];
 /** Karsten's optimal curves by commander mana value 2..6: cards at MV 1,2,3,4,5,6 (§2.4). */
@@ -162,6 +164,7 @@ interface Facts {
   /** `filled` times the share of a 100-card deck's counts this format's deck holds (59/99 in Standard Brawl): scales the counts below. */
   countScale: number;
   size: number;           // cards in a finished deck
+  std: boolean;           // Standard Brawl: one-on-one, no brackets
   tag: string;            // 'Bracket 3', or 'Standard Brawl'
   at: string;             // 'at Bracket 3', or 'in Standard Brawl'
   bi: number;             // bracket index 0..4
@@ -537,10 +540,15 @@ function answers(c: DeckCard): { creature: boolean; artifact: boolean; enchantme
 function interactionPart(f: Facts): Part {
   const { summary: s } = f;
   const issues: Issue[] = [];
-  const [fullLo, fullHi] = INTERACTION_BAND[f.bi];
-  const lo = Math.round(fullLo * f.countScale);
-  const hi = Math.max(lo, Math.ceil(fullHi * f.countScale));
-  const countScore = s.interaction === 0 && fullLo > 0 ? 0 : band(s.interaction, lo, hi, Math.max(1, 5 * f.countScale), 10);
+  // Standard Brawl: the band is the shared targets' spot removal + counterspells + wipes (the numbers the scorer rewards).
+  const shared = (['spot-removal', 'counterspell', 'wipe'] as const).map((r) => f.fullTargets.roles[r] ?? { lo: 0, hi: 0 });
+  const [fullLo, fullHi] = f.std
+    ? [shared.reduce((n, b) => n + b.lo, 0), shared.reduce((n, b) => n + b.hi, 0)]
+    : INTERACTION_BAND[f.bi];
+  const scale = f.std ? f.filled : f.countScale;
+  const lo = Math.round(fullLo * scale);
+  const hi = Math.max(lo, Math.ceil(fullHi * scale));
+  const countScore = s.interaction === 0 && fullLo > 0 ? 0 : band(s.interaction, lo, hi, Math.max(1, 5 * scale), 10);
   if (s.interaction < lo) {
     issues.push({
       text: `${lo - s.interaction} short on interaction: ${s.interaction} removal spells, counterspells and wipes, want ${lo}-${hi}.`,
@@ -621,13 +629,14 @@ function winconsPart(f: Facts): Part {
   }
 
   const turn = winTurn(f);
-  const floor = WIN_TURN_FLOOR[f.bi];
-  const limit = WIN_TURN_LIMIT[f.bi];
+  // Standard Brawl has no "too fast" floor; one-on-one at 25 life, a win past turn 8 is slow.
+  const floor = f.std ? 0 : WIN_TURN_FLOOR[f.bi];
+  const limit = f.std ? STD_WIN_TURN_LIMIT : WIN_TURN_LIMIT[f.bi];
   const speedFit = band(turn, floor, limit, 2);
   const about = Math.max(1, Math.round(turn));
   if (turn < floor) {
     issues.push({
-      text: `Can threaten a win around turn ${about}; ${f.tag} tables expect games to reach turn ${floor}. Slow it down${f.size === 60 ? '' : ' or raise the target bracket'}.`,
+      text: `Can threaten a win around turn ${about}; ${f.tag} tables expect games to reach turn ${floor}. Slow it down${f.std ? '' : ' or raise the target bracket'}.`,
       filter: null, actionable: false, loss: 0.4 * (1 - speedFit),
     });
   } else if (turn > limit) {
@@ -655,7 +664,7 @@ function consistencyPart(f: Facts): Part {
 
   const once = pAtLeast(library, landish, hand, 2) - pAtLeast(library, landish, hand, 5);
   const keepable = clamp01(1 - (1 - once) ** 2); // one free mulligan
-  const full = s.cardCount >= 60;
+  const full = s.cardCount >= 0.6 * f.size;
   const wantLands = fastDeck ? 3 : 4;
   const seen = Math.min(library, 7 + wantLands); // a draw every turn, the first player included
   const drops = pAtLeast(library, landish, seen, wantLands);
@@ -757,7 +766,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
   const commanderIds = new Set(deck.commanders);
   const offIdentity = new Set(violations.filter((v) => v.code === 'identity').flatMap((v) => v.oracleIds));
   const facts: Facts = {
-    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity, size,
+    deck, ctx, cards, summary, bracket, fullTargets, filled, commanderIds, offIdentity, size, std,
     countScale: filled * (std ? (size - 1) / 99 : 1),
     tag: std ? 'Standard Brawl' : `Bracket ${bracket}`,
     at: std ? 'in Standard Brawl' : `at Bracket ${bracket}`,
