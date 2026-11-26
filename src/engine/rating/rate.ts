@@ -40,6 +40,8 @@ type PerBracket<T> = readonly [T, T, T, T, T];
 export const QUALITY_EXPECTED: PerBracket<number> = [0.75, 0.8, 0.85, 0.9, 0.95];
 /** Card quality (sub-score value) from which the weakest cards are no longer named as a fix. */
 const QUALITY_FIX_BELOW = 0.85;
+/** A card is counted as weak in the card-quality fix under this share of the bracket's expectation. */
+const QUALITY_WEAK_SHARE = 0.7;
 /** Weakest cards a card-quality fix names. */
 const QUALITY_NAMED = 3;
 const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -407,20 +409,23 @@ function qualityPart(f: Facts): Part {
   if (n === 0) return { value: 0, issues: [] };
   const value = clamp01(sum / n / expected);
   const issues: Issue[] = [];
-  // Below the bar the mean is under the expectation, so at least one card is too.
-  const weak = value < QUALITY_FIX_BELOW
-    ? [...rated.values()].filter((c) => c.value < expected).sort((a, b) => a.value - b.value || a.name.localeCompare(b.name))
-    : [];
-  if (weak.length > 0) {
+  if (value < QUALITY_FIX_BELOW) {
+    // Weakest first. Only cards well under the expectation are counted; when none is, the deck as a
+    // whole is a little short, and its weakest cards are still named (a low sub-score always has a fix).
+    const ranked = [...rated.values()].sort((a, b) => a.value - b.value || a.name.localeCompare(b.name));
+    const weak = ranked.filter((c) => c.value < QUALITY_WEAK_SHARE * expected);
+    const named = (weak.length > 0 ? weak : ranked).slice(0, QUALITY_NAMED).map((c) => c.name);
+    const list = named.length > 1 ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}` : named[0];
+    const what = named.length === 1 ? `The weakest is ${list}. Swap it for a stronger card.` : `The weakest are ${list}. Swap them for stronger cards.`;
     const count = weak.reduce((a, c) => a + c.qty, 0);
     // Point the browser at a role when most of the weak cards share it: stronger cards for the same job.
     const byRole = new Map<Role, number>();
     for (const c of weak) for (const r of c.roles) byRole.set(r, (byRole.get(r) ?? 0) + c.qty);
     const [role, shared] = [...byRole].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0];
-    const names = weak.slice(0, QUALITY_NAMED).map((c) => c.name);
-    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
     issues.push({
-      text: `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} below the card quality Bracket ${f.bracket} decks run (quality under ${pct(expected)}). The weakest ${names.length === 1 ? 'is' : 'are'} ${list}.`,
+      text: count > 0
+        ? `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} weak for Bracket ${f.bracket}. ${what}`
+        : `The deck's spells are a little weak for Bracket ${f.bracket}. ${what}`,
       filter: role && shared * 2 > count ? { role } : null, loss: 1 - value,
     });
   }

@@ -535,10 +535,10 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
     expect(sub(rWeak, 'quality').value).toBeLessThan(sub(rBefore, 'quality').value - 0.15);
     expect(rWeak.rating).toBeLessThan(rBefore.rating);
 
-    // One fix: how many cards are under the bracket's expectation, and the three weakest by name.
+    // One fix: how many cards are well under the bracket's expectation, the three weakest by name, and what to do.
     const fixes = sub(rWeak, 'quality').fixes;
     expect(fixes).toHaveLength(1);
-    expect(fixes[0].text).toMatch(/^\d+ of the deck's \d+ spells are below the card quality Bracket 2 decks run/);
+    expect(fixes[0].text).toMatch(/^\d+ of the deck's \d+ spells are weak for Bracket 2\. The weakest are .+\. Swap them for stronger cards\.$/);
     const weakScorer = createScorer(weak, ctx);
     const spells = weak.main.map((e) => db.get(e.oracleId)!).filter((c) => !isLand(c.oracleId));
     const bottom = spells.map((c) => ({ c, v: qualityOf(weakScorer, c) ?? 2 })).sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name)).slice(0, 3);
@@ -574,7 +574,63 @@ describe('rateDeck: card quality (the scorer\'s own quality part)', () => {
     expect(q.value).toBeLessThan(0.85);
     expect(q.fixes).toHaveLength(1);
     expect(q.fixes[0].filter).toEqual({ role: 'ramp' });
-    expect(q.fixes[0].text).toMatch(/^6 of the deck's 6 spells are below/);
+    expect(q.fixes[0].text).toMatch(/^6 of the deck's 6 spells are weak for Bracket 2\./);
+  });
+
+  /** A Lathril deck of Forests and `spells`, one copy each, at Bracket 2. */
+  const withSpells = (spells: Card[]): Deck => ({
+    ...lathril(),
+    main: [{ oracleId: card('Forest').oracleId, qty: 99 - spells.length, locked: false }, ...spells.map((c) => ({ oracleId: c.oracleId, qty: 1, locked: false }))],
+  });
+  /** Ungated nonland fixture cards with their quality for a Lathril deck, weakest first. */
+  const rankedSpells = () => {
+    const scorer = createScorer(lathril(), ctx);
+    return db.all()
+      .filter((c) => c.oracleId !== card('Lathril, Blade of the Elves').oracleId && !isLand(c.oracleId) && db.features(c.oracleId) && scorer.score(c).gate === null)
+      .map((c) => ({ c, v: qualityOf(scorer, c)! }))
+      .sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name));
+  };
+
+  it('the card-quality fix counts only cards well under the expectation, names the three weakest and says what to do', () => {
+    const expected = QUALITY_EXPECTED[1];
+    const bar = 0.7 * expected;
+    const ranked = rankedSpells();
+    // Four cards well under Bracket 2's expectation and four just under it.
+    const well = ranked.filter((x) => x.v < bar).slice(0, 4).map((x) => x.c);
+    const near = ranked.filter((x) => x.v >= bar && x.v < expected).slice(-4).map((x) => x.c);
+    expect(well).toHaveLength(4);
+    expect(near).toHaveLength(4);
+    const d = withSpells([...well, ...near]);
+    const scorer = createScorer(d, ctx);
+    const inDeck = [...well, ...near].map((c) => ({ c, v: qualityOf(scorer, c)! })).sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name));
+    const counted = inDeck.filter((x) => x.v < bar);
+    expect(counted.length).toBeGreaterThanOrEqual(3);
+    expect(counted.length).toBeLessThan(inDeck.length);
+
+    const q = sub(rateDeck(d, ctx), 'quality');
+    expect(q.value).toBeLessThan(0.85);
+    expect(q.fixes).toHaveLength(1);
+    const text = q.fixes[0].text;
+    expect(text).toMatch(new RegExp(`^${counted.length} of the deck's 8 spells are weak for Bracket 2\\. The weakest are `));
+    for (const { c } of counted.slice(0, 3)) expect(text).toContain(c.name);
+    for (const { c } of inDeck.filter((x) => x.v >= bar)) expect(text).not.toContain(c.name);
+    expect(text.endsWith('Swap them for stronger cards.')).toBe(true);
+  });
+
+  it('a deck only a little under the expectation still gets a fix naming its weakest cards', () => {
+    const expected = QUALITY_EXPECTED[1];
+    // Six cards between 0.7 and 0.8 of Bracket 2's expectation: none well under it, the mean low enough for a fix.
+    const mild = rankedSpells().filter((x) => x.v >= 0.7 * expected && x.v < 0.8 * expected).slice(0, 6).map((x) => x.c);
+    expect(mild).toHaveLength(6);
+    const d = withSpells(mild);
+    const scorer = createScorer(d, ctx);
+    expect(mild.every((c) => qualityOf(scorer, c)! >= 0.7 * expected)).toBe(true);
+    const q = sub(rateDeck(d, ctx), 'quality');
+    expect(q.value).toBeLessThan(0.85);
+    expect(q.fixes).toHaveLength(1);
+    expect(q.fixes[0].text).toMatch(/^The deck's spells are a little weak for Bracket 2\. The weakest are .+\. Swap them for stronger cards\.$/);
+    const weakest = mild.map((c) => ({ c, v: qualityOf(scorer, c)! })).sort((a, b) => a.v - b.v || a.c.name.localeCompare(b.c.name)).slice(0, 3);
+    for (const { c } of weakest) expect(q.fixes[0].text).toContain(c.name);
   });
 
   it('no NaN on empty, commander-only and partial decks', () => {
