@@ -18,7 +18,7 @@ export const UNOWNED_MAX = 20;
 const LAZY_CAPS = [5, 10, 15, 20];
 const KEPT = 6;
 
-interface Job { key: string; state: DiscoverState; started: number; lazy: Map<string, DiscoverTier[]> }
+interface Job { key: string; stamp: string; state: DiscoverState; started: number; lazy: Map<string, DiscoverTier[]> }
 
 // On globalThis, like the rest of the server state, but not dropped with the caches: a result is
 // keyed by bracket, scope, `freeOnly` and the set of cards it searches (the owned cards, or with
@@ -32,16 +32,16 @@ const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve)
 /** The owned cards a search uses: with `freeOnly`, only cards with a copy no box or built deck holds. */
 const ownedFor = (freeOnly: boolean): Set<string> => (freeOnly ? freeOwnedSet(new Set()) : ownedSet());
 
-/** Which commanders have EDHREC data in the cache (and how fresh): a result built from other data is stale. */
+/** Which EDHREC pages are cached (and how fresh), read from the small columns only: a finished result built from other data is stale. A running job is found without it. */
 function edhrecStamp(): string {
   if (!getSettings().edhrecEnabled) return 'off';
-  const rows = getDb().prepare("SELECT key, fetched_at FROM edhrec_cache WHERE json != 'null' ORDER BY key").all() as { key: string; fetched_at: string }[];
+  const rows = getDb().prepare("SELECT key, fetched_at FROM edhrec_cache ORDER BY key").all() as { key: string; fetched_at: string }[];
   return createHash('sha1').update(JSON.stringify(rows)).digest('hex').slice(0, 12);
 }
 
 function keyOf(bracket: Bracket, scope: DiscoverScope, freeOnly: boolean): string {
   const ids = [...ownedFor(freeOnly)].sort();
-  return createHash('sha1').update(JSON.stringify([bracket, scope, freeOnly, ids, getCardDb().all().length, edhrecStamp()])).digest('hex');
+  return createHash('sha1').update(JSON.stringify([bracket, scope, freeOnly, ids, getCardDb().all().length])).digest('hex');
 }
 
 /**
@@ -149,7 +149,7 @@ export function readFreeOnly(value: unknown): boolean {
 export function discoverState(bracket: Bracket, scope: DiscoverScope = 'owned', freeOnly = false): DiscoverState {
   if (ownedSet().size === 0) return blank(bracket, scope, freeOnly, 'empty');
   const job = jobs().get(keyOf(bracket, scope, freeOnly));
-  return job ? withCards(job) : blank(bracket, scope, freeOnly, 'idle');
+  return job && (job.state.status === 'running' || job.stamp === edhrecStamp()) ? withCards(job) : blank(bracket, scope, freeOnly, 'idle');
 }
 
 /** POST /api/discover: starts the job unless a result (or a running job) for the same collection, bracket, scope and freeOnly exists. */
@@ -158,8 +158,9 @@ export function startDiscover(bracket: Bracket, scope: DiscoverScope = 'owned', 
   const all = jobs();
   const key = keyOf(bracket, scope, freeOnly);
   const hit = all.get(key);
-  if (hit && hit.state.status !== 'error') return withCards(hit);
-  const job: Job = { key, state: blank(bracket, scope, freeOnly, 'running'), started: Date.now(), lazy: new Map() };
+  const stamp = edhrecStamp();
+  if (hit && (hit.state.status === 'running' || (hit.state.status !== 'error' && hit.stamp === stamp))) return withCards(hit);
+  const job: Job = { key, stamp, state: blank(bracket, scope, freeOnly, 'running'), started: Date.now(), lazy: new Map() };
   all.delete(key);
   all.set(key, job);
   for (const [k, j] of all) {

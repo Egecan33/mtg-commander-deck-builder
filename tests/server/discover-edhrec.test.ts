@@ -54,10 +54,19 @@ describe('best from collection rates like the deck page', () => {
     }
   });
 
-  it('starts a new run once EDHREC data is cached for another commander', () => {
-    const before = discoverState(3, 'owned');
-    expect(before.status).toBe('done');
+  it('does not reuse a finished result once EDHREC data is cached for another commander', () => {
+    expect(discoverState(3, 'owned').status).toBe('done');
     cachePage('atraxa-praetors-voice');
     expect(discoverState(3, 'owned').status).toBe('idle');
+    expect(startDiscover(3, 'owned').status).toBe('running');
   });
+
+  it('keeps showing a running job when the cached EDHREC set changes under it', async () => {
+    const running = startDiscover(3, 'owned');
+    expect(running.status).toBe('running');
+    cachePage('some-other-commander');
+    expect(discoverState(3, 'owned').status).toBe('running');
+    expect(startDiscover(3, 'owned').status).toBe('running');
+    await finished();
+  }, 240_000);
 });
