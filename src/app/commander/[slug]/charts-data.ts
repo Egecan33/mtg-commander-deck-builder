@@ -21,7 +21,7 @@ const ODDS: { label: string; roles: Role[] }[] = [
 ];
 
 /** The numbers the Charts tab draws, from a deck and its analysis (the scorer's own summary and targets). */
-export function chartData(deck: Deck, a: Pick<AnalyzeResponse, 'summary' | 'targets' | 'cards'>): ChartData {
+export function chartData(deck: Deck, a: Pick<AnalyzeResponse, 'summary' | 'targets' | 'cards'> & { packages?: Pick<AnalyzeResponse['packages'], 'packages'> }): ChartData {
   const curve = a.summary.curve.map((count, i) => ({ mv: i >= 7 ? '7+' : String(i), count }));
   const typeCounts = new Map<string, number>();
   for (const e of deck.main) {
@@ -38,7 +38,8 @@ export function chartData(deck: Deck, a: Pick<AnalyzeResponse, 'summary' | 'targ
   const sources = (colors.length ? colors : (['C'] as ColorLetter[])).map((color) => ({
     color, count: Math.round((a.summary.sources[color as keyof typeof a.summary.sources] ?? 0) * 10) / 10,
   }));
-  const odds = ODDS.map(({ label, roles: wanted }) => {
+  // The deck's planned packages, each with the cards of it that are in the library (the deck page's own numbers).
+  const odds = a.packages ? a.packages.packages.map((p) => ({ label: p.name, hits: p.library ?? p.count })) : ODDS.map(({ label, roles: wanted }) => {
     let hits = 0;
     for (const e of deck.main) {
       const card = a.cards[e.oracleId];

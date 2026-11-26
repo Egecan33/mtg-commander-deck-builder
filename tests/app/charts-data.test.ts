@@ -44,3 +44,11 @@ describe('chartData', () => {
     expect(d.curve[0].mv).toBe('0');
   });
 });
+
+describe('chartData odds', () => {
+  it('odds follow the package plan', () => {
+    const plan = { packages: [{ name: 'Ramp', count: 8, library: 7 }, { name: 'Goblins', count: 9 }] };
+    const d = chartData(deck(['k']), analysis({ packages: plan }));
+    expect(d.odds).toEqual([{ label: 'Ramp', hits: 7 }, { label: 'Goblins', hits: 9 }]);
+  });
+});

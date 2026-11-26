@@ -135,7 +135,7 @@ export function CommanderPage({ slug }: { slug: string }) {
 
   const name = page ? joinNames(page.commanders) : '';
   const commanderIds = useMemo(() => page?.commanders.map((c) => c.oracleId) ?? [], [page]);
-  const avg = useAverageDeck(commanderIds, name, q, ready && !!page && (tab === 'deck' || tab === 'charts'), freeOnly === true, page?.edhrec ?? '');
+  const avg = useAverageDeck(commanderIds, name, q, ready && !!page && (tab === 'recs' || tab === 'deck' || tab === 'charts'), freeOnly === true, page?.edhrec ?? '');
   const create = useCallback(
     async (kind: 'build' | 'best' | 'empty') => {
       if (!page) return;
@@ -191,7 +191,7 @@ export function CommanderPage({ slug }: { slug: string }) {
         </div>
       </div>
       <div className="mx-auto max-w-[1500px] px-8 py-5 [&_section>header]:!top-[var(--cmd-bar,0px)]">
-        {tab === 'recs' && (recs ? <RecsTab data={recs} name={name} edhrecDecks={page.edhrecDecks} /> : <p className="text-ash">Loading card recs…</p>)}
+        {tab === 'recs' && (recs ? <RecsTab data={recs} name={name} edhrecDecks={page.edhrecDecks} avg={avg} /> : <p className="text-ash">Loading card recs…</p>)}
         {tab === 'decks' && <DecksTab page={page} name={name} onBuild={() => void create('build')} />}
         {tab === 'deck' && <AverageDeckTab avg={avg} name={name} />}
         {tab === 'charts' && <ChartsTab avg={avg} name={name} bracket={q.bracket} />}

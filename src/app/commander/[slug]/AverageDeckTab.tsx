@@ -12,6 +12,7 @@ import { createDeck } from '@/app/lib/api';
 import { setFilters } from '@/app/lib/filters';
 import { BAND_VAR, bandOf } from '@/app/lib/ui';
 import { DeckView } from '@/app/deck/[id]/DeckView';
+import { CommanderPackages } from './CommanderPackages';
 import type { AverageDeck } from './useAverageDeck';
 
 const NO_HELD = {};
@@ -22,7 +23,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
   const notify = useNotify();
   const [detail, setDetail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<'cards' | 'network'>('cards');
+  const [view, setView] = useState<'cards' | 'network' | 'packages'>('cards');
   const [focus, setFocus] = useState<number | null>(null);
   const net = useNetwork(avg.deck ?? null, view === 'network');
   const networkNow = net.network;
@@ -66,6 +67,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
       <div className="seg mb-3" role="group" aria-label="Show the deck as">
         <button type="button" aria-pressed={view === 'cards'} onClick={() => setView('cards')} data-testid="average-view-cards">Cards</button>
         <button type="button" aria-pressed={view === 'network'} onClick={() => setView('network')} data-testid="average-view-network">Network</button>
+        <button type="button" aria-pressed={view === 'packages'} onClick={() => setView('packages')} data-testid="average-view-packages">Packages</button>
       </div>
       {view === 'network' && (
         <div className="grid grid-cols-[minmax(0,1fr)_26rem] gap-4" data-testid="average-network">
@@ -86,6 +88,7 @@ export function AverageDeckTab({ avg, name }: { avg: AverageDeck; name: string }
           </div>
         </div>
       )}
+      {view === 'packages' && <CommanderPackages avg={avg} />}
       {view === 'cards' && <DeckView
         deck={deck}
         lookup={analysis.cards}

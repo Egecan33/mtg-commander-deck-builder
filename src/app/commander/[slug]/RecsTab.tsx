@@ -14,6 +14,8 @@ import { Section, useSectionLimit } from '@/app/components/Section';
 import type { CommanderRecsResponse, RecCard } from '@/app/lib/api';
 import { setFilters, useFilters } from '@/app/lib/filters';
 import { fmtInt, fmtPrice } from '@/app/lib/ui';
+import { CommanderPackages } from './CommanderPackages';
+import type { AverageDeck } from './useAverageDeck';
 import { arrangeRecs, type ArrangedSection, type GroupBy, type RecSort } from './arrange';
 
 export const REC_GROUPS: FilterOption[] = [
@@ -37,7 +39,7 @@ function EmptyAction({ text }: { text: string }) {
   return null;
 }
 
-export function RecsTab({ data, name, edhrecDecks }: { data: CommanderRecsResponse; name: string; edhrecDecks?: number }) {
+export function RecsTab({ data, name, edhrecDecks, avg }: { data: CommanderRecsResponse; name: string; edhrecDecks?: number; avg: AverageDeck }) {
   const f = useFilters();
   const [detail, setDetail] = useState<string | null>(null);
   const groupBy = pickOption(f.groupBy, REC_GROUPS) as GroupBy;
@@ -118,11 +120,11 @@ export function RecsTab({ data, name, edhrecDecks }: { data: CommanderRecsRespon
                 {body(s)}
                 {s.total > s.cards.length && <p className="mt-2 text-[13px] text-ash" data-testid="rec-capped">Showing the first {s.cards.length} of {fmtInt(s.total)}. Narrow the filters to see the rest.</p>}
               </Section>
-            {groupBy === 'category' && s.id === 'owned' && (
-            <Section id="rec-packages" title="Packages" data={{ 'data-section': 'packages' }}>
-              <EmptyState testId="rec-packages-pending" message="Packages of cards that work together arrive with the packages work." />
-            </Section>
-          )}
+              {groupBy === 'category' && s.id === 'owned' && (
+                <Section id="rec-packages" title="Packages" data={{ 'data-section': 'packages' }}>
+                  <CommanderPackages avg={avg} />
+                </Section>
+              )}
             </Fragment>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { EmptyState } from '@/app/components/EmptyState';
 import { OddsBar } from '@/app/components/OddsBar';
 import { Section } from '@/app/components/Section';
 import { ColorPip } from '@/app/components/card';
+import { deckSizeOf } from '@/engine/format';
 import { setFilters } from '@/app/lib/filters';
 import { BAND_VAR } from '@/app/lib/ui';
 import { chartData } from './charts-data';
@@ -39,6 +40,7 @@ export function ChartsTab({ avg, name, bracket }: { avg: AverageDeck; name: stri
   }
   if (!avg.deck || !avg.analysis) return <p className="text-ash">Building the average deck…</p>;
   const d = chartData(avg.deck, avg.analysis);
+  const librarySize = deckSizeOf(avg.analysis.format) - avg.deck.commanders.length;
   const maxCurve = Math.max(1, ...d.curve.map((c) => c.count));
   const maxType = Math.max(1, ...d.types.map((t) => t.count));
   const maxRole = Math.max(1, ...d.roles.map((r) => Math.max(r.count, r.band.hi)));
@@ -89,7 +91,7 @@ export function ChartsTab({ avg, name, bracket }: { avg: AverageDeck; name: stri
       </Section>
       <Section id="chart-odds" title="Odds to draw each kind of card" testId="chart-odds">
         <div className="grid gap-4 sm:grid-cols-2">
-          {d.odds.map((o) => <OddsBar key={o.label} hits={o.hits} deckSize={99} label={`${o.label} (${o.hits})`} />)}
+          {d.odds.map((o) => <OddsBar key={o.label} hits={o.hits} deckSize={librarySize} label={`${o.label} (${o.hits})`} />)}
         </div>
       </Section>
     </div>
