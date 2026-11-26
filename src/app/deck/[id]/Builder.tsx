@@ -19,7 +19,7 @@ import {
   BRACKETS, COLOR_NAME, DEFAULT_QUERY, addCard, bracketName, brokenRules, deckCount, entryOf, errText, inDeck, isAbort, queryForFix, removeCard, swapCard, toggleLock,
   type BrowserQuery,
 } from '../../lib/ui';
-import { FormatChip, WildcardLine } from './ArenaParts';
+import { CraftSection, FormatChip, WildcardLine } from './ArenaParts';
 import { Browser, type BrowserCard } from './Browser';
 import { DeckView } from './DeckView';
 import {
@@ -112,6 +112,8 @@ export function Builder({ id }: { id: string }) {
   const brawl = analysis ? analysis.format === 'brawl' : deckCollection?.kind === 'arena';
   const { craftOnly } = useFilters();
   const [moving, setMoving] = useState(false);
+  // "Cards to craft" of a Brawl deck, shown above the deck sections.
+  const [craftOpen, setCraftOpen] = useState(false);
 
   const learn = useCallback((cards: CardLookup | ClientCard[]) => {
     setLookup((cur) => {
@@ -650,8 +652,10 @@ export function Builder({ id }: { id: string }) {
   const manual = activeCollection?.kind === 'manual';
   const offer = analysis?.boxMatch && boxLinked === false ? analysis.boxMatch : null;
   const takes = analysis && analysis.conflicts.byHolder.length > 0;
-  const notice = takes || offer ? (
+  const crafts = craftOpen && analysis?.arena && analysis.arena.toCraft.length > 0 ? analysis.arena : null;
+  const notice = takes || offer || crafts ? (
     <>
+      {crafts && <CraftSection report={crafts} lookup={lookup} onOpen={openCard} onClose={() => setCraftOpen(false)} />}
       {takes && (
         <HeldSummary
           conflicts={analysis.conflicts}
@@ -771,7 +775,7 @@ export function Builder({ id }: { id: string }) {
               {saveState === 'saving' || deck !== settled ? 'Saving' : saveState === 'failed' ? 'Not saved' : dirty.current ? 'Saved' : ''}
             </span>
           </div>
-          {analysis?.arena && <WildcardLine report={analysis.arena} lookup={lookup} onOpen={openCard} />}
+          {analysis?.arena && <WildcardLine report={analysis.arena} open={craftOpen} onToggle={() => setCraftOpen((o) => !o)} />}
           {needsColor && (
             <div className="mt-1 flex items-center gap-1.5 px-1 text-[0.8rem] text-ash" data-testid="chosen-color">
               <span>Chosen colour</span>

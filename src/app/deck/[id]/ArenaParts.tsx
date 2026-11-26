@@ -1,54 +1,55 @@
 'use client';
 
+import { CardGrid } from '../../components/CardGrid';
+import { CardTile, unknownCard } from '../../components/CardTile';
+import { Menu } from '../../components/Menu';
+import { Section } from '../../components/Section';
 import type { ArenaRarity, ArenaReport, CardLookup, CollectionInfo, Format } from '../../lib/api';
 
 const ORDER: readonly ArenaRarity[] = ['common', 'uncommon', 'rare', 'mythic'];
 export const RARITY_LETTER: Record<ArenaRarity, string> = { common: 'C', uncommon: 'U', rare: 'R', mythic: 'M' };
+const cap = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
 /** The tile stat a Brawl deck shows where a Commander deck shows a price: the card's Arena rarity. */
 export function rarityStat(rarity: ArenaRarity | null): { label: string; value: string; title: string } {
-  return rarity
-    ? { label: '', value: RARITY_LETTER[rarity], title: `${rarity[0].toUpperCase()}${rarity.slice(1)} on MTG Arena` }
-    : { label: '', value: '–', title: 'Not on MTG Arena' };
+  return rarity ? { label: '', value: RARITY_LETTER[rarity], title: `${cap(rarity)} on MTG Arena` } : { label: '', value: '–', title: 'Not on MTG Arena' };
 }
 
 /**
- * "MTG Arena · Brawl" or "Physical · Commander", with the action that moves the deck to the other
- * collection. Moving changes only the collection; the deck is then checked under that collection's rules.
+ * "MTG Arena · Brawl" or "Physical · Commander" as a quiet chip that opens a menu with the action
+ * that moves the deck to the other collection. Moving changes only the collection; the deck is then
+ * checked under that collection's rules.
  */
 export function FormatChip({
   format, collection, other, busy, onMove,
 }: { format: Format; collection: CollectionInfo | null; other: CollectionInfo | null; busy: boolean; onMove: (to: CollectionInfo) => void }) {
+  const label = `${collection?.name ?? (format === 'brawl' ? 'MTG Arena' : 'Physical')} · ${format === 'brawl' ? 'Brawl' : 'Commander'}`;
+  const title = format === 'brawl' ? 'Built for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget' : 'Built for paper: Commander rules';
+  if (!other) return <span className="chip" title={title} data-testid="deck-format">{label}</span>;
   return (
-    <>
-      <span
-        className={`chip ${format === 'brawl' ? 'border-brass text-bone' : ''}`}
-        title={format === 'brawl' ? 'Built for MTG Arena: Brawl rules, Arena cards only, your wildcards as the budget' : 'Built for paper: Commander rules'}
-        data-testid="deck-format"
-      >
-        {collection?.name ?? (format === 'brawl' ? 'MTG Arena' : 'Physical')} · {format === 'brawl' ? 'Brawl' : 'Commander'}
-      </span>
-      {other && (
-        <button
-          type="button"
-          className="chip hover:text-bone"
-          disabled={busy}
-          onClick={() => onMove(other)}
-          title={`Moves this deck to your ${other.name} collection. Its cards stay as they are; it is then checked under ${other.kind === 'arena' ? 'Brawl' : 'Commander'} rules.`}
-          data-testid="deck-move"
-        >
-          {busy ? 'Moving' : `Move to ${other.name}`}
-        </button>
-      )}
-    </>
+    <Menu
+      label={busy ? 'Moving' : label}
+      className="chip hover:text-bone"
+      testId="deck-format"
+      title={title}
+      items={[
+        {
+          label: `Move to ${other.name}`,
+          description: `Its cards stay as they are; it is then checked under ${other.kind === 'arena' ? 'MTG Arena Brawl' : 'Commander'} rules.`,
+          onSelect: () => onMove(other),
+          disabled: busy,
+          testId: 'deck-move',
+        },
+      ]}
+    />
   );
 }
 
 /**
  * "Wildcards needed: 3 uncommon, 2 rare, 1 mythic. You have 12, 1, 0." Rarities over budget are
- * marked. The cards to craft, with the printing Arena should craft, open below it.
+ * marked. "Cards to craft" opens `CraftSection` (the parent shows it above the deck).
  */
-export function WildcardLine({ report, lookup, onOpen }: { report: ArenaReport; lookup: CardLookup; onOpen: (id: string) => void }) {
+export function WildcardLine({ report, open, onToggle }: { report: ArenaReport; open: boolean; onToggle: () => void }) {
   if (report.noData) {
     return (
       <p className="mt-1 px-1 text-[0.8rem] text-band-mid" data-testid="wildcards-no-data">
@@ -87,26 +88,41 @@ export function WildcardLine({ report, lookup, onOpen }: { report: ArenaReport; 
         </span>
       ))}
       <span>.</span>
-      <details className="inline-block align-top">
-        <summary className="ml-2 cursor-pointer text-brass hover:text-bone" data-testid="craft-toggle">
-          Cards to craft ({report.toCraft.length})
-        </summary>
-        <ul className="mt-1 max-h-48 overflow-y-auto rounded-md border border-slag bg-soot px-2 py-1.5 text-[0.8rem]" data-testid="craft-list">
-          {ORDER.slice().reverse().flatMap((rarity) =>
-            report.toCraft.filter((l) => l.rarity === rarity).map((l) => (
-              <li key={l.oracleId} className="flex gap-2 py-0.5" data-testid="craft-line" data-rarity={rarity}>
-                <button type="button" className="text-bone hover:text-brass" onClick={() => onOpen(l.oracleId)}>
-                  {lookup[l.oracleId]?.name ?? 'Unknown card'}
-                </button>
-                <span className="text-ash">
-                  {l.set && l.number ? `${l.set} ${l.number}, ` : ''}
-                  {rarity}
-                </span>
-              </li>
-            )),
-          )}
-        </ul>
-      </details>
+      <button type="button" className="ml-2 text-ash underline-offset-2 hover:text-bone hover:underline" aria-expanded={open} onClick={onToggle} data-testid="craft-toggle">
+        {open ? 'Hide cards to craft' : `Cards to craft (${report.toCraft.length})`}
+      </button>
     </div>
+  );
+}
+
+/** The cards to craft, rarest first, as small tiles: rarity and the Arena printing to craft under each. */
+export function CraftSection({ report, lookup, onOpen, onClose }: { report: ArenaReport; lookup: CardLookup; onOpen: (id: string) => void; onClose: () => void }) {
+  const lines = ORDER.slice().reverse().flatMap((r) => report.toCraft.filter((l) => l.rarity === r));
+  return (
+    <Section
+      id="cards-to-craft"
+      title="Cards to craft"
+      count={lines.length}
+      testId="craft-list"
+      actions={<button type="button" className="btn btn-sm btn-quiet" onClick={onClose}>Hide</button>}
+    >
+      <CardGrid size="S">
+        {lines.map((l) => (
+          <CardTile
+            key={l.oracleId}
+            card={lookup[l.oracleId] ?? unknownCard(l.oracleId)}
+            known={!!lookup[l.oracleId]}
+            size="S"
+            stats={[
+              ...(l.set && l.number ? [{ label: '', value: `${l.set} ${l.number}`, title: 'The Arena printing to craft' }] : []),
+              rarityStat(l.rarity),
+            ]}
+            onOpen={() => onOpen(l.oracleId)}
+            testId="craft-line"
+            data={{ 'data-rarity': l.rarity }}
+          />
+        ))}
+      </CardGrid>
+    </Section>
   );
 }

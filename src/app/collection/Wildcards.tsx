@@ -117,7 +117,7 @@ export function ArenaWildcards({ version }: { version: unknown }) {
         </span>
         {draft && !value && <span className="text-band-low">Use whole numbers from 0 to 9999.</span>}
         {changed && (
-          <button type="button" className="btn btn-sm btn-primary ml-auto" disabled={busy} onClick={() => void save()} data-testid="wildcards-save">
+          <button type="button" className="btn btn-sm ml-auto" disabled={busy} onClick={() => void save()} data-testid="wildcards-save">
             Save wildcards
           </button>
         )}
