@@ -1,11 +1,48 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import type { CardLookup, HeldBy } from '../lib/api';
 import { CardImage } from './card';
 import { HeldMark } from './held';
 
-export interface Change { out: string; in: string; reason: string }
+/** One change. With `summary` (one short line) the row shows it, and `reason` sits behind "Why". */
+export interface Change { out: string; in: string; reason: string; summary?: string }
+
+/**
+ * A row's line: `lead`, then the summary with a "Why" toggle for the full reason; without a summary
+ * (or when the reason says no more), the reason itself.
+ */
+function Line({ lead, summary, reason, base }: { lead?: ReactNode; summary?: string; reason: string; base: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const why = !!summary && summary !== reason.replace(/\.$/, '');
+  return (
+    <div>
+      <p className="flex flex-wrap items-baseline gap-x-1.5">
+        {lead}
+        <span className="text-ash" data-testid={summary ? `${base}-summary` : undefined}>{summary ?? reason}</span>
+        {why && (
+          <button
+            type="button"
+            className="text-smoke underline decoration-slag underline-offset-2 hover:text-bone"
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen((o) => !o)}
+            title={open ? 'Hide the full reason' : 'Show the full reason'}
+            data-testid={`${base}-why`}
+          >
+            Why
+          </button>
+        )}
+      </p>
+      {why && (
+        <p id={id} hidden={!open} className="mt-0.5 max-w-[70ch] text-ash" data-testid={`${base}-reason`}>
+          {reason}
+        </p>
+      )}
+    </div>
+  );
+}
 
 const STRIP = 24;
 
@@ -39,9 +76,10 @@ function Thumb({ id, lookup, held }: { id: string; lookup: CardLookup; held?: re
 }
 
 /**
- * What an action changed: the title with the rating before → after, the changes grouped by their
- * reason (out → in), and Undo / Dismiss. Test ids derive from `testId`: "fix-panel" gives
- * "fix-undo" and "fix-dismiss".
+ * What an action changed: the title with the rating before → after (announced as a status), the
+ * changes grouped by their reason (out → in, the short summary with the full reason behind "Why"),
+ * and Undo / Dismiss. Test ids derive from `testId`: "fix-panel" gives "fix-undo", "fix-dismiss",
+ * "fix-why", "fix-summary" and "fix-message" (the note; "fix-note" is the rating panel's).
  */
 export function ResultPanel({
   title, before, after, changes, lookup, heldBy, note, onUndo, onDismiss, testId = 'result-panel',
@@ -69,7 +107,7 @@ export function ResultPanel({
   return (
     <section className="result-in rounded-[6px] border border-slag bg-anvil px-3.5 py-3" aria-label={title} data-testid={testId}>
       <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1" role="status">
           <h2 className="text-[18px] leading-tight" data-testid={`${base}-title`}>{title}</h2>
           {before !== undefined && after !== undefined && (
             <p className="mt-0.5 text-[13px] text-ash" data-testid={`${base}-rating`}>{ratingText(before, after)}</p>
@@ -86,7 +124,7 @@ export function ResultPanel({
           </button>
         </div>
       </div>
-      {note && <p className="mt-2 max-w-[70ch] text-[13px] text-bone" data-testid={`${base}-note`}>{note}</p>}
+      {note && <p className="mt-2 max-w-[70ch] text-[13px] text-bone" data-testid={`${base}-message`}>{note}</p>}
 
       {groups.length > 0 && (
         <ul className="mt-2.5 grid gap-3" data-testid={`${base}-changes`}>
@@ -105,7 +143,7 @@ export function ResultPanel({
                     <p className="text-bone">
                       {c.out && c.in ? `${nameOf(c.out)} → ${nameOf(c.in)}` : c.in ? `Added ${nameOf(c.in)}` : `Cut ${nameOf(c.out)}`}
                     </p>
-                    <p className="text-ash">{reason}</p>
+                    <Line summary={c.summary} reason={reason} base={base} />
                     {held && held.length > 0 && (
                       <p className="mt-0.5 flex items-center gap-1.5 text-ash">
                         <HeldMark names={held} small />
@@ -122,9 +160,9 @@ export function ResultPanel({
             const shown = open ? items : items.slice(0, STRIP);
             return (
               <li key={reason} data-testid={`${base}-group`}>
-                <p className="text-[13px]">
-                  <span className="text-bone">{groupHeading(items)}</span> <span className="text-ash">{reason}</span>
-                </p>
+                <div className="text-[13px]">
+                  <Line lead={<span className="text-bone">{groupHeading(items)}</span>} summary={items[0]!.summary} reason={reason} base={base} />
+                </div>
                 {strip ? (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {shown.map((c, i) => {

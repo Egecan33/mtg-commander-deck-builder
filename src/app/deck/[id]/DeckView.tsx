@@ -27,12 +27,16 @@ const sectionId = (label: string) => `deck-${label.toLowerCase().replace(/[^a-z0
 
 /** The deck as card images in titled sections (by what the cards do, or by card type) with a jump rail; or as a compact list. */
 export function DeckView({
-  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice,
+  deck, lookup, scoreOf, weakest, held, onRemove, onAdd, onLock, onOpen, tools, notice, result, lead,
 }: {
+  /** Shown before the deck's heading (Show card search, when it is hidden). */
+  lead?: ReactNode;
   /** Extra actions for the whole deck, shown under the header. */
   tools?: ReactNode;
   /** Shown above the cards (what the deck takes from boxes and built decks, the box offer). */
   notice?: ReactNode;
+  /** What the last action changed (the Fix deck panel), at the top of the scrolling deck. */
+  result?: ReactNode;
   deck: Deck;
   lookup: CardLookup;
   scoreOf: (id: string) => CardScore | undefined;
@@ -170,6 +174,7 @@ export function DeckView({
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col border-l border-slag" aria-label="Deck" data-testid="deck-view">
       <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+        {lead}
         <h2 className="mr-auto text-[18px] leading-none">Deck</h2>
         <FilterBar show={['groupBy', 'view']} groups={GROUPS} testId="deck-view-controls" />
       </div>
@@ -181,11 +186,12 @@ export function DeckView({
         <div className="flex min-h-0 flex-1">
           <JumpRail label="Deck sections" className="w-[8.5rem] shrink-0 overflow-y-auto overscroll-contain pb-4 pl-2 pr-1 pt-2" />
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain pb-4 pl-2 pr-3" data-testid="deck-scroll">
+            {result}
             {empty && (
               <EmptyState
                 className="mb-4 mt-2"
                 title="The 99 are empty"
-                message="Add cards from the browser on the left with the + on each card, or use Auto-build above for a full deck."
+                message="Add cards from the card search on the left with the + on each card, or use Build, Auto-build above for a full deck."
                 testId="deck-empty"
               />
             )}

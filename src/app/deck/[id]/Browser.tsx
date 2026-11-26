@@ -32,8 +32,10 @@ export type BrowserCard = ScoredCard & { held?: string[] };
  * what is already in.
  */
 export function Browser({
-  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, brawl = false,
+  deck, settled, rev, query, setQuery, extraAxes, held, onAdd, onRemove, onOpen, searchRef, onHide, brawl = false,
 }: {
+  /** Hides the card search column (the deck gets its width). */
+  onHide: () => void;
   deck: Deck;
   settled: Deck;
   rev: number;
@@ -83,7 +85,7 @@ export function Browser({
     <section className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Card browser" data-testid="browser">
       <div className="grid gap-2 px-3 pb-2 pt-3">
         <div className="flex items-center gap-2">
-          <h2 className="mr-1 text-[1.15rem] leading-none">Cards</h2>
+          <h2 className="mr-1 text-[18px] leading-none">Cards</h2>
           <input
             ref={searchRef}
             className="field min-w-0 flex-1"
@@ -93,12 +95,22 @@ export function Browser({
             aria-label="Search cards"
             data-testid="card-search"
           />
-          <select className="field w-[10.5rem]" value={query.sort} onChange={(e) => set('sort', e.target.value as CardSort)} aria-label="Sort cards" data-testid="sort">
+          <button type="button" className="btn btn-sm btn-quiet shrink-0" onClick={onHide} title="Hide the card search and give the deck the room. Show it again above the deck, or press /." data-testid="browser-hide">
+            Hide card search
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select className="field h-7 w-[10.5rem] text-[0.8125rem]" value={query.sort} onChange={(e) => set('sort', e.target.value as CardSort)} aria-label="Sort cards" title="Order of the cards" data-testid="sort">
             {SORTS.filter((s) => !brawl || s.id !== 'price').map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-          <button type="button" className="btn btn-sm" aria-expanded={showFilters} onClick={() => setShowFilters((s) => !s)}>
+          <button type="button" className="btn btn-sm" aria-expanded={showFilters} onClick={() => setShowFilters((s) => !s)} title={showFilters ? 'Hide the filters' : 'Show the filters'}>
             Filters{active ? ` (${active})` : ''}
           </button>
+          <span className="ml-auto text-[0.8rem] text-smoke" aria-live="polite">
+            <span data-testid="browser-total">{paged.total === null ? 'Scoring the card pool' : `${fmtInt(paged.total)} cards`}</span>
+            {paged.loading && paged.total !== null && <span className="ml-2">updating scores</span>}
+          </span>
         </div>
 
         {showFilters && (
@@ -166,11 +178,6 @@ export function Browser({
             <button type="button" className="shrink-0 text-ash hover:text-bone" onClick={() => setQuery({ ...DEFAULT_QUERY })}>Back to all cards</button>
           </div>
         )}
-
-        <div className="flex items-baseline text-[0.8rem] text-smoke" aria-live="polite">
-          <span data-testid="browser-total">{paged.total === null ? 'Scoring the card pool' : `${fmtInt(paged.total)} cards`}</span>
-          {paged.loading && paged.total !== null && <span className="ml-2">updating scores</span>}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1">

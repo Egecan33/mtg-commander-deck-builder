@@ -69,7 +69,7 @@ A screen may compose these; it does not re-implement them. Existing ad-hoc versi
 │          │                                                 │  tabs)     │
 └──────────┴─────────────────────────────────────────────────┴────────────┘
 ```
-Content is left-aligned; grids fill the width; the side panel is 26rem.
+Content is left-aligned; grids fill the width; the side panel is 22.5rem (amended 2026-11-26, ruling D26: the deck column's tile width matters more).
 
 ### Commander page
 ```

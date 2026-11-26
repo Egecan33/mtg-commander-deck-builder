@@ -158,7 +158,15 @@ export interface CardScore {
 }
 
 export interface SubScore { key: string; label: string; weight: number; value: number; fixes: Fix[] }
-export interface Fix { text: string; filter: { role?: Role; axis?: AxisId; color?: Color; maxMv?: number; land?: boolean } | null }
+export interface Fix {
+  text: string; filter: { role?: Role; axis?: AxisId; color?: Color; maxMv?: number; land?: boolean } | null;
+  /**
+   * true when `fixDeck` works on this problem (a role, the lands, the theme, the curve, card quality,
+   * the target bracket's rules); false for advice only the player can act on ("Plays like Bracket 2",
+   * "Set the theme weights"). The rating always sets it.
+   */
+  actionable?: boolean;
+}
 export interface DeckRating { rating: number; legal: boolean; complete: boolean; subscores: SubScore[]; violations: Violation[] }
 
 /** What a directed improve run is asked to do (all optional; see `improveDeck`). */
@@ -191,8 +199,12 @@ export interface SwapProposal {
   objection?: string;
 }
 
-/** One card change `fixDeck` made: `out` is '' for a plain add, `in` is '' for a plain cut. */
-export interface FixChange { out: string; in: string; reason: string }
+/**
+ * One card change `fixDeck` made: `out` is '' for a plain add, `in` is '' for a plain cut. `summary` is
+ * one short line on what it did ("Ramp 6 → 7 of 10–13", "Bracket: cuts a Game Changer", "Fills the
+ * deck to 100"); `reason` is the full sentence.
+ */
+export interface FixChange { out: string; in: string; reason: string; summary: string }
 /**
  * What `fixDeck` did: the deck after the fix, every change in the order it was made, the ratings
  * before and after (unrounded, to one decimal, as in `SwapProposal`), and a plain-English note when

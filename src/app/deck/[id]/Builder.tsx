@@ -6,10 +6,13 @@ import type { Bracket, CardScore, Color, Deck, Fix, ImproveGoals, Role, SwapProp
 import { CardDetail } from '../../components/CardDetail';
 import { CardImage, ColorPip, Gauge, Overlay } from '../../components/card';
 import { HeldMark, heldText, useFreeOnly } from '../../components/held';
+import { Menu } from '../../components/Menu';
+import { ResultPanel } from '../../components/ResultPanel';
 import { useCollections, useNotify, useProxies, useStatus } from '../../components/Shell';
 import {
   ApiError, analyzeDeck, browseCards, buildDeck, exportDeck, getBoxes, getDeck, linkBox, loadEdhrec, moveDeck, takeFromBox, updateDeck,
-  type AnalyzeResponse, type BoxInfo, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type HeldBy, type ScoredCard,
+  type AnalyzeResponse, type BoxInfo, type BuildRequestOptions, type CardLookup, type ClientCard, type CollectionInfo, type ConflictReport, type FixResponse,
+  type HeldBy, type ScoredCard,
 } from '../../lib/api';
 import { setFilters, useFilters } from '../../lib/filters';
 import {
@@ -81,6 +84,12 @@ export function Builder({ id }: { id: string }) {
   const [options, setOptions] = useState<ImproveOptions>({ bracket: 'keep', ownedOnly: false, maxPrice: '', maxSwaps: '15', goals: [], lean: false, leanAxis: '' });
   const [proposals, setProposals] = useState<ProposalSet | null>(null);
   const [replacing, setReplacing] = useState<{ out: string; list: SwapProposal[] | null; error?: string; heldBy?: HeldBy } | null>(null);
+  // The last Fix deck: what it returned, the deck before it (for Undo) and the deck it applied (null: nothing changed).
+  const [fixed, setFixed] = useState<{ seq: number; res: FixResponse; before: Deck; after: Deck | null } | null>(null);
+  const fixSeq = useRef(0);
+  // When a Fix deck run ends, the focus goes back to its button (it was disabled while the run worked).
+  const fixButton = useRef<HTMLButtonElement>(null);
+  const refocusFix = useRef(false);
   const [freeOnlyPref, setFreeOnly] = useFreeOnly();
   const freeOnly = freeOnlyPref ?? false;
   // "!" of cards outside the deck, from where they were last seen (a browser result, a proposal).
@@ -221,6 +230,22 @@ export function Builder({ id }: { id: string }) {
     dirty.current = true;
     setDeck((d) => (d ? fn(d) : d));
   }, []);
+  // The deck as last rendered, for an action that must not apply over changes made while it ran.
+  const deckRef = useRef<Deck | null>(null);
+  useEffect(() => {
+    deckRef.current = deck;
+  }, [deck]);
+
+  // ---- the card search column, shown or hidden (remembered for every deck)
+  const { ready: filtersReady, ownedOnly: storedOwnedOnly, browser: browserShown } = useFilters();
+  // "/" on a hidden card search shows it, then the search box takes the focus.
+  const focusSearch = useRef(false);
+  const showBrowser = useCallback(() => setFilters({ browser: true }), []);
+  useEffect(() => {
+    if (!browserShown || !focusSearch.current || !searchRef.current) return;
+    focusSearch.current = false;
+    searchRef.current.focus();
+  }, [browserShown]);
 
   // ---- keyboard: "/" goes to search. Esc is handled by whichever overlay is open.
   useEffect(() => {
@@ -228,13 +253,18 @@ export function Builder({ id }: { id: string }) {
       const el = e.target as HTMLElement | null;
       if (e.key === '/' && !e.metaKey && !e.ctrlKey && !(el && /INPUT|TEXTAREA|SELECT/.test(el.tagName))) {
         e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        if (!searchRef.current) {
+          focusSearch.current = true;
+          showBrowser();
+          return;
+        }
+        searchRef.current.focus();
+        searchRef.current.select();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [showBrowser]);
 
   // ---- card actions
   const add = useCallback(
@@ -346,6 +376,58 @@ export function Builder({ id }: { id: string }) {
       setBusy(null);
     }
   };
+  /**
+   * Fix deck (or, with `only`, one part of the rating): the engine makes the deck legal and complete and
+   * works on what the rating lists, with the same card options as Improve. The result goes through the
+   * normal save, and the panel above the deck lists every change with one Undo.
+   */
+  const runFix = async (only?: BuildRequestOptions['only']) => {
+    if (!deck) return;
+    const before = deck;
+    setBusy(only ? `fix:${only}` : 'fix');
+    try {
+      const res = await buildDeck(before, 'fix', { ...buildOpts(), ...(only ? { only } : {}) });
+      learn(res.cards);
+      if (deckRef.current !== before) {
+        notify.info('The deck changed while Fix deck was working, so nothing was applied. Press Fix deck again.');
+        return;
+      }
+      let after: Deck | null = null;
+      if (res.changes.length > 0) {
+        // Fix deck changes the cards, never the deck's name or whether it is built.
+        const next: Deck = { ...res.deck, id: before.id, name: before.name };
+        if (before.built) next.built = true;
+        else delete next.built;
+        after = next;
+        mutate(() => next);
+        setProposals(null);
+      }
+      setFixed({ seq: ++fixSeq.current, res, before, after });
+    } catch (e) {
+      notify.error(e);
+    } finally {
+      refocusFix.current = true;
+      setBusy(null);
+    }
+  };
+  useEffect(() => {
+    if (busy || !refocusFix.current) return;
+    refocusFix.current = false;
+    fixButton.current?.focus({ preventScroll: true });
+  }, [busy]);
+  /** Puts back the deck exactly as it was before the fix; offered only while the fixed deck is unchanged. */
+  const undoFix = () => {
+    if (!fixed?.after || deck !== fixed.after) return;
+    const before = fixed.before;
+    mutate(() => before);
+    setFixed(null);
+    fixButton.current?.focus({ preventScroll: true });
+    notify.info('Undone. The deck is back as it was before Fix deck.');
+  };
+  // A new result panel scrolls into view at the top of the deck.
+  const revealResult = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView({ block: 'nearest' });
+  }, []);
   const propose = async (kind: 'improve' | 'swaps') => {
     if (!deck) return;
     setBusy(kind);
@@ -429,7 +511,6 @@ export function Builder({ id }: { id: string }) {
     if (usable.length) notify.info(usable.length === 1 ? `Swapped in ${lookup[usable[0]!.in]?.name ?? 'the new card'}` : `Applied ${usable.length} swaps`);
   };
   // "Only my collection" is a choice about the player, not about one deck: it is one of the shared filters.
-  const { ready: filtersReady, ownedOnly: storedOwnedOnly } = useFilters();
   useEffect(() => {
     if (filtersReady) setOptions((o) => (o.ownedOnly === storedOwnedOnly ? o : { ...o, ownedOnly: storedOwnedOnly }));
   }, [filtersReady, storedOwnedOnly]);
@@ -537,7 +618,9 @@ export function Builder({ id }: { id: string }) {
   };
   const applyFix = (fix: Fix) => {
     const next = queryForFix(fix);
-    if (next) setQuery(next);
+    if (!next) return;
+    setQuery(next);
+    showBrowser();
   };
 
   // ---- render
@@ -583,6 +666,36 @@ export function Builder({ id }: { id: string }) {
     </>
   ) : null;
   const canCommand = !!detailCard && /Legendary|can be your commander/i.test(detailCard.typeLine) && deck.commanders.length < 2 && !detailIsCommander;
+  const noCommander = deck.commanders.length === 0;
+  // Fix deck's number: the rating's fixes Fix deck can act on (not advice such as "Plays like Bracket 2"),
+  // plus every rule the deck breaks.
+  const problems = rating ? rating.subscores.reduce((n, s) => n + s.fixes.filter((f) => f.actionable).length, 0) + rating.violations.length : 0;
+  const fixTitle = !rating
+    ? 'Reading the deck'
+    : noCommander
+      ? 'Choose a commander first'
+      : problems === 0
+        ? 'Nothing to fix'
+        : `Make the deck legal and 100 cards, then work on the ${problems} ${problems === 1 ? 'problem' : 'problems'} from the rating that Fix deck can act on. Uses the card options beside it; Undo puts the deck back.`;
+  const fixResult = fixed ? (
+    <div key={fixed.seq} ref={revealResult} className="mb-3 mt-2">
+      <ResultPanel
+        title={fixed.after ? `Fixed: ${fixed.res.changes.length} ${fixed.res.changes.length === 1 ? 'change' : 'changes'}` : 'Fix deck changed nothing'}
+        before={fixed.after ? fixed.res.ratingBefore : undefined}
+        after={fixed.after ? fixed.res.ratingAfter : undefined}
+        changes={fixed.res.changes}
+        lookup={lookup}
+        heldBy={fixed.res.heldBy}
+        note={[fixed.res.note, fixed.after && deck !== fixed.after ? 'The deck changed after the fix, so it can no longer be undone in one step.' : null].filter(Boolean).join(' ') || null}
+        onUndo={fixed.after && deck === fixed.after ? undoFix : undefined}
+        onDismiss={() => {
+          setFixed(null);
+          fixButton.current?.focus({ preventScroll: true });
+        }}
+        testId="fix-panel"
+      />
+    </div>
+  ) : null;
 
   return (
     <div className="flex h-full flex-col" data-testid="builder">
@@ -688,32 +801,84 @@ export function Builder({ id }: { id: string }) {
           {rating ? <Gauge value={rating.rating} partial={!rating.complete} legal={broken.length === 0} size={112} /> : <div className="skeleton h-[4.3rem] w-28 rounded-md" />}
         </button>
 
-        <div className="grid shrink-0 grid-cols-3 gap-1.5">
-          <button type="button" className="btn btn-sm btn-primary" disabled={!!busy || deck.commanders.length === 0} onClick={() => void rebuild('auto', 'auto', 1)} title="Build a full 100-card deck around the commander. Locked cards stay." data-testid="auto-build">
-            {busy === 'auto' ? 'Building' : 'Auto-build'}
-          </button>
-          <button type="button" className="btn btn-sm" disabled={!!busy || deck.commanders.length === 0 || count >= 100} onClick={() => void rebuild('fill', 'fill')} title="Keep every card in the deck and add the best cards for the empty slots" data-testid="fill">
-            {busy === 'fill' ? 'Filling' : 'Fill the rest'}
-          </button>
-          <button type="button" className="btn btn-sm" disabled={!!busy || deck.commanders.length === 0} onClick={() => void rebuild('auto', 'reroll', 2 + Math.floor(Math.random() * 1_000_000))} title="Build again with different picks among near-equal cards. Locked cards stay." data-testid="reroll">
-            {busy === 'reroll' ? 'Rolling' : 'Reroll'}
-          </button>
-          <button type="button" className="btn btn-sm" disabled={!!busy || deck.commanders.length === 0} onClick={() => void propose('swaps')} data-testid="suggest-swaps">
-            {busy === 'swaps' ? 'Looking' : 'Suggest swaps'}
-          </button>
-          <button type="button" className="btn btn-sm" disabled={!!busy || deck.commanders.length === 0} onClick={() => void propose('improve')} data-testid="improve">
-            {busy === 'improve' ? 'Working' : 'Improve'}
-          </button>
-          <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport()} data-testid="export">
-            Export
-          </button>
-          <div className="col-span-2 flex min-w-0 flex-col justify-center text-[0.78rem] leading-tight text-ash">
+        <div className="grid shrink-0 gap-2" data-testid="deck-actions">
+          <div className="flex items-center gap-1.5">
+            <button
+              ref={fixButton}
+              type="button"
+              className="btn btn-sm btn-primary"
+              disabled={!!busy || !rating || problems === 0 || noCommander}
+              onClick={() => void runFix()}
+              title={fixTitle}
+              data-testid="fix-deck"
+              data-problems={rating ? problems : undefined}
+            >
+              {busy === 'fix' ? 'Fixing' : problems > 0 ? `Fix deck · ${problems}` : 'Fix deck'}
+            </button>
+            <Menu
+              label={busy === 'auto' ? 'Building' : busy === 'fill' ? 'Filling' : busy === 'reroll' ? 'Rolling' : 'Build'}
+              testId="menu-build"
+              title="Build the deck: a new auto-build, fill the empty slots, or reroll"
+              items={[
+                {
+                  label: 'Auto-build',
+                  description: 'A new 100-card deck around the commander. Locked cards stay.',
+                  onSelect: () => void rebuild('auto', 'auto', 1),
+                  disabled: !!busy || noCommander,
+                  title: noCommander ? 'Choose a commander first' : undefined,
+                  testId: 'auto-build',
+                },
+                {
+                  label: 'Fill the rest',
+                  description: 'Keeps every card and adds the best ones for the empty slots.',
+                  onSelect: () => void rebuild('fill', 'fill'),
+                  disabled: !!busy || noCommander || count >= 100,
+                  title: noCommander ? 'Choose a commander first' : count >= 100 ? 'The deck already has 100 cards' : undefined,
+                  testId: 'fill',
+                },
+                {
+                  label: 'Reroll',
+                  description: 'Builds again with other picks among near-equal cards. Locked cards stay.',
+                  onSelect: () => void rebuild('auto', 'reroll', 2 + Math.floor(Math.random() * 1_000_000)),
+                  disabled: !!busy || noCommander,
+                  title: noCommander ? 'Choose a commander first' : undefined,
+                  testId: 'reroll',
+                },
+              ]}
+            />
+            <button type="button" className="btn btn-sm" onClick={() => setPanel('improve')} title="Open the Improve tab: find improvements, suggest swaps, add one card" data-testid="improve">
+              Improve
+            </button>
+            <Menu
+              label="Export"
+              testId="menu-export"
+              align="right"
+              title="Copy the deck list for a deck site or for MTG Arena"
+              items={[
+                {
+                  label: 'Copy deck list',
+                  description: 'Plain text for Moxfield, Archidekt and most deck sites.',
+                  onSelect: () => void doExport('text'),
+                  disabled: !!busy,
+                  testId: 'export',
+                },
+                {
+                  label: 'Copy for Arena',
+                  description: 'In the form MTG Arena imports: in Arena open Decks, Import.',
+                  onSelect: () => void doExport('arena'),
+                  disabled: !!busy,
+                  testId: 'export-arena',
+                },
+              ]}
+            />
+          </div>
+          <div className="flex min-w-0 items-center gap-3 text-[13px] leading-tight text-ash">
             <label
-              className="flex cursor-pointer items-center gap-1.5"
-              title="Auto-build, Fill the rest, Reroll, Suggest swaps, Improve, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
+              className="flex min-w-0 cursor-pointer items-center gap-1.5"
+              title="Fix deck, Build, Improve, Suggest swaps, add-one and replace-a-card then only use cards from the collection picked in the top bar. Basic lands are always allowed."
             >
               <input type="checkbox" checked={options.ownedOnly} onChange={(e) => setOwnedOnly(e.target.checked)} data-testid="owned-only" />
-              <span className="truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
+              <span className="max-w-[15rem] truncate">Only my {activeCollection ? `${activeCollection.name} ` : ''}collection{activeCollection ? ` (${activeCollection.count.toLocaleString('en-US')})` : ''}</span>
             </label>
             {brawl && (
               <label
@@ -726,42 +891,53 @@ export function Builder({ id }: { id: string }) {
             )}
             {manual && (
               <label
-                className={`flex items-center gap-1.5 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
-                title={options.ownedOnly ? 'Builds and suggestions leave out copies sealed in a box or in another built deck' : 'Tick “Only my collection” first'}
+                className={`flex shrink-0 items-center gap-1.5 ${options.ownedOnly ? 'cursor-pointer' : 'text-smoke'}`}
+                title={options.ownedOnly ? 'Fix deck, builds and suggestions leave out copies sealed in a box or in another built deck' : 'Tick “Only my collection” first'}
               >
                 <input type="checkbox" checked={freeOnly} disabled={!options.ownedOnly} onChange={(e) => setFreeOnly(e.target.checked)} data-testid="free-only" />
-                <span className="truncate">Use free copies only</span>
+                <span>Use free copies only</span>
               </label>
             )}
           </div>
-          <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => void doExport('arena')} title="Copy the deck in the form MTG Arena imports: in Arena open Decks, Import" data-testid="export-arena">
-            Copy for Arena
-          </button>
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_22.5rem] grid-rows-[minmax(0,1fr)]">
-        <Browser
-          deck={deck}
-          settled={settled}
-          rev={rev}
-          query={query}
-          setQuery={setQuery}
-          extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
-          held={held}
-          onAdd={add}
-          onRemove={remove}
-          onOpen={openCard}
-          searchRef={searchRef}
-          brawl={brawl}
-        />
+      <div
+        className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] ${browserShown ? 'grid-cols-[27rem_minmax(0,1fr)_22.5rem]' : 'grid-cols-[minmax(0,1fr)_22.5rem]'}`}
+        data-browser={browserShown ? 'shown' : 'hidden'}
+      >
+        {browserShown && (
+          <Browser
+            deck={deck}
+            settled={settled}
+            rev={rev}
+            query={query}
+            setQuery={setQuery}
+            extraAxes={analysis ? Object.keys(analysis.themeWeights) : []}
+            held={held}
+            onAdd={add}
+            onRemove={remove}
+            onOpen={openCard}
+            searchRef={searchRef}
+            onHide={() => setFilters({ browser: false })}
+            brawl={brawl}
+          />
+        )}
         <DeckView
+          lead={
+            browserShown ? undefined : (
+              <button type="button" className="btn btn-sm" onClick={showBrowser} title="Show the card search beside the deck (or press /)" data-testid="browser-show">
+                Show card search
+              </button>
+            )
+          }
           deck={deck}
           lookup={lookup}
           scoreOf={scoreOf}
           weakest={weakest}
           held={held}
           notice={notice}
+          result={fixResult}
           onRemove={remove}
           onAdd={add}
           onLock={lock}
@@ -824,7 +1000,10 @@ export function Builder({ id }: { id: string }) {
                 deck={deck}
                 onChange={(axis, w) => mutate((d) => ({ ...d, themeWeights: { ...(d.themeWeights ?? analysis.themeWeights), [axis]: w } }))}
                 onReset={() => mutate((d) => ({ ...d, themeWeights: null }))}
-                onShow={(axis) => setQuery({ ...DEFAULT_QUERY, axis, fromFix: null })}
+                onShow={(axis) => {
+                  setQuery({ ...DEFAULT_QUERY, axis, fromFix: null });
+                  showBrowser();
+                }}
               />
             ) : (
               <ImprovePanel

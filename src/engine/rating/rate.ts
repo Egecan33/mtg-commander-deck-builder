@@ -40,6 +40,8 @@ type PerBracket<T> = readonly [T, T, T, T, T];
 export const QUALITY_EXPECTED: PerBracket<number> = [0.75, 0.8, 0.85, 0.9, 0.95];
 /** Card quality (sub-score value) from which the weakest cards are no longer named as a fix. */
 const QUALITY_FIX_BELOW = 0.85;
+/** A card is counted as weak in the card-quality fix under this share of the bracket's expectation. */
+const QUALITY_WEAK_SHARE = 0.7;
 /** Weakest cards a card-quality fix names. */
 const QUALITY_NAMED = 3;
 const COLORS: readonly Color[] = ['W', 'U', 'B', 'R', 'G'];
@@ -126,7 +128,15 @@ function band(x: number, lo: number, hi: number, below: number, above = below): 
   return 1;
 }
 
-interface Issue extends Fix { loss: number }
+/**
+ * A shortfall and its fix. `actionable` says whether `fixDeck` works on it: the climb in Improve
+ * (`improve.ts`) tries swaps for every fix with a filter, Fix deck's goals take its role and theme
+ * filters, its bracket step cuts what the target bracket forbids, and Improve's generic swaps (a
+ * better card for the weakest one, a spell for a land the curve does not want) answer card quality
+ * and too many lands. Advice only the player can act on (lower the target, set the theme weights,
+ * slow the deck down) is not actionable, and neither are notes no step of Fix deck aims at.
+ */
+interface Issue extends Fix { loss: number; actionable: boolean }
 interface Part { value: number; issues: Issue[] }
 
 /** Everything the nine sub-scores read, gathered once per deck. */
@@ -202,12 +212,12 @@ function manaPart(f: Facts): Part {
   if (landScore < 1 && landGap > 0) {
     issues.push({
       text: `Add ${plural(landGap, 'land')}: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} at Bracket ${f.bracket}.`,
-      filter: { land: true }, loss: 0.6 * (1 - landScore),
+      filter: { land: true }, actionable: true, loss: 0.6 * (1 - landScore),
     });
   } else if (landScore < 1 && landGap < 0) {
     issues.push({
       text: `Cut ${plural(-landGap, 'land')} for spells: the deck has ${r1(s.landsEffective)}, and its curve wants about ${t.lands} at Bracket ${f.bracket}.`,
-      filter: null, loss: 0.6 * (1 - landScore),
+      filter: null, actionable: true, loss: 0.6 * (1 - landScore),
     });
   }
 
@@ -217,7 +227,7 @@ function manaPart(f: Facts): Part {
   if (tapScore < 1) {
     issues.push({
       text: `${r1(s.taplands)} lands enter tapped; a Bracket ${f.bracket} deck wants at most ${cap}. Swap some for untapped lands.`,
-      filter: { land: true }, loss: 0.25 * (1 - tapScore),
+      filter: { land: true }, actionable: true, loss: 0.25 * (1 - tapScore),
     });
   }
 
@@ -233,7 +243,7 @@ function manaPart(f: Facts): Part {
     utility *= 0.5;
     issues.push({
       text: `${plural(colourless, 'land')} make only colourless mana, a lot for a ${deckColors.length}-colour deck. Swap some for lands that make your colours.`,
-      filter: { land: true }, loss: 0.05,
+      filter: { land: true }, actionable: true, loss: 0.05,
     });
   }
   const structure = 0.6 * landScore + 0.25 * tapScore + 0.15 * utility;
@@ -248,7 +258,7 @@ function manaPart(f: Facts): Part {
     if (lost <= 0) continue; // within the slack every colour is allowed
     issues.push({
       text: `${short} short on ${COLOR_NAME[color]} sources for ${e.name}: have ${r1(e.have)}, need ${e.need}.`,
-      filter: { color }, loss: structure * lost * CASTABLE_POWER + 0.001,
+      filter: { color }, actionable: true, loss: structure * lost * CASTABLE_POWER + 0.001,
     });
   }
 
@@ -276,9 +286,9 @@ function rolesPart(f: Facts): Part {
     if (CORE_ROLES.includes(role)) worstCore = Math.min(worstCore, v);
     const want = b.lo === b.hi ? `${b.lo}` : `${b.lo}-${b.hi}`;
     if (need.short > 0) {
-      issues.push({ text: `${need.short} short on ${label}: have ${n}, want ${want}.`, filter: { role }, loss: weight * (1 - v) });
+      issues.push({ text: `${need.short} short on ${label}: have ${n}, want ${want}.`, filter: { role }, actionable: true, loss: weight * (1 - v) });
     } else if (need.over > 1) {
-      issues.push({ text: `${need.over} over on ${label}: have ${n}, want ${want}. Some of those slots could go to the theme.`, filter: null, loss: weight * (1 - v) });
+      issues.push({ text: `${need.over} over on ${label}: have ${n}, want ${want}. Some of those slots could go to the theme.`, filter: null, actionable: false, loss: weight * (1 - v) });
     }
   }
   // Ramp, card draw and removal are what every deck runs on: one of them (nearly) missing is not
@@ -342,13 +352,13 @@ function synergyPart(f: Facts): Part {
     density = INFERRED_THEME_CAP;
     issues.push({
       text: `The commander names no theme this engine recognises, so the deck is rated against its own largest one (${axisLabel(primary)}). Set the theme weights to confirm it.`,
-      filter: { axis: primary }, loss: 0.6 * (1 - INFERRED_THEME_CAP),
+      filter: { axis: primary }, actionable: false, loss: 0.6 * (1 - INFERRED_THEME_CAP),
     });
   }
   if (onTheme < want) {
     issues.push({
       text: `Add ${want - onTheme} more on-theme cards (${label}): ${onTheme} of the deck's spells work with the commander, want ${want} or more.`,
-      filter: { axis: primary }, loss: 0.6 * (1 - density),
+      filter: { axis: primary }, actionable: true, loss: 0.6 * (1 - density),
     });
   }
 
@@ -366,7 +376,7 @@ function synergyPart(f: Facts): Part {
     const plenty = e < p ? 'payoffs' : 'enablers';
     issues.push({
       text: `${label}: only ${plural(lo, scarce.slice(0, -1))} against ${hi} ${plenty}. Add ${enough - lo} more ${scarce}.`,
-      filter: { axis: primary }, loss: 0.4 * (1 - balance),
+      filter: { axis: primary }, actionable: true, loss: 0.4 * (1 - balance),
     });
   }
   return { value: 0.6 * density + 0.4 * balance, issues };
@@ -407,21 +417,24 @@ function qualityPart(f: Facts): Part {
   if (n === 0) return { value: 0, issues: [] };
   const value = clamp01(sum / n / expected);
   const issues: Issue[] = [];
-  // Below the bar the mean is under the expectation, so at least one card is too.
-  const weak = value < QUALITY_FIX_BELOW
-    ? [...rated.values()].filter((c) => c.value < expected).sort((a, b) => a.value - b.value || a.name.localeCompare(b.name))
-    : [];
-  if (weak.length > 0) {
+  if (value < QUALITY_FIX_BELOW) {
+    // Weakest first. Only cards well under the expectation are counted; when none is, the deck as a
+    // whole is a little short, and its weakest cards are still named (a low sub-score always has a fix).
+    const ranked = [...rated.values()].sort((a, b) => a.value - b.value || a.name.localeCompare(b.name));
+    const weak = ranked.filter((c) => c.value < QUALITY_WEAK_SHARE * expected);
+    const named = (weak.length > 0 ? weak : ranked).slice(0, QUALITY_NAMED).map((c) => c.name);
+    const list = named.length > 1 ? `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}` : named[0];
+    const what = named.length === 1 ? `The weakest is ${list}. Swap it for a stronger card.` : `The weakest are ${list}. Swap them for stronger cards.`;
     const count = weak.reduce((a, c) => a + c.qty, 0);
     // Point the browser at a role when most of the weak cards share it: stronger cards for the same job.
     const byRole = new Map<Role, number>();
     for (const c of weak) for (const r of c.roles) byRole.set(r, (byRole.get(r) ?? 0) + c.qty);
     const [role, shared] = [...byRole].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [null, 0];
-    const names = weak.slice(0, QUALITY_NAMED).map((c) => c.name);
-    const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
     issues.push({
-      text: `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} below the card quality Bracket ${f.bracket} decks run (quality under ${pct(expected)}). The weakest ${names.length === 1 ? 'is' : 'are'} ${list}.`,
-      filter: role && shared * 2 > count ? { role } : null, loss: 1 - value,
+      text: count > 0
+        ? `${count} of the deck's ${n} spells ${count === 1 ? 'is' : 'are'} weak for Bracket ${f.bracket}. ${what}`
+        : `The deck's spells are a little weak for Bracket ${f.bracket}. ${what}`,
+      filter: role && shared * 2 > count ? { role } : null, actionable: true, loss: 1 - value,
     });
   }
   return { value, issues };
@@ -437,12 +450,12 @@ function curvePart(f: Facts): Part {
   if (s.avgMv > t.avgMv.hi) {
     issues.push({
       text: `Average mana value is ${s.avgMv.toFixed(2)}; Bracket ${f.bracket} decks run ${t.avgMv.lo}-${t.avgMv.hi}. Swap expensive cards for cheaper ones.`,
-      filter: { maxMv: 3 }, loss: 0.5 * (1 - mvScore),
+      filter: { maxMv: 3 }, actionable: true, loss: 0.5 * (1 - mvScore),
     });
   } else if (mvScore < 1) {
     issues.push({
       text: `Average mana value is ${s.avgMv.toFixed(2)}, below the ${t.avgMv.lo}-${t.avgMv.hi} usual at Bracket ${f.bracket}: the deck may run out of things to do late.`,
-      filter: null, loss: 0.5 * (1 - mvScore),
+      filter: null, actionable: false, loss: 0.5 * (1 - mvScore),
     });
   }
 
@@ -452,7 +465,7 @@ function curvePart(f: Facts): Part {
   if (early < earlyWant) {
     issues.push({
       text: `Only ${plural(early, 'spell')} at mana value 2 or less; aim for ${earlyWant} so the first turns are not empty.`,
-      filter: { maxMv: 2 }, loss: 0.2 * (1 - earlyScore),
+      filter: { maxMv: 2 }, actionable: true, loss: 0.2 * (1 - earlyScore),
     });
   }
 
@@ -484,7 +497,7 @@ function curvePart(f: Facts): Part {
       text: clash
         ? `${mine[worstIdx]} spells cost ${at}, the same as the commander, so they compete with it for that turn; move a few down the curve.`
         : `${mine[worstIdx]} spells at mana value ${at} is top-heavy for a ${Math.round(cmdMv)}-mana commander; move a few down the curve.`,
-      filter: { maxMv: Math.max(2, worstIdx) }, loss: 0.3 * worstOver,
+      filter: { maxMv: Math.max(2, worstIdx) }, actionable: true, loss: 0.3 * worstOver,
     });
   }
   return { value: 0.5 * mvScore + 0.3 * shape + 0.2 * earlyScore, issues };
@@ -513,7 +526,7 @@ function interactionPart(f: Facts): Part {
   if (s.interaction < lo) {
     issues.push({
       text: `${lo - s.interaction} short on interaction: ${s.interaction} removal spells, counterspells and wipes, want ${lo}-${hi}.`,
-      filter: { role: 'spot-removal' }, loss: 0.5 * (1 - countScore),
+      filter: { role: 'spot-removal' }, actionable: true, loss: 0.5 * (1 - countScore),
     });
   }
 
@@ -523,7 +536,7 @@ function interactionPart(f: Facts): Part {
   if (s.interaction > 0 && share < shareWant) {
     issues.push({
       text: `Only ${pct(share)} of the interaction works at instant speed; Bracket ${f.bracket} decks want ${pct(shareWant)} or more.`,
-      filter: { role: 'spot-removal' }, loss: 0.25 * (1 - shareScore),
+      filter: { role: 'spot-removal' }, actionable: true, loss: 0.25 * (1 - shareScore),
     });
   }
 
@@ -545,7 +558,7 @@ function interactionPart(f: Facts): Part {
     if (k.n >= need) continue;
     issues.push({
       text: `${k.n === 0 ? 'No' : `Only ${k.n}`} ${k.n === 1 ? 'answer' : 'answers'} to ${k.label}; carry at least ${need}.`,
-      filter: { role: k.role }, loss: 0.25 / kinds.length + (k.n === 0 ? 0.01 : 0),
+      filter: { role: k.role }, actionable: true, loss: 0.25 / kinds.length + (k.n === 0 ? 0.01 : 0),
     });
   }
   return { value: 0.5 * countScore + 0.25 * shareScore + 0.25 * (covered / kinds.length), issues };
@@ -577,7 +590,7 @@ function winconsPart(f: Facts): Part {
   if (n === 0 && owed) {
     issues.push({
       text: `No identifiable win condition. Add ${Math.max(1, b.lo)} or more ways to actually end the game.`,
-      filter: { role: 'win-condition' }, loss: 1,
+      filter: { role: 'win-condition' }, actionable: true, loss: 1,
     });
     return { value: 0, issues };
   }
@@ -585,7 +598,7 @@ function winconsPart(f: Facts): Part {
   if (n < b.lo) {
     issues.push({
       text: `${b.lo - n} short on win conditions: have ${n}, want ${want}.`,
-      filter: { role: 'win-condition' }, loss: 0.6 * (1 - countScore),
+      filter: { role: 'win-condition' }, actionable: true, loss: 0.6 * (1 - countScore),
     });
   }
 
@@ -597,12 +610,12 @@ function winconsPart(f: Facts): Part {
   if (turn < floor) {
     issues.push({
       text: `Can threaten a win around turn ${about}; Bracket ${f.bracket} tables expect games to reach turn ${floor}. Slow it down or raise the target bracket.`,
-      filter: null, loss: 0.4 * (1 - speedFit),
+      filter: null, actionable: false, loss: 0.4 * (1 - speedFit),
     });
   } else if (turn > limit) {
     issues.push({
       text: `Likely to close games around turn ${about}, slow for Bracket ${f.bracket}. Lower the curve or add faster finishers.`,
-      filter: { role: 'win-condition' }, loss: 0.4 * (1 - speedFit),
+      filter: { role: 'win-condition' }, actionable: true, loss: 0.4 * (1 - speedFit),
     });
   }
   return { value: 0.6 * countScore + 0.4 * speedFit, issues };
@@ -633,13 +646,13 @@ function consistencyPart(f: Facts): Part {
   if (keepable < 0.9) {
     issues.push({
       text: `Opening hands hold 2-4 ${fastDeck ? 'mana sources' : 'lands'} only ${pct(keepable)} of the time, even with the free mulligan.`,
-      filter: tooMany ? null : { land: true }, loss: 0.35 * (1 - keepable),
+      filter: tooMany ? null : { land: true }, actionable: !tooMany, loss: 0.35 * (1 - keepable),
     });
   }
   if (full && drops < 0.55) {
     issues.push({
       text: `${pct(drops)} chance of ${wantLands} ${fastDeck ? 'mana sources' : 'lands'} by turn ${wantLands}; more lands or cheap ramp would steady it.`,
-      filter: { land: true }, loss: 0.25 * (1 - dropScore),
+      filter: { land: true }, actionable: true, loss: 0.25 * (1 - dropScore),
     });
   }
 
@@ -648,7 +661,7 @@ function consistencyPart(f: Facts): Part {
   if (early < 0.85) {
     issues.push({
       text: `Only ${pct(early)} of games have ramp or card draw by turn 3 (${plural(starters, 'cheap piece')}).`,
-      filter: { role: 'ramp', maxMv: 3 }, loss: 0.25 * (1 - early),
+      filter: { role: 'ramp', maxMv: 3 }, actionable: true, loss: 0.25 * (1 - early),
     });
   }
 
@@ -659,7 +672,7 @@ function consistencyPart(f: Facts): Part {
   if (redundancy < 1) {
     issues.push({
       text: `Little redundancy: ${plural(tutors, 'tutor')} and ${draw} card-draw pieces to find the key cards.`,
-      filter: { role: f.bracket >= 3 ? 'tutor' : 'draw' }, loss: 0.15 * (1 - redundancy),
+      filter: { role: f.bracket >= 3 ? 'tutor' : 'draw' }, actionable: true, loss: 0.15 * (1 - redundancy),
     });
   }
   return { value: 0.35 * keepable + 0.25 * dropScore + 0.25 * early + 0.15 * redundancy, issues };
@@ -668,7 +681,7 @@ function consistencyPart(f: Facts): Part {
 function bracketPart(f: Facts): Part {
   const { report } = f;
   if (report.violationsOfTarget.length > 0) {
-    return { value: 0, issues: report.violationsOfTarget.map((v, i) => ({ text: v.message, filter: null, loss: 1 - i * 0.01 })) };
+    return { value: 0, issues: report.violationsOfTarget.map((v, i) => ({ text: v.message, filter: null, actionable: true, loss: 1 - i * 0.01 })) };
   }
   const gap = report.playsLike - f.bracket;
   const value = clamp01(1 - Math.abs(gap) / 2);
@@ -678,10 +691,10 @@ function bracketPart(f: Facts): Part {
       text: gap > 0
         ? `Plays like Bracket ${report.playsLike}, above the Bracket ${f.bracket} target: it will outpace the table. Raise the target or swap the strongest cards.`
         : `Plays like Bracket ${report.playsLike}, below the Bracket ${f.bracket} target: it will struggle to keep up. Add stronger cards or lower the target.`,
-      filter: null, loss: 1 - value,
+      filter: null, actionable: false, loss: 1 - value,
     });
   }
-  report.warnings.forEach((text, i) => issues.push({ text, filter: null, loss: 0.1 - i * 0.01 }));
+  report.warnings.forEach((text, i) => issues.push({ text, filter: null, actionable: false, loss: 0.1 - i * 0.01 }));
   return { value, issues };
 }
 
@@ -743,7 +756,7 @@ export function rateDeck(deck: Deck, ctx: EngineContext): DeckRating {
       .filter((i) => i.loss > 0)
       .sort((a, b) => b.loss - a.loss)
       .slice(0, MAX_FIXES)
-      .map(({ text, filter }) => ({ text, filter }));
+      .map(({ text, filter, actionable }) => ({ text, filter, actionable }));
     const value = clamp01(part.value) * (CAST_DEPENDENT.has(key) ? uncastable : 1) * filled;
     return { key, label: LABELS[key], weight: RATING_WEIGHTS[key], value: Math.round(clamp01(value) * 1000) / 1000, fixes };
   });
