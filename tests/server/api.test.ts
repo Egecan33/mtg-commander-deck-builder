@@ -18,6 +18,7 @@ import * as edhrecRoute from '@/app/api/edhrec/route';
 import * as exportRoute from '@/app/api/export/route';
 import * as imgRoute from '@/app/api/img/[size]/[file]/route';
 import * as importRoute from '@/app/api/import/route';
+import * as packagesRoute from '@/app/api/packages/route';
 import * as partnersRoute from '@/app/api/partners/route';
 import * as proxiesRoute from '@/app/api/proxies/route';
 import * as settingsRoute from '@/app/api/settings/route';
@@ -39,7 +40,7 @@ type RouteModule = Partial<Record<'GET' | 'POST' | 'PUT' | 'DELETE', unknown>>;
 const ROUTES: [RegExp, RouteModule][] = [
   [/^\/api\/status$/, statusRoute], [/^\/api\/sync$/, syncRoute], [/^\/api\/commanders$/, commandersRoute],
   [/^\/api\/partners$/, partnersRoute], [/^\/api\/decks$/, decksRoute], [/^\/api\/decks\/(?<id>[^/]+)$/, deckRoute],
-  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/network$/, networkRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
+  [/^\/api\/analyze$/, analyzeRoute], [/^\/api\/network$/, networkRoute], [/^\/api\/packages$/, packagesRoute], [/^\/api\/cards$/, cardsRoute], [/^\/api\/build$/, buildRoute],
   [/^\/api\/import$/, importRoute], [/^\/api\/export$/, exportRoute], [/^\/api\/collection$/, collectionRoute],
   [/^\/api\/settings$/, settingsRoute], [/^\/api\/edhrec$/, edhrecRoute], [/^\/api\/proxies$/, proxiesRoute],
   [/^\/api\/img\/(?<size>[^/]+)\/(?<file>[^/]+)$/, imgRoute],
@@ -1035,6 +1036,52 @@ describe("POST /api/build mode 'package'", () => {
     const deck = await imported('upgraded', 3);
     for (const pkg of [undefined, 'theme:nope', 'fn:x', 'land']) {
       expect((await request('POST', '/api/build', { deck, mode: 'package', options: pkg === undefined ? {} : { package: pkg } })).status, String(pkg)).toBe(400);
+    }
+  });
+});
+
+describe('GET /api/packages', () => {
+  const ownEverything = () => call('POST', '/api/collection', { text: getCardDb().all().map((c) => `1 ${c.name}`).join('\n') });
+  const clear = () => call('POST', '/api/collection', { text: '' });
+
+  it("lists the active collection's packages for those colours", async () => {
+    await ownEverything();
+    try {
+      const r = await call<api.PackagesResponse>('GET', '/api/packages?colors=UB');
+      expect(r.colors).toEqual(['U', 'B']);
+      expect(r.packages.slice(0, 4).map((p) => p.id)).toEqual(['ramp', 'draw', 'removal', 'protection']);
+      for (const p of r.packages) {
+        for (const c of p.cards) {
+          expect(c.owned).toBe(true);
+          expect(c.colorIdentity.every((k) => k === 'U' || k === 'B')).toBe(true);
+        }
+        if (p.kind === 'functional') expect(p.total).toBeGreaterThanOrEqual(8);
+      }
+      for (const bad of ['', 'XY']) expect((await request('GET', `/api/packages?colors=${bad}`)).status, bad).toBe(400);
+      expect((await request('GET', '/api/packages')).status).toBe(400);
+    } finally {
+      await clear();
+    }
+  });
+
+  it('free copies only puts held copies last', async () => {
+    const cdb = getCardDb();
+    const ring = cdb.all().find((c) => c.name === 'Sol Ring')!;
+    await call('POST', '/api/collection', { text: '1 Sol Ring\n1 Arcane Signet\n1 Mind Stone\n1 Fellwar Stone' });
+    const held = await call<DeckResponse>('POST', '/api/decks', {
+      deck: { id: null, name: 'Holds the ring', commanders: [], companion: null, chosenColor: null, main: [{ oracleId: ring.oracleId, qty: 1, locked: false }], targetBracket: 3, themeWeights: null, built: true },
+    });
+    try {
+      const r = await call<api.PackagesResponse>('GET', '/api/packages?colors=C&freeOnly=1');
+      const ramp = r.packages.find((p) => p.id === 'ramp')!;
+      expect(r.heldBy[ring.oracleId]?.join(' ')).toMatch(/Holds the ring/);
+      expect(ramp.cards.map((c) => c.name)).toContain('Sol Ring');
+      expect(ramp.cards[ramp.cards.length - 1].name).toBe('Sol Ring');
+      const plain = await call<api.PackagesResponse>('GET', '/api/packages?colors=C');
+      expect(plain.heldBy[ring.oracleId]?.join(' ')).toMatch(/Holds the ring/);
+    } finally {
+      await request('DELETE', `/api/decks/${held.deck.id}`);
+      await clear();
     }
   });
 });

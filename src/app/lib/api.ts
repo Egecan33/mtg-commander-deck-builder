@@ -53,6 +53,14 @@
  *        Under 100 cards they are plain adds; at 100 each add cuts the weakest unlocked card that is in none of the
  *        deck's packages (never a commander, never lands below the land target). The card options, free copies,
  *        price and locked cards hold. `note` says what could not be added and why.
+ * GET  /api/packages?colors=UB[&freeOnly=1] -> PackagesResponse
+ *        Your best packages from the ACTIVE collection for those colours: owned, legal, nonland cards whose
+ *        colour identity fits inside the chosen colours ('C' alone = colourless). The four core packages always
+ *        (even empty), then up to four theme packages (the axes with the most well-played owned cards, at least
+ *        8), then functional packages (Win the game, Pillow fort, Max hand size) that have at least 8 cards.
+ *        `total`: owned cards in the package; `cards`: the best 8, by the scorer's deck-free quality (theme
+ *        packages: quality x how strongly the card serves the theme). With `freeOnly=1`, copies held by boxes
+ *        and built decks come after free ones; `heldBy` names the holders either way. No colours is a 400.
  * POST /api/network     {deck}          -> NetworkResponse
  *        How the deck's cards work together. `nodes`: every nonland card and the commanders (lands are
  *        left out). `edges`: { a, b, kind, weight 0..1, reasons [from a, from b] }, kind 'combo' (1, or 0.5
@@ -233,7 +241,7 @@
 import type { ConflictReport } from '@/engine/collection/conflicts';
 import type { RatingKey } from '@/engine/rating';
 import type {
-  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackagePlan, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
+  AxisId, Bracket, BracketReport, Card, CardScore, Color, Deck, DeckNetwork, DeckRating, PackageId, PackageKind, PackagePlan, DeckSummary, FixChange, FixResult, ImproveGoals, Role, SwapProposal, Targets,
 } from '@/engine/types';
 
 export type { ConflictReport, FixChange, ImproveGoals, RatingKey };
@@ -334,6 +342,12 @@ export interface DeckTile {
   combos: number;
   /** The cards are really assembled in this deck (see `Deck.built`). */
   built: boolean;
+}
+/** GET /api/packages: your best packages per colour (see the header). */
+export interface PackagesResponse {
+  colors: ColorLetter[];
+  packages: { id: PackageId; name: string; kind: PackageKind; total: number; cards: ClientCard[] }[];
+  heldBy: HeldBy;
 }
 /** POST /api/network: the deck's network (see `DeckNetwork`) and a card for every node. */
 export type NetworkResponse = DeckNetwork & { cards: CardLookup };
@@ -668,6 +682,8 @@ export const getDeck = (id: string, signal?: AbortSignal) =>
 export const updateDeck = (id: string, deck: Deck) => call<DeckResponse>('PUT', `/api/decks/${encodeURIComponent(id)}`, { deck });
 export const deleteDeck = (id: string) => call<{ ok: true }>('DELETE', `/api/decks/${encodeURIComponent(id)}`);
 
+export const getPackages = (colors: ColorLetter[], freeOnly: boolean, signal?: AbortSignal) =>
+  call<PackagesResponse>('GET', `/api/packages${query({ colors: colors.join(''), freeOnly: freeOnly ? 1 : undefined })}`, undefined, signal);
 export const getNetwork = (deck: Deck, signal?: AbortSignal) => call<NetworkResponse>('POST', '/api/network', { deck }, signal);
 export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeResponse>('POST', '/api/analyze', { deck }, signal);
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);

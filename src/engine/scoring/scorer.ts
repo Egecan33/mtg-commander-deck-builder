@@ -3,6 +3,7 @@ import { isEarly, isRelevant, isTwoCard } from '../brackets/combos';
 import { axisLabel } from '../features';
 import { TYPE_MEMBER } from '../features/axes';
 import { karstenSources } from '../mana';
+import { BASIC_LAND_QUALITY, rankQuality, rawQuality } from './quality';
 import { UNCONNECTED_EDGE, UNCONNECTED_LINK, isRingCard, linkIndex } from '../network/edges';
 import { allowedIdentity, cardFitsDeck, commanderCards, copyLimit, deckCounts, isBasicLand } from '../rules';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights, summarizeDeck } from '../summary';
@@ -40,34 +41,6 @@ const signed = (n: number) => (n < 0 ? `−${Math.abs(n)}` : `+${n}`);
 
 // ---- quality -------------------------------------------------------------------------------
 
-/** EDHREC rank → quality, through log10(rank). Anchors follow deck-theory.md §6.4, smoothed. */
-const RANK_CURVE: readonly (readonly [number, number])[] = [
-  [0, 1], [1.7, 1], [2, 0.93], [2.7, 0.8], [3.18, 0.6], [3.6, 0.38], [4, 0.2], [4.5, 0.06],
-];
-const UNRANKED_QUALITY = 0.08;
-const BASIC_LAND_QUALITY = 0.6;
-
-function rankQuality(rank: number | null | undefined): number {
-  if (rank === null || rank === undefined || !(rank >= 1)) return UNRANKED_QUALITY;
-  const x = Math.log10(rank);
-  for (let i = 1; i < RANK_CURVE.length; i++) {
-    const [x1, y1] = RANK_CURVE[i];
-    if (x <= x1) {
-      const [x0, y0] = RANK_CURVE[i - 1];
-      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
-    }
-  }
-  return RANK_CURVE[RANK_CURVE.length - 1][1];
-}
-
-/** Mana value a role's cards normally cost; each mana above it costs quality. */
-const ROLE_BASELINE: Partial<Record<Role, number>> = { ramp: 2, 'spot-removal': 2, counterspell: 2, draw: 3, tutor: 3, wipe: 5 };
-/** Commander mana value from which mana rocks that make two or more mana are not held to the two-mana baseline. */
-const BIG_COMMANDER = [6];
-const MULTI_MANA = /\{T\}[^.\n]*: Add (\{[WUBRGC]\}){2,}|: Add (two|three|four|five|X) mana/;
-const OVERCOST_STEP = 0.05;
-const OVERCOST_MAX = 0.15;
-const INSTANT_BONUS = 0.05;
 /**
  * Power, not popularity, at Brackets 4-5: a card's quality there is at least what its power tier
  * earns ([Bracket 4, Bracket 5]). Mana Vault and Demonic Consultation are in few decks overall,
@@ -393,27 +366,11 @@ function buildStat(card: Card, s: Setup, cache: StaticCache): Stat {
   }
 
   // Quality: global popularity, a little for instant-speed interaction, less for costing too much.
+  const rankQ = isBasicLand(card) ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
   const basic = isBasicLand(card);
-  const rankQ = basic ? BASIC_LAND_QUALITY : rankQuality(card.edhrecRank);
-  let quality = rankQ;
-  let qualityText = basic ? 'basic land' : card.edhrecRank ? `EDHREC rank ${card.edhrecRank}` : 'no popularity data';
-  if (f && !land) {
-    const interaction = roles.includes('spot-removal') || roles.includes('counterspell') || roles.includes('wipe');
-    if (interaction && f.instantSpeed) { quality += INSTANT_BONUS; qualityText += ', instant speed'; }
-    let over = Infinity;
-    for (const role of roles) {
-      const base = ROLE_BASELINE[role];
-      if (base !== undefined) over = Math.min(over, mv - base);
-    }
-    // A creature or planeswalker brings a body with the effect; only plain spells are held to the role's price.
-    // Nor is a rock that makes two or more mana overpriced for a commander that costs six or more
-    // (Thran Dynamo and Gilded Lotus are how Kozilek gets cast).
-    const bigRock = roles.includes('ramp') && BIG_COMMANDER.some((n) => s.commanderMvs.has(n) || [...s.commanderMvs].some((m) => m >= n)) && MULTI_MANA.test(card.oracleText);
-    if (over !== Infinity && over >= 1 && !bigRock && !/\b(Creature|Planeswalker)\b/.test(card.frontTypeLine ?? card.typeLine ?? '')) {
-      quality -= Math.min(OVERCOST_MAX, OVERCOST_STEP * Math.floor(over));
-      qualityText += ', costs more than most cards doing this job';
-    }
-  }
+  const raw = rawQuality(card, f, s.commanderMvs);
+  let quality = raw.quality;
+  let qualityText = raw.text;
   const tierTop = bracket >= 4 ? TIER_QUALITY[f?.powerTier ?? 0]?.[bracket - 4] : undefined;
   const tierQuality = tierTop === undefined ? undefined : tierTop - TIER_RANK_SPREAD * (1 - rankQ);
   if (tierQuality !== undefined && tierQuality > quality) {
