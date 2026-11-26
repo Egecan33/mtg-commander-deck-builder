@@ -1,4 +1,4 @@
-import { isLegalIn, legalityViolation } from '../format';
+import { formatOf, isLegalIn, legalityViolation } from '../format';
 import type { Card, CardDb, Deck, Violation } from '../types';
 import { frontTypes, hasCreatureType, hasType } from './commander';
 import { deckCounts, deckSize, startingDeck } from './copies';
@@ -95,6 +95,8 @@ export function companionViolation(deck: Deck, db: CardDb): Violation | null {
   if (!card) return { code: 'unknown-card', message: 'The companion is not in the card database.', oracleIds: [id] };
   const fail = (message: string, extra: string[] = []): Violation => ({ code: 'companion', message, oracleIds: [id, ...extra] });
 
+  // Arena publishes "Brawl decks do not have a sideboard", where a companion would wait.
+  if (formatOf(db) === 'brawl') return fail(`${card.name} cannot be a companion: Brawl decks have no sideboard.`);
   if (!card.isMeldResult && !isLegalIn(card, db)) return legalityViolation(card, db);
   const rule = RULES[card.frontName];
   if (!card.keywords.includes('Companion') || !rule) return fail(`${card.name} does not have the companion ability.`);

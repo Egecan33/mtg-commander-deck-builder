@@ -27,7 +27,7 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
   } else if (deck.commanders.length === 1) {
     const c = commanders[0];
     if (c && !canLead(c, formatOf(db))) {
-      const background = partnerKind(c).some((k) => k.kind === 'background');
+      const background = formatOf(db) !== 'brawl' && partnerKind(c).some((k) => k.kind === 'background');
       out.push({
         code: 'bad-commander',
         message: background
@@ -36,6 +36,9 @@ export function validateDeck(deck: Deck, db: CardDb): Violation[] {
         oracleIds: [c.oracleId],
       });
     }
+  } else if (formatOf(db) === 'brawl') {
+    // Arena publishes "1 commander card" for Brawl: no partners or backgrounds.
+    out.push({ code: 'bad-pair', message: 'A Brawl deck has one commander.', oracleIds: [...deck.commanders] });
   } else if (deck.commanders.length > 2) {
     out.push({ code: 'bad-pair', message: 'A deck can have at most two commanders.', oracleIds: [...deck.commanders] });
   } else if (commanders.length === 2 && !canPair(commanders[0], commanders[1])) {

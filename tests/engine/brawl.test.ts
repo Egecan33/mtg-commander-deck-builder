@@ -47,6 +47,28 @@ describe('Brawl deck rules', () => {
     expect(canLead(card('Lightning Bolt'), 'brawl')).toBe(false);
   });
 
+  // https://magic.wizards.com/en/formats/brawl (checked 2026-11-26): "1 commander card (any legendary
+  // creature or Planeswalker ...)" and "Brawl decks do not have a sideboard".
+  it('leads a Brawl deck with a legendary creature or planeswalker only (no legendary Vehicle)', () => {
+    expect(canLead(card('Shorikai, Genesis Engine'), 'commander')).toBe(true);
+    expect(canLead(card('Shorikai, Genesis Engine'), 'brawl')).toBe(false);
+    expect(canLead(card('Lathril, Blade of the Elves'), 'brawl')).toBe(true);
+  });
+
+  it('allows one commander in Brawl: a partner pair legal in Commander is not', () => {
+    const pair: Deck = { ...deckOf('Thrasios, Triton Hero'), commanders: [card('Thrasios, Triton Hero').oracleId, card('Tymna the Weaver').oracleId] };
+    expect(validateDeck(pair, commander).filter((v) => v.code === 'bad-pair')).toEqual([]);
+    const v = validateDeck(pair, brawl).find((x) => x.code === 'bad-pair');
+    expect(v?.message).toBe('A Brawl deck has one commander.');
+  });
+
+  it('allows no companion in Brawl (no sideboard)', () => {
+    const deck: Deck = { ...deckOf('Thrasios, Triton Hero'), companion: card('Keruga, the Macrosage').oracleId };
+    expect(validateDeck(deck, commander).some((x) => /sideboard/.test(x.message))).toBe(false);
+    const v = validateDeck(deck, brawl).find((x) => x.code === 'companion');
+    expect(v?.message).toBe('Keruga, the Macrosage cannot be a companion: Brawl decks have no sideboard.');
+  });
+
   it('makes a Brawl deck illegal for a card that is not on Arena', () => {
     const deck = deckOf('Lathril, Blade of the Elves', ['Sol Ring']);
     expect(codesFor(deck, brawl, 'Sol Ring')).toEqual(['not-on-arena']);

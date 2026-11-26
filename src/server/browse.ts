@@ -2,6 +2,7 @@ import type {
   CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
 import { normalizeName } from '@/engine/carddb';
+import { formatOf } from '@/engine/format';
 import { canPair } from '@/engine/rules';
 import { AXIS_MEMBER, ROLES } from '@/engine/summary';
 import type { Card, Color, Deck, Role } from '@/engine/types';
@@ -175,7 +176,10 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   return { total: matches.length, page: pageNo, pageSize, commanders: matches.slice(start, end).map((c) => toCommanderCard(c, db, owned)) };
 }
 
-/** Every card that may be the second commander next to `oracleId`, most popular first. */
+/**
+ * Every card that may be the second commander next to `oracleId`, most popular first. None while an
+ * MTG Arena collection is active: a Brawl deck has one commander.
+ */
 export function partnersOf(oracleId: string): PartnersResponse {
   const db = activeDb();
   const commander = db.get(oracleId);
@@ -183,6 +187,7 @@ export function partnersOf(oracleId: string): PartnersResponse {
   const owned = ownedSet();
   const { ranks, position } = poolIndex(db);
   const rank = (c: Card) => ranks[position.get(c.oracleId) as number];
-  const partners = db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+  const brawl = formatOf(db) === 'brawl';
+  const partners = brawl ? [] : db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderCard(c, db, owned)) };
 }

@@ -59,14 +59,16 @@ export function isCommanderEligible(card: Card): boolean {
 }
 
 /**
- * True when the card can be a deck's only commander in this format. Brawl (MTG Arena) also lets
- * any legendary planeswalker lead; otherwise it follows Commander (`isCommanderEligible`).
+ * True when the card can be a deck's only commander in this format. Brawl (MTG Arena) takes what
+ * Arena publishes: "any legendary creature or Planeswalker" (https://magic.wizards.com/en/formats/brawl,
+ * checked 2026-11-26), so a planeswalker can lead and a legendary Vehicle or Background cannot.
+ * Commander follows `isCommanderEligible`.
  */
 export function canLead(card: Card, format: Format): boolean {
-  if (isCommanderEligible(card)) return true;
-  if (format !== 'brawl' || card.isMeldResult) return false;
+  if (format !== 'brawl') return isCommanderEligible(card);
+  if (card.isMeldResult) return false;
   const { types } = frontTypes(card);
-  return types.includes('Legendary') && types.includes('Planeswalker');
+  return types.includes('Legendary') && (types.includes('Creature') || types.includes('Planeswalker'));
 }
 
 /** Every two-commander ability (CR 702.124) or partner role the card has. `detail` is the named card or variant, else ''. */

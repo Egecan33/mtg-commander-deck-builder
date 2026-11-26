@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { AnalyzeResponse, CardsResponse, CommandersResponse, DeckResponse, DecksResponse } from '@/app/lib/api';
+import type { AnalyzeResponse, CardsResponse, CommandersResponse, DeckResponse, DecksResponse, PartnersResponse } from '@/app/lib/api';
 import * as analyzeRoute from '@/app/api/analyze/route';
 import * as cardsRoute from '@/app/api/cards/route';
 import * as commandersRoute from '@/app/api/commanders/route';
 import * as deckRoute from '@/app/api/decks/[id]/route';
+import * as partnersRoute from '@/app/api/partners/route';
 import * as decksRoute from '@/app/api/decks/route';
 import type { Deck } from '@/engine/types';
 import { listCollections, setActiveCollection } from '@/server/collection';
@@ -126,7 +127,11 @@ describe('decks belong to a collection', () => {
     setActiveCollection('arena');
     const commanders = await ok<CommandersResponse>(send(commandersRoute.GET, 'GET', '/api/commanders?q=Tyvar'));
     expect(commanders.commanders.map((c) => c.name)).toContain('Tyvar Kell');
+    // Brawl has one commander: no partners while Arena is active.
+    const thrasios = id('Thrasios, Triton Hero');
+    expect((await ok<PartnersResponse>(send(partnersRoute.GET, 'GET', `/api/partners?id=${thrasios}`))).partners).toEqual([]);
     setActiveCollection('physical');
     expect((await ok<CommandersResponse>(send(commandersRoute.GET, 'GET', '/api/commanders?q=Tyvar'))).commanders).toEqual([]);
+    expect((await ok<PartnersResponse>(send(partnersRoute.GET, 'GET', `/api/partners?id=${thrasios}`))).partners.length).toBeGreaterThan(0);
   });
 });
