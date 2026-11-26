@@ -265,8 +265,12 @@
  *        Player.log (Player-prev.log before it); a rarity Arena leaves out is 0. When the log has none,
  *        `ok` is false, `message` says why and the stored counts stay. Local files only.
  * GET  /api/products?q=&limit=          -> ProductsResponse
- *        Physical precon products (digital MTGO/Arena types are hidden), newest release first. `q` is a
- *        case-insensitive name substring or an exact set code; limit 1..200 (50).
+ *        Physical precon products (digital MTGO/Arena types are hidden), best match first, newest
+ *        release first when `q` is empty. Every word of `q` must match the product's name, set name,
+ *        type or (whole) set code, in any order, typos forgiven (engine/text/search). limit 1..200 (50).
+ *        `groups`: boxes sold as one but listed as several decks, with all their decks; `sets`: set names.
+ * POST /api/cards/find {ids, q}         -> { ids }   the cards among `ids` (at most 500) that match the search
+ *        text in name, type line or rules text, best first. "Find in deck".
  * GET  /api/products/:id                -> ProductDetailResponse   the product's cards (`commander` marks the
  *        commander slots) with `ownedQty` from the ACTIVE collection, and a CardLookup. 404 when unknown.
  * GET  /api/printing?q=TEXT             -> PrintingResponse
@@ -848,7 +852,22 @@ export interface EdhrecResponse { status: EdhrecStatus; commanderDecks: number; 
 
 // ---------------------------------------------------------------------------------------------
 export interface ProductInfo { id: string; name: string; setCode: string; type: string; releaseDate: string; /** Summed quantity. */ cardCount: number }
-export interface ProductsResponse { products: ProductInfo[] }
+/** A box sold as one product but listed as several decks (TLA's "Beginner Box - Aang Tutorial", ...). */
+export interface ProductGroup {
+  key: string; setCode: string; setName: string; prefix: string;
+  /** "<set name> — <prefix>". */
+  label: string;
+  /** Every deck of the group, by name. */
+  products: ProductInfo[];
+  cardCount: number;
+}
+export interface ProductsResponse {
+  products: ProductInfo[];
+  /** The groups the listed products belong to (3+ decks of one set sharing a "Prefix - Suffix" name prefix). */
+  groups: ProductGroup[];
+  /** Set name by upper-case set code, for the listed products whose set is known. */
+  sets: Record<string, string>;
+}
 export interface ProductDetailResponse {
   product: ProductInfo;
   cards: { oracleId: string; qty: number; commander: boolean; ownedQty: number }[];
@@ -955,6 +974,7 @@ export const getPackages = (colors: ColorLetter[], freeOnly: boolean, signal?: A
   call<PackagesResponse>('GET', `/api/packages${query({ colors: colors.join(''), freeOnly: freeOnly ? 1 : undefined, arenaFormat: arenaFormat === 'standardbrawl' ? 'standardbrawl' : undefined })}`, undefined, signal);
 export const getNetwork = (deck: Deck, signal?: AbortSignal) => call<NetworkResponse>('POST', '/api/network', { deck }, signal);
 export const analyzeDeck = (deck: Deck, signal?: AbortSignal) => call<AnalyzeResponse>('POST', '/api/analyze', { deck }, signal);
+export const findCards = (ids: readonly string[], q: string, signal?: AbortSignal) => call<{ ids: string[] }>('POST', '/api/cards/find', { ids, q }, signal);
 export const browseCards = (request: CardsRequest, signal?: AbortSignal) => call<CardsResponse>('POST', '/api/cards', request, signal);
 
 export function buildDeck(deck: Deck, mode: 'auto' | 'fill', options?: BuildRequestOptions, signal?: AbortSignal): Promise<BuildDeckResponse>;

@@ -7,6 +7,7 @@ import { VirtualGrid } from '../components/VirtualGrid';
 import { adjustCollection, collectionExportUrl, getCollection, lookupPrinting, replaceCollection, type BoxTake, type ClientCard, type CollectionResponse, type PrintingResponse, type TextLine } from '../lib/api';
 import { fmtDate, fmtInt } from '../lib/ui';
 import { AddBox, YourBoxes } from './Boxes';
+import { prepareFields, searchItems } from '@/engine/text/search';
 import { OwnedTile, type Owned } from './OwnedTile';
 import { ArenaWildcards } from './Wildcards';
 
@@ -209,8 +210,7 @@ export default function CollectionPage() {
   // Every owned card with the ghosts in their old cells (after the card that came before them).
   const all = useMemo(() => withGhosts(collection?.cards ?? [], ghosts), [collection, ghosts]);
   const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return needle ? all.filter((c) => c.name.toLowerCase().includes(needle)) : all;
+    return searchItems(all, q, (c) => prepareFields([c.name]));
   }, [all, q]);
 
   return (

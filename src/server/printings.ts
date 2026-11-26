@@ -1,8 +1,9 @@
 import type { PrintingResponse } from '@/app/lib/api';
 import { normalizeName } from '@/engine/carddb';
 import { parsePrintCode } from '@/engine/text';
+import { TYPO_FALLBACK_BELOW, matchScore, queryWords } from '@/engine/text/search';
 import type { Card } from '@/engine/types';
-import { toClientCard } from './cards';
+import { poolIndex, toClientCard } from './cards';
 import { ownedQuantities, ownedSet } from './collection';
 import { getCardDb, getDb } from './store';
 
@@ -53,16 +54,23 @@ export function lookupPrinting(params: URLSearchParams): PrintingResponse {
   const qty = !exactWhole && m ? Math.max(1, Number(m[1])) : 1;
   const name = !exactWhole && m ? m[2] : q;
   const exact = exactWhole ?? db.byName(name);
-  const needle = normalizeName(name);
-  const hits: { c: Card; rank: number }[] = [];
-  if (needle.length >= 2) {
-    for (const c of db.all()) {
-      const n = normalizeName(c.name);
-      const at = n.indexOf(needle);
-      if (at < 0) continue;
-      hits.push({ c, rank: (at === 0 ? 0 : 1e7) + (c.edhrecRank ?? 9e6) });
+  const words = queryWords(name);
+  const hits: { c: Card; s: number }[] = [];
+  if (words.length > 0 && normalizeName(name).length >= 2) {
+    const index = poolIndex(db);
+    const missed: number[] = [];
+    index.cards.forEach((c, i) => {
+      const s = matchScore(words, index.nameOnly[i]);
+      if (s > 0) hits.push({ c, s });
+      else missed.push(i);
+    });
+    if (hits.length < TYPO_FALLBACK_BELOW) {
+      for (const i of missed) {
+        const s = matchScore(words, index.nameOnly[i], { typo: true });
+        if (s > 0) hits.push({ c: index.cards[i], s });
+      }
     }
-    hits.sort((a, b) => a.rank - b.rank);
+    hits.sort((a, b) => b.s - a.s || (a.c.edhrecRank ?? 9e6) - (b.c.edhrecRank ?? 9e6));
   }
   const suggestions = hits.slice(0, SUGGESTIONS).map((h) => h.c);
   return out(exact ?? suggestions[0], qty, 'name', suggestions);

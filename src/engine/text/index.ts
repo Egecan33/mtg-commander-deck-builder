@@ -6,3 +6,5 @@ export { parsePrintCode } from './printcode';
 export type { PrintCode } from './printcode';
 export { createArenaLogReader, parseArenaLog } from './arenalog';
 export type { ArenaLogData, ArenaLogReader } from './arenalog';
+export { normalizeText, wordsOf, queryWords, prepareFields, matchScore, searchItems, editDistance, maxTypos, TYPO_FALLBACK_BELOW } from './search';
+export type { Prepared, FieldInput, MatchOptions } from './search';

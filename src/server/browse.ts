@@ -2,13 +2,14 @@ import type {
   CardFilters, CardSort, CardsResponse, ColorLetter, ColorMode, CommanderSort, CommandersResponse, PartnersResponse, ScoredCard,
 } from '@/app/lib/api';
 import { overlapKey } from '@/engine/builder';
-import { normalizeName } from '@/engine/carddb';
 import { bracketOf, formatOf, isBrawlFormat } from '@/engine/format';
 import { inPackage, packageDef, tagsOf } from '@/engine/packages';
 import type { PackageDef } from '@/engine/packages';
 import { canPair } from '@/engine/rules';
+import { TYPO_FALLBACK_BELOW, matchScore, normalizeText, queryWords } from '@/engine/text/search';
 import { AXIS_MEMBER, ROLES } from '@/engine/summary';
 import type { Card, Color, Deck, Role } from '@/engine/types';
+import type { Prepared } from '@/engine/text/search';
 import { poolIndex, toClientCard, toCommanderCard } from './cards';
 import type { ServerCardDb } from './carddb';
 import { activeFormat, deckCollection, ownedSet, ownedSetOf } from './collection';
@@ -47,7 +48,37 @@ export function colorMatcher(colors: ColorLetter[], mode: ColorMode): ((card: Ca
   return (card) => chosen.every((c) => card.colorIdentity.includes(c));
 }
 
-const tokens = (q: unknown): string[] => (typeof q === 'string' ? normalizeName(q).split(' ').filter(Boolean).slice(0, 12) : []);
+const tokens = (q: unknown): string[] => (typeof q === 'string' ? queryWords(q) : []);
+/** Typos are forgiven in the name and the type line, not in rules text (which is full of near-words). */
+const TYPO_FIELDS = 2;
+const FIRST = 1000;
+
+/**
+ * Search tiers for the cards that match `words`: 0 the name is the phrase, 1 the name contains it,
+ * 2 every word hits the name, 3 a hit in type or text, 4 only a typo hit (tried only when fewer than
+ * a handful match without one). `rows` are the candidates in the order the caller wants kept inside a tier.
+ */
+function searchTiers<T>(rows: readonly T[], words: readonly string[], at: (row: T) => { name: string; front?: string; prepared: Prepared }): T[][] {
+  const phrase = words.join(' ');
+  const tiers: T[][] = [[], [], [], [], []];
+  const missed: T[] = [];
+  let found = 0;
+  for (const row of rows) {
+    const { name, front, prepared } = at(row);
+    const s = matchScore(words, prepared, { typoFields: TYPO_FIELDS });
+    if (s === 0) {
+      missed.push(row);
+      continue;
+    }
+    found++;
+    const n = normalizeText(name);
+    tiers[n === phrase || (front !== undefined && normalizeText(front) === phrase) ? 0 : n.includes(phrase) ? 1 : s >= words.length * FIRST ? 2 : 3].push(row);
+  }
+  if (found < TYPO_FALLBACK_BELOW) {
+    for (const row of missed) if (matchScore(words, at(row).prepared, { typo: true, typoFields: TYPO_FIELDS }) > 0) tiers[4].push(row);
+  }
+  return tiers;
+}
 const optNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const page = (items: number, pageNo: number, size: number) => ({ start: Math.min(items, (pageNo - 1) * size), end: Math.min(items, pageNo * size) });
 
@@ -78,7 +109,7 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const analysis = getAnalysis(deck);
   const db = analysis.ctx.db as ServerCardDb;
   const index = poolIndex(db);
-  const { cards, names, haystacks, typeLines, ranks } = index;
+  const { cards, names, prepared, typeLines, ranks } = index;
   const pool = analysis.pool();
   const { scores } = pool;
 
@@ -111,7 +142,6 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const inDeck = typeof f.inDeck === 'boolean' ? f.inDeck : null;
   const deckIds = inDeck === null ? null : new Set<string>([...deck.commanders, ...deck.main.map((e) => e.oracleId)]);
   const words = tokens(query.q);
-  const phrase = words.join(' ');
 
   // Package membership is read at the bracket the deck is tuned for (Standard Brawl has none: the middle one).
   const bracket = bracketOf(deck, db);
@@ -119,8 +149,8 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
   const others = pkg ? analysis.report().packages.packages.map((p) => packageDef(p.id)).filter((d): d is PackageDef => d !== null && d.id !== pkg!.id) : [];
   const alsoOf = new Map<number, string[]>();
 
-  // Search tiers: 0 the name is the query, 1 the name contains it, 2 it matches in type or text.
-  const tiers: number[][] = [[], [], []];
+  // Cards that pass every filter, in the chosen order; a search text then ranks them into tiers.
+  const passed: number[] = [];
   for (const i of order) {
     const card = cards[i];
     if (legalOnly && scores[i].gate) continue;
@@ -145,21 +175,15 @@ export function browseCards(deck: Deck, query: CardsQuery): CardsResponse {
         if (!a || Math.max(a.e, a.p) < AXIS_MEMBER) continue;
       }
     }
-    if (words.length === 0) {
-      tiers[0].push(i);
-      continue;
-    }
-    const hay = haystacks[i];
-    if (!words.every((w) => hay.includes(w))) continue;
-    const name = names[i];
-    tiers[name === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(i);
+    passed.push(i);
   }
+  const tiers = words.length === 0 ? [passed] : searchTiers(passed, words, (i) => ({ name: names[i], prepared: prepared[i] }));
   // With a package filter and the score order, dual-purpose cards come first (gated cards stay last)
   if (pkg && sort === 'score' && dir === 'desc') {
     const key = (i: number) => overlapKey(scores[i].score, alsoOf.get(i)?.length ?? 0);
     for (const tier of tiers) tier.sort((a, b) => (scores[a].gate ? 1 : 0) - (scores[b].gate ? 1 : 0) || key(b) - key(a));
   }
-  const matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  const matches = tiers.flat();
 
   const { start, end } = page(matches.length, pageNo, pageSize);
   const out: ScoredCard[] = [];
@@ -191,7 +215,6 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const mode = params.get('mode');
   const colorOk = colorMatcher(parseColors(params.get('colors') ?? ''), MODES.includes(mode as ColorMode) ? (mode as ColorMode) : 'includes');
   const words = tokens(params.get('q'));
-  const phrase = words.join(' ');
   const sort = (params.get('sort') ?? 'popularity') as CommanderSort;
   if (!COMMANDER_SORTS.includes(sort)) throw new HttpError(400, 'sort must be popularity, name, price or best.');
   const axis = params.get('axis') || null;
@@ -202,21 +225,20 @@ export function browseCommanders(params: URLSearchParams): CommandersResponse {
   const format = formatOf(db);
   const leads = commanderIndex(format).byId;
 
-  const tiers: Card[][] = [[], [], []];
+  const passed: Card[] = [];
   for (const card of index.commanders) {
     if (colorOk && !colorOk(card)) continue;
     if (ownedOnly && !owned.has(card.oracleId)) continue;
     if (axis && !leads.get(card.oracleId)?.lead.includes(axis)) continue;
-    if (words.length === 0) {
-      tiers[0].push(card);
-      continue;
-    }
-    const i = index.position.get(card.oracleId) as number;
-    if (!words.every((w) => index.haystacks[i].includes(w))) continue;
-    const name = index.names[i];
-    tiers[name === phrase || normalizeName(card.frontName) === phrase ? 0 : name.includes(phrase) ? 1 : 2].push(card);
+    passed.push(card);
   }
-  let matches = words.length === 0 ? tiers[0] : [...tiers[0], ...tiers[1], ...tiers[2]];
+  let matches =
+    words.length === 0
+      ? passed
+      : searchTiers(passed, words, (card) => {
+          const i = index.position.get(card.oracleId) as number;
+          return { name: index.names[i], front: card.frontName, prepared: index.prepared[i] };
+        }).flat();
   const best = new Map<string, number>();
   if (sort === 'name') matches = [...matches].sort((a, b) => a.name.localeCompare(b.name));
   else if (sort === 'price') {
@@ -252,4 +274,19 @@ export function partnersOf(oracleId: string): PartnersResponse {
   const brawl = isBrawlFormat(formatOf(db));
   const partners = brawl ? [] : db.all().filter((c) => canPair(commander, c)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return { commander: toCommanderCard(commander, db, owned), partners: partners.map((c) => toCommanderTile(c, owned, formatOf(db))) };
+}
+
+/**
+ * Which of the cards `ids` match a search text (name, type line, rules text), by the shared matcher
+ * (typos included when few match), best match first. For "Find in deck". Unknown ids are skipped.
+ */
+export function findCardIds(ids: readonly string[], q: unknown): string[] {
+  const words = tokens(q);
+  if (words.length === 0) return [...ids];
+  const index = poolIndex(getCardDb());
+  const known = ids.filter((id) => index.position.has(id));
+  return searchTiers(known, words, (id) => {
+    const i = index.position.get(id) as number;
+    return { name: index.names[i], front: index.cards[i].frontName, prepared: index.prepared[i] };
+  }).flat();
 }

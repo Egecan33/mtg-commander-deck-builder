@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CardImage } from '../components/card';
 import { useNotify } from '../components/Shell';
 import {
   ApiError, addBox, adjustCollection, getBox, getBoxes, getDeck, getProduct, linkBox, openBoxAsDeck, removeBox, searchProducts, takeFromBox,
-  previewBox, type BoxCard, type BoxDetailResponse, type BoxInfo, type BoxPreviewCard, type ProductDetailResponse, type ProductInfo,
+  previewBox, type BoxCard, type BoxDetailResponse, type BoxInfo, type BoxPreviewCard, type ProductDetailResponse, type ProductGroup, type ProductInfo, type ProductsResponse,
 } from '../lib/api';
 import { fmtInt, isAbort } from '../lib/ui';
 
@@ -16,14 +16,32 @@ const day = (iso: string) => {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+/** One line of "recently added": a single box, or every deck of a group added in one go. */
+interface Added { id: string; label: string; parts: { box: BoxInfo; counted: { oracleId: string; qty: number }[] }[]; undone?: boolean }
+
+/** The same card in several decks of a group: one checklist line (copies add up, the free copies are the same pool). */
+function mergeOverlap(lists: BoxPreviewCard[][]): BoxPreviewCard[] {
+  const by = new Map<string, BoxPreviewCard>();
+  for (const list of lists) {
+    for (const c of list) {
+      const have = by.get(c.oracleId);
+      by.set(c.oracleId, have ? { ...have, boxQty: have.boxQty + c.boxQty, free: Math.max(have.free, c.free), onlyHere: have.onlyHere && c.onlyHere } : c);
+    }
+  }
+  return [...by.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** "Add a box": search a sealed product, see what you already own of it, add it. */
 export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void }) {
   const notify = useNotify();
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<ProductInfo[] | null>(null);
+  const [results, setResults] = useState<ProductsResponse | null>(null);
   const [picked, setPicked] = useState<ProductDetailResponse | null>(null);
+  // A box sold as one but listed as several decks: opened in the results, or picked to add them all.
+  const [open, setOpen] = useState<string | null>(null);
+  const [pickedAll, setPickedAll] = useState<ProductGroup | null>(null);
   const [busy, setBusy] = useState(false);
-  const [added, setAdded] = useState<{ box: BoxInfo; counted: { oracleId: string; qty: number }[]; undone?: boolean }[]>([]);
+  const [added, setAdded] = useState<Added[]>([]);
   // Cards of the picked box the collection already holds free copies of; `checked` ones count as the box's.
   const [overlap, setOverlap] = useState<BoxPreviewCard[]>([]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -32,12 +50,31 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
     const text = q.trim();
     if (!text) return setResults(null);
     const ctrl = new AbortController();
-    const t = setTimeout(() => searchProducts(text, ctrl.signal).then((r) => setResults(r.products), () => {}), 150);
+    const t = setTimeout(() => searchProducts(text, ctrl.signal).then(setResults, () => {}), 150);
     return () => {
       clearTimeout(t);
       ctrl.abort();
     };
   }, [q]);
+
+  // One row per product, except that the decks of a group share one row where the first of them is.
+  const rows = useMemo(() => {
+    if (!results) return [];
+    const groupOf = new Map<string, ProductGroup>();
+    for (const g of results.groups) for (const p of g.products) groupOf.set(p.id, g);
+    const out: ({ group: ProductGroup } | { product: ProductInfo })[] = [];
+    const seen = new Set<string>();
+    for (const p of results.products) {
+      const g = groupOf.get(p.id);
+      if (!g) out.push({ product: p });
+      else if (!seen.has(g.key)) {
+        seen.add(g.key);
+        out.push({ group: g });
+      }
+    }
+    return out;
+  }, [results]);
+  const setLabel = (p: ProductInfo) => results?.sets[p.setCode.toUpperCase()] ?? p.setCode.toUpperCase();
 
   const pick = async (p: ProductInfo) => {
     try {
@@ -45,10 +82,30 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
       const pre = await previewBox(p.id).then((r) => r.cards, () => [] as BoxPreviewCard[]);
       setOverlap(pre);
       setChecked(new Set());
+      setPickedAll(null);
       setPicked(detail);
     } catch (e) {
       notify.error(e);
     }
+  };
+  const pickAll = async (g: ProductGroup) => {
+    try {
+      const lists = await Promise.all(g.products.map((p) => previewBox(p.id).then((r) => r.cards, () => [] as BoxPreviewCard[])));
+      setOverlap(mergeOverlap(lists));
+      setChecked(new Set());
+      setPicked(null);
+      setPickedAll(g);
+    } catch (e) {
+      notify.error(e);
+    }
+  };
+  const finish = async () => {
+    setPicked(null);
+    setPickedAll(null);
+    setOpen(null);
+    setQ('');
+    setResults(null);
+    await onChanged();
   };
   const confirm = async () => {
     if (!picked) return;
@@ -57,37 +114,66 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
       const ids = overlap.filter((c) => checked.has(c.oracleId));
       const { box } = await addBox(picked.product.id, ids.map((c) => c.oracleId));
       const counted = ids.map((c) => ({ oracleId: c.oracleId, qty: Math.min(c.free, c.boxQty) }));
-      setAdded((a) => [{ box, counted }, ...a.filter((x) => !x.undone)].slice(0, 5));
-      setPicked(null);
-      setQ('');
-      setResults(null);
-      await onChanged();
+      setAdded((a) => [{ id: box.id, label: box.name, parts: [{ box, counted }] }, ...a.filter((x) => !x.undone)].slice(0, 5));
+      await finish();
     } catch (e) {
       notify.error(e);
     } finally {
       setBusy(false);
     }
   };
+  // Every deck of the group as its own box, one after the other. A card ticked in the checklist
+  // counts for each deck that holds it as long as free copies last, so each deck is previewed anew.
+  const confirmAll = async () => {
+    if (!pickedAll) return;
+    setBusy(true);
+    const parts: Added['parts'] = [];
+    const record = () => {
+      if (parts.length > 0) setAdded((a) => [{ id: parts[0]!.box.id, label: pickedAll.label, parts }, ...a.filter((x) => !x.undone)].slice(0, 5));
+    };
+    try {
+      for (const p of pickedAll.products) {
+        const pre = checked.size > 0 ? await previewBox(p.id).then((r) => r.cards.filter((c) => checked.has(c.oracleId)), () => [] as BoxPreviewCard[]) : [];
+        const { box } = await addBox(p.id, pre.map((c) => c.oracleId));
+        parts.push({ box, counted: pre.map((c) => ({ oracleId: c.oracleId, qty: Math.min(c.free, c.boxQty) })) });
+      }
+      record();
+      await finish();
+    } catch (e) {
+      record();
+      notify.error(e);
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
   // Undo of an added box is the same as selling it: its cards leave again. One at a time, and the
   // row stays in place (without its button) until the pointer leaves the list, so a second click
-  // cannot reach the next row's Undo.
+  // cannot reach the next row's Undo. A group goes out as a whole.
   const undoRun = useRef(false);
   const [undoing, setUndoing] = useState<string | null>(null);
-  const undo = async (box: BoxInfo, counted: { oracleId: string; qty: number }[]) => {
+  const undo = async (entry: Added) => {
     if (undoRun.current) return;
     undoRun.current = true;
-    setUndoing(box.id);
+    setUndoing(entry.id);
+    let gone = 0;
     try {
-      await removeBox(box.id, 'sold');
-      // Copies that already were yours go back to being loose copies.
-      for (const c of counted) await adjustCollection(c.oracleId, c.qty);
-      setAdded((a) => a.map((x) => (x.box.id === box.id ? { ...x, undone: true } : x)));
+      for (const { box, counted } of [...entry.parts].reverse()) {
+        try {
+          await removeBox(box.id, 'sold');
+          // Copies that already were yours go back to being loose copies.
+          for (const c of counted) await adjustCollection(c.oracleId, c.qty);
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 404) gone++;
+          else throw e;
+        }
+      }
+      setAdded((a) => a.map((x) => (x.id === entry.id ? { ...x, undone: true } : x)));
+      if (gone > 0) notify.info(`${gone === entry.parts.length ? entry.label : `${gone} of ${entry.label}`} was no longer in your boxes, so there was nothing to undo for it`);
       await onChanged();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) {
-        setAdded((a) => a.map((x) => (x.box.id === box.id ? { ...x, undone: true } : x)));
-        notify.info(`${box.name} is no longer in your boxes, so there is nothing to undo`);
-      } else notify.error(e);
+      notify.error(e);
+      await onChanged();
     } finally {
       undoRun.current = false;
       setUndoing(null);
@@ -96,37 +182,124 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
 
   const ownedDistinct = picked ? picked.cards.filter((c) => c.ownedQty > 0).length : 0;
 
+  const overlapList = overlap.length > 0 && (
+    <fieldset className="mt-2 rounded-md border border-slag p-2" data-testid="box-overlap">
+      <legend className="px-1 text-[0.88rem] text-ash">
+        You already have {fmtInt(overlap.reduce((n, c) => n + Math.min(c.free, c.boxQty), 0))} of this box&apos;s cards outside boxes
+      </legend>
+      <p className="text-[0.8rem] text-smoke">
+        Singles are usually extra copies, so the box is added on top. Tick a card to count it as this box's card instead of adding it again.
+      </p>
+      <button
+        type="button"
+        className="btn btn-sm btn-quiet mt-1"
+        onClick={() => setChecked(checked.size === overlap.length ? new Set() : new Set(overlap.map((c) => c.oracleId)))}
+        data-testid="box-check-all"
+      >
+        {checked.size === overlap.length ? 'Uncheck all' : 'Check all'}
+      </button>
+      <ul className="mt-1 grid max-h-56 gap-0.5 overflow-y-auto">
+        {overlap.map((c) => (
+          <li key={c.oracleId}>
+            <label className="flex items-start gap-2 text-[0.88rem]">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={checked.has(c.oracleId)}
+                onChange={() => setChecked((cur) => { const n = new Set(cur); if (!n.delete(c.oracleId)) n.add(c.oracleId); return n; })}
+                data-testid="box-overlap-card"
+                data-name={c.name}
+              />
+              <span className="min-w-0 flex-1">
+                {c.name}
+                <span className="block text-[0.78rem] text-smoke">{c.onlyHere ? 'only in this box' : 'also printed in other sets'}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+  const nothingPicked = !picked && !pickedAll;
+
   return (
     <div data-testid="box-add">
       <h2 className="text-[1.1rem]">Add a box</h2>
       <p className="mt-1 text-[0.88rem] text-ash">
-        Bought a sealed product? Search it by name or set code. Every card in it is added to this collection and remembered as sealed, so selling the box later takes exactly those cards out.
+        Bought a sealed product? Search it by name, set or set code, in any word order. Every card in it is added to this collection and remembered as sealed, so selling the box later takes exactly those cards out.
       </p>
       <input
         className="field mt-2 w-full"
         value={q}
-        onChange={(e) => { setQ(e.target.value); setPicked(null); }}
-        placeholder="Product name or set code"
+        onChange={(e) => { setQ(e.target.value); setPicked(null); setPickedAll(null); }}
+        placeholder="Product, set name or set code"
         spellCheck={false}
         autoComplete="off"
         aria-label="Search sealed products"
         data-testid="box-search"
       />
-      {results && !picked && (
-        results.length === 0 ? (
+      {results && nothingPicked && (
+        rows.length === 0 ? (
           <p className="mt-2 text-[0.88rem] text-ash">No product matches that.</p>
         ) : (
           <ul className="mt-2 max-h-64 overflow-y-auto rounded-md border border-slag" data-testid="box-results">
-            {results.map((p) => (
-              <li key={p.id} className="border-b border-slag last:border-b-0">
-                <button type="button" className="block w-full px-3 py-2 text-left hover:bg-soot" onClick={() => void pick(p)} data-testid="box-result">
-                  <span className="block font-medium">{p.name}</span>
-                  <span className="block text-[0.8rem] text-smoke">{p.type} &middot; {p.setCode.toUpperCase()} &middot; {p.releaseDate} &middot; {fmtInt(p.cardCount)} cards</span>
-                </button>
-              </li>
-            ))}
+            {rows.map((row) =>
+              'group' in row ? (
+                <li key={row.group.key} className="border-b border-slag last:border-b-0" data-testid="box-group" data-key={row.group.key}>
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2 text-left hover:bg-soot"
+                    aria-expanded={open === row.group.key}
+                    onClick={() => setOpen(open === row.group.key ? null : row.group.key)}
+                    data-testid="box-group-toggle"
+                  >
+                    <span className="block font-medium">{row.group.label} &middot; {row.group.products.length} decks</span>
+                    <span className="block text-[0.8rem] text-smoke">{row.group.products[0]?.type} &middot; {row.group.setCode.toUpperCase()} &middot; {row.group.products[0]?.releaseDate} &middot; {fmtInt(row.group.cardCount)} cards in all</span>
+                  </button>
+                  {open === row.group.key && (
+                    <div className="border-t border-slag bg-soot px-3 py-2" data-testid="box-group-decks">
+                      <button type="button" className="btn btn-sm" onClick={() => void pickAll(row.group)} data-testid="box-add-all">
+                        Add all {row.group.products.length}
+                      </button>
+                      <ul className="mt-1 grid gap-0.5">
+                        {row.group.products.map((p) => (
+                          <li key={p.id}>
+                            <button type="button" className="block w-full rounded px-2 py-1 text-left text-[0.88rem] hover:bg-iron" onClick={() => void pick(p)} data-testid="box-result">
+                              {p.name} <span className="text-smoke">&middot; {fmtInt(p.cardCount)} cards</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              ) : (
+                <li key={row.product.id} className="border-b border-slag last:border-b-0">
+                  <button type="button" className="block w-full px-3 py-2 text-left hover:bg-soot" onClick={() => void pick(row.product)} data-testid="box-result">
+                    <span className="block font-medium">{row.product.name}</span>
+                    <span className="block text-[0.8rem] text-smoke">{row.product.type} &middot; {setLabel(row.product)} &middot; {row.product.setCode.toUpperCase()} &middot; {row.product.releaseDate} &middot; {fmtInt(row.product.cardCount)} cards</span>
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         )
+      )}
+      {pickedAll && (
+        <div className="mt-2 rounded-md border border-slag bg-soot p-3" data-testid="box-picked-all">
+          <div className="font-medium">{pickedAll.label}</div>
+          <div className="text-[0.8rem] text-smoke">{pickedAll.products.length} decks &middot; {pickedAll.setCode.toUpperCase()} &middot; {fmtInt(pickedAll.cardCount)} cards in all</div>
+          <ul className="mt-1 text-[0.84rem] text-ash">
+            {pickedAll.products.map((p) => <li key={p.id}>{p.name}</li>)}
+          </ul>
+          {overlapList}
+          <div className="mt-2 flex gap-2">
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void confirmAll()} data-testid="box-add-all-confirm">
+              {busy ? 'Adding' : `Add ${pickedAll.products.length} decks to Physical`}
+            </button>
+            <button type="button" className="btn btn-quiet" onClick={() => setPickedAll(null)}>Pick another</button>
+          </div>
+        </div>
       )}
       {picked && (
         <div className="mt-2 rounded-md border border-slag bg-soot p-3" data-testid="box-picked">
@@ -145,44 +318,7 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
           <p className="mt-2 text-[0.88rem] text-ash" data-testid="box-owned-note">
             You already own {fmtInt(ownedDistinct)} of its {fmtInt(picked.cards.length)} cards.
           </p>
-          {overlap.length > 0 && (
-            <fieldset className="mt-2 rounded-md border border-slag p-2" data-testid="box-overlap">
-              <legend className="px-1 text-[0.88rem] text-ash">
-                You already have {fmtInt(overlap.reduce((n, c) => n + Math.min(c.free, c.boxQty), 0))} of this box&apos;s cards outside boxes
-              </legend>
-              <p className="text-[0.8rem] text-smoke">
-                Singles are usually extra copies, so the box is added on top. Tick a card to count it as this box's card instead of adding it again.
-              </p>
-              <button
-                type="button"
-                className="btn btn-sm btn-quiet mt-1"
-                onClick={() => setChecked(checked.size === overlap.length ? new Set() : new Set(overlap.map((c) => c.oracleId)))}
-                data-testid="box-check-all"
-              >
-                {checked.size === overlap.length ? 'Uncheck all' : 'Check all'}
-              </button>
-              <ul className="mt-1 grid max-h-56 gap-0.5 overflow-y-auto">
-                {overlap.map((c) => (
-                  <li key={c.oracleId}>
-                    <label className="flex items-start gap-2 text-[0.88rem]">
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={checked.has(c.oracleId)}
-                        onChange={() => setChecked((cur) => { const n = new Set(cur); if (!n.delete(c.oracleId)) n.add(c.oracleId); return n; })}
-                        data-testid="box-overlap-card"
-                        data-name={c.name}
-                      />
-                      <span className="min-w-0 flex-1">
-                        {c.name}
-                        <span className="block text-[0.78rem] text-smoke">{c.onlyHere ? 'only in this box' : 'also printed in other sets'}</span>
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </fieldset>
-          )}
+          {overlapList}
           <div className="mt-2 flex gap-2">
             <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void confirm()} data-testid="box-add-confirm">
               {busy ? 'Adding' : 'Add to Physical'}
@@ -193,25 +329,31 @@ export function AddBox({ onChanged }: { onChanged: () => Promise<void> | void })
       )}
       {added.length > 0 && (
         <ul className="mt-3 grid gap-1 text-[0.84rem]" data-testid="box-recent" onPointerLeave={() => setAdded((a) => (a.some((x) => x.undone) ? a.filter((x) => !x.undone) : a))}>
-          {added.map(({ box, counted, undone }) => (
-            <li key={box.id} className={`flex items-center gap-2 ${undone ? 'text-smoke line-through' : ''}`}>
-              <span className="min-w-0 flex-1 truncate"><span className="text-smoke">Added</span> {box.name}: {fmtInt(box.total)} cards{counted.length > 0 ? `, ${fmtInt(counted.reduce((n, c) => n + c.qty, 0))} you already had now count as the box's` : ''}</span>
-              {undone ? (
-                <span className="text-smoke no-underline">Undone</span>
-              ) : (
-                <button
-                  type="button"
-                  className="text-brass hover:underline disabled:text-smoke disabled:no-underline"
-                  title="Takes the box and its cards out again, as if sold"
-                  disabled={undoing !== null}
-                  onClick={() => void undo(box, counted)}
-                  data-testid="box-undo"
-                >
-                  {undoing === box.id ? 'Undoing' : 'Undo'}
-                </button>
-              )}
-            </li>
-          ))}
+          {added.map((entry) => {
+            const total = entry.parts.reduce((n, p) => n + p.box.total, 0);
+            const counted = entry.parts.reduce((n, p) => n + p.counted.reduce((m, c) => m + c.qty, 0), 0);
+            return (
+              <li key={entry.id} className={`flex items-center gap-2 ${entry.undone ? 'text-smoke line-through' : ''}`}>
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="text-smoke">Added</span> {entry.label}: {entry.parts.length > 1 ? `${entry.parts.length} decks, ` : ''}{fmtInt(total)} cards{counted > 0 ? `, ${fmtInt(counted)} you already had now count as the box's` : ''}
+                </span>
+                {entry.undone ? (
+                  <span className="text-smoke no-underline">Undone</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-brass hover:underline disabled:text-smoke disabled:no-underline"
+                    title={entry.parts.length > 1 ? 'Takes all the boxes and their cards out again, as if sold' : 'Takes the box and its cards out again, as if sold'}
+                    disabled={undoing !== null}
+                    onClick={() => void undo(entry)}
+                    data-testid="box-undo"
+                  >
+                    {undoing === entry.id ? 'Undoing' : 'Undo'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

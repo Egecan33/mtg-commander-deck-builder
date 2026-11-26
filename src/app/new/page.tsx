@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { prepareFields, searchItems } from '@/engine/text/search';
 import type { Bracket, Color, Deck } from '@/engine/types';
 import { CardImage, ColorPip } from '../components/card';
 import { ColorChips } from '../components/ColorChips';
@@ -79,8 +80,7 @@ export default function NewDeckPage() {
   );
 
   const partnerList = useMemo(() => {
-    const needle = query.toLowerCase();
-    return (partners ?? []).filter((p) => !needle || p.name.toLowerCase().includes(needle));
+    return searchItems(partners ?? [], query, (p) => prepareFields([p.name]));
   }, [partners, query]);
 
   const needsColor = !!commander && (commander.needsColorChoice || !!partner?.needsColorChoice);

@@ -1,5 +1,6 @@
 import type { CardLookup, ClientCard, CommanderCard } from '@/app/lib/api';
 import { cardSlug } from '@/engine/text/slug';
+import { prepareFields, type Prepared } from '@/engine/text/search';
 import { normalizeName } from '@/engine/carddb';
 import { formatOf } from '@/engine/format';
 import { canLead, needsColorChoice, partnerKind, requiresColorChoice } from '@/engine/rules';
@@ -63,8 +64,10 @@ export interface PoolIndex {
   position: Map<string, number>;
   /** Normalised name per card, for name matches. */
   names: string[];
-  /** Name, type line and rules text, lower-cased, for free-text search. */
-  haystacks: string[];
+  /** Name, type line and rules text as matchable words (see `engine/text/search`), for free-text search. */
+  prepared: Prepared[];
+  /** Only the name's words (a view on `prepared`), for searches by card name. */
+  nameOnly: Prepared[];
   typeLines: string[];
   /** Popularity order key: EDHREC rank, unranked cards last. */
   ranks: Float64Array;
@@ -82,7 +85,9 @@ export function poolIndex(db: ServerCardDb = getCardDb()): PoolIndex {
   const cards = db.all();
   const position = new Map<string, number>();
   const names: string[] = [];
-  const haystacks: string[] = [];
+  const prepared: Prepared[] = [];
+  const nameOnly: Prepared[] = [];
+  const intern = new Map<string, string>();
   const typeLines: string[] = [];
   const ranks = new Float64Array(cards.length);
   cards.forEach((c, i) => {
@@ -90,11 +95,13 @@ export function poolIndex(db: ServerCardDb = getCardDb()): PoolIndex {
     const name = normalizeName(c.name);
     names.push(name);
     typeLines.push(c.typeLine.toLowerCase());
-    haystacks.push(`${name}\n${c.typeLine.toLowerCase()}\n${c.oracleText.toLowerCase()}`);
+    const prep = prepareFields([c.name, c.typeLine, c.oracleText], intern);
+    prepared.push(prep);
+    nameOnly.push({ words: [prep.words[0]!], exact: [false] });
     ranks[i] = rankOf(c);
   });
   const commanders = cards.filter((c) => canLead(c, format)).sort((a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name));
-  const index: PoolIndex = { cards, position, names, haystacks, typeLines, ranks, commanders };
+  const index: PoolIndex = { cards, position, names, prepared, nameOnly, typeLines, ranks, commanders };
   Object.assign(slot, { db, index });
   return index;
 }

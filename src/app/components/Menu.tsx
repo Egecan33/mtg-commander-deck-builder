@@ -1,5 +1,6 @@
 'use client';
 
+import { prepareFields, searchItems } from '@/engine/text/search';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 export interface MenuItem {
@@ -35,10 +36,7 @@ export function Menu({
   const menuId = useId();
   const input = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState('');
-  const needle = q.trim().toLowerCase();
-  const shown = search
-    ? items.filter((i) => !needle || i.label.toLowerCase().includes(needle) || (i.description ?? '').toLowerCase().includes(needle)).slice(0, maxShown)
-    : items;
+  const shown = search ? searchItems(items, q, (i) => prepareFields([i.label, i.description ?? ''])).slice(0, maxShown) : items;
 
   const itemEls = () => [...(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
   const focusItem = (i: number) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CardScore, Deck, DeckEntry, FoundCombo, PlannedPackage } from '@/engine/types';
 import { CardGrid } from '../../components/CardGrid';
 import { ComboRow } from '../../components/ComboRow';
@@ -12,6 +12,7 @@ import { Section } from '../../components/Section';
 import { Mana, ScoreBadge } from '../../components/card';
 import { HeldMark } from '../../components/held';
 import type { CardLookup, ClientCard, HeldBy } from '../../lib/api';
+import { findCards } from '../../lib/api';
 import { useFilters } from '../../lib/filters';
 import { ROLE_GROUPS, TYPE_GROUPS, packageNote, roleGroup, typeGroup } from '../../lib/ui';
 
@@ -90,10 +91,50 @@ export function DeckView({
     return out;
   }, [deck, lookup, grouping]);
 
+  // ---- Find in deck: the deck's own cards filtered by the shared matcher (name, type, rules text) on the server.
+  const [find, setFind] = useState('');
+  const [found, setFound] = useState<ReadonlySet<string> | null>(null);
+  const findRef = useRef<HTMLInputElement>(null);
+  const allIds = useMemo(() => [...new Set([...deck.commanders, ...(deck.companion ? [deck.companion] : []), ...deck.main.map((e) => e.oracleId)])], [deck]);
+  const finding = find.trim() !== '';
+  useEffect(() => {
+    if (!finding) {
+      setFound(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      findCards(allIds, find, ctrl.signal).then((r) => setFound(new Set(r.ids)), () => {});
+    }, 150);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [find, finding, allIds]);
+  // "f" goes to the field when no field has the focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.key !== 'f' || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      if (el && (/INPUT|TEXTAREA|SELECT/.test(el.tagName) || el.isContentEditable)) return;
+      e.preventDefault();
+      findRef.current?.focus();
+      findRef.current?.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const filtering = finding && found !== null;
+  const shown = useMemo(
+    () => (filtering ? groups.map((g) => ({ ...g, rows: g.rows.filter((r) => found!.has(r.entry.oracleId)) })).filter((g) => g.rows.length > 0) : groups),
+    [groups, filtering, found],
+  );
+  const mainCopies = (gs: { rows: Row[] }[]) => gs.reduce((n, g) => n + g.rows.reduce((m, r) => (r.zone === 'main' ? m + r.entry.qty : m), 0), 0);
+
   const empty = deck.main.length === 0;
   const [allAway, setAllAway] = useState(false);
-  const leadZones = groups.filter((g) => g.rows[0]?.zone !== 'main').length;
-  const comboSection = combos ? (
+  const leadZones = shown.filter((g) => g.rows[0]?.zone !== 'main').length;
+  const comboSection = combos && !filtering ? (
     <Section key="combos" id="deck-combos" title="Combos" count={combos.included.length} testId="deck-combos" data={{ 'data-complete': combos.included.length, 'data-one-away': combos.oneAway.length }}>
       {combos.included.length === 0 ? (
         <p className="text-ash" data-testid="combos-none">No combo in this deck yet.</p>
@@ -224,6 +265,33 @@ export function DeckView({
         <FilterBar show={['groupBy', 'view']} groups={GROUPS} testId="deck-view-controls" />
       </div>
 
+      <div className="flex items-center gap-2 px-3 pb-2" data-testid="deck-find">
+        <input
+          ref={findRef}
+          type="search"
+          className="field h-7 min-w-0 flex-1 text-[0.8125rem]"
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setFind('');
+              e.currentTarget.blur();
+            }
+          }}
+          placeholder="Find in deck   ( f )"
+          aria-label="Find in deck"
+          spellCheck={false}
+          autoComplete="off"
+          data-testid="deck-find-input"
+        />
+        {finding && (
+          <span className="shrink-0 text-[0.8125rem] text-ash [font-variant-numeric:tabular-nums]" aria-live="polite" data-testid="deck-find-count">
+            {filtering ? `${mainCopies(shown)} of ${mainCopies(groups)} match` : 'Searching'}
+          </span>
+        )}
+      </div>
+
       {tools && <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2">{tools}</div>}
       {notice && <div className="grid gap-1.5 px-3 pb-2">{notice}</div>}
 
@@ -241,14 +309,17 @@ export function DeckView({
               />
             )}
 
-            {groups.map((g, i) => (
+            {filtering && shown.length === 0 && (
+              <EmptyState className="mb-4 mt-2" title="Nothing in the deck matches" message={`No card here matches “${find.trim()}” in its name, type or rules text.`} testId="deck-find-none" />
+            )}
+            {shown.map((g, i) => (
               <Fragment key={g.label}>
               {i === leadZones && comboSection}
               <Section
                 id={sectionId(g.label)}
                 title={g.label}
                 count={g.rows.reduce((s, r) => s + r.entry.qty, 0)}
-                note={packageNote(g.label, g.rows.reduce((s, r) => s + r.entry.qty, 0), grouping === 'role' ? packages : null)}
+                note={filtering ? undefined : packageNote(g.label, g.rows.reduce((s, r) => s + r.entry.qty, 0), grouping === 'role' ? packages : null)}
                 testId="deck-group"
                 data={{ 'data-group': g.label }}
               >
@@ -262,7 +333,7 @@ export function DeckView({
               </Section>
               </Fragment>
             ))}
-            {leadZones >= groups.length && comboSection}
+            {leadZones >= shown.length && comboSection}
           </div>
         </div>
       </JumpScope>
