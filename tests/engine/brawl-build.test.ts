@@ -5,7 +5,7 @@ import {
 import { validateDeck, deckSize, isBasicLand } from '@/engine/rules';
 import type { BuildOptions, Card, Deck, EngineContext, SwapProposal, Wildcards } from '@/engine/types';
 import { toCraft, wildcardsNeeded } from '@/engine/wildcards';
-import { brawlFixtureDb, card } from '../helpers/fixture-db';
+import { brawlFixtureDb, card, fixtureDb } from '../helpers/fixture-db';
 
 /* Every build path, on the Brawl view of the fixture: Arena cards only, and inside the wildcards. */
 
@@ -62,6 +62,20 @@ describe('Brawl builds use Arena cards only', () => {
     expect(ids(r.deck)).not.toContain(card('Sol Ring').oracleId);
     expect(ids(r.deck).filter((id) => !onArena(id))).toEqual([]);
     expect(validateDeck(r.deck, db)).toEqual([]);
+  });
+
+  it('fixes a Physical deck moved to Arena within the wildcards: non-Arena cards out, no unowned mythic in', () => {
+    // Built under Commander rules, so it holds cards Arena does not have (Sol Ring and the like).
+    const paper = autoBuild(shell(), { ...ctx, db: fixtureDb() }, opts({ seed: 5 }));
+    const missing = ids(paper).filter((id) => !onArena(id));
+    expect(missing.length).toBeGreaterThan(0);
+    expect(validateDeck(paper, db).filter((v) => v.code === 'not-on-arena').length).toBe(missing.length);
+    const r = fixDeck(paper, ctx, opts({ wildcards: NO_MYTHIC }));
+    expect(ids(r.deck).filter((id) => !onArena(id))).toEqual([]);
+    expect(validateDeck(r.deck, db).filter((v) => v.code === 'not-on-arena' || v.code === 'size')).toEqual([]);
+    const broughtIn = r.changes.map((c) => c.in).filter((id) => id !== '');
+    expect(broughtIn.length).toBeGreaterThan(0);
+    expect(broughtIn.filter((id) => unownedMythic(id, ownedPlain))).toEqual([]);
   });
 
   it('keeps the Best from collection tiers on Arena cards', () => {
