@@ -156,9 +156,10 @@ function PackageRow({
         </button>
         <span className="ml-auto flex items-center gap-1.5 text-[0.86rem]" role="group" aria-label={`${p.name} size`}>
           <button type="button" className="btn btn-sm px-2" disabled={size <= PACKAGE_MIN} onClick={() => step(size - 1)} aria-label={`Want one fewer: ${p.name}`} data-testid="package-pin-less">&minus;</button>
-          <span className={`w-6 text-center tabular-nums ${p.pinned || local !== null ? 'font-semibold text-brass' : ''}`} data-testid="package-pin-value">{size}</span>
+          {/* brass is for the one primary action: a size you set reads bold, Reset is a quiet link */}
+          <span className={`w-6 text-center tabular-nums ${p.pinned || local !== null ? 'font-semibold text-bone' : ''}`} data-testid="package-pin-value">{size}</span>
           <button type="button" className="btn btn-sm px-2" disabled={size >= PACKAGE_PIN_MAX} onClick={() => step(size + 1)} aria-label={`Want one more: ${p.name}`} data-testid="package-pin-more">+</button>
-          <button type="button" className={`text-[0.75rem] text-brass hover:underline ${p.pinned || local !== null ? '' : 'invisible'}`} onClick={() => { setLocal(null); onPin(p.id, null); }} data-testid="package-pin-reset">Reset</button>
+          <button type="button" className={`text-[0.75rem] text-ash underline-offset-2 hover:text-bone hover:underline ${p.pinned || local !== null ? '' : 'invisible'}`} onClick={() => { setLocal(null); onPin(p.id, null); }} data-testid="package-pin-reset">Reset</button>
         </span>
       </div>
     </section>
