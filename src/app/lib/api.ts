@@ -52,13 +52,13 @@
  *        Changers at Bracket 2 and the like) inside it with the same routine as `only: 'bracket'`, and
  *        then applies a directed improve built from the rating's own fixes (at most 15 swaps; swaps
  *        the engine objects to are skipped; the run may dip on the way, and the prefix that ends at its
- *        highest rating is kept, when that is above the rating the legality step left, else none of it).
+ *        highest rating is kept, when that is above the rating the steps before it left, else none of it).
  *        Every change is in `changes` ({ out, in, reason, summary }; `out` '' for an add, `in` '' for a cut;
  *        `summary` one short line such as "Ramp 6 → 7 of 10–13", `reason` the full sentence).
  *        Making the deck legal and 100 cards always stands, even when it costs rating points (a deck that
  *        breaks a rule is capped at 40 and cannot be played; `note` then says what it cost), so
  *        `ratingAfter` can be below `ratingBefore` only for that reason; the improve part never ends below
- *        the rating the legality step left. `note` also explains an empty result (what
+ *        the rating the steps before it left. `note` also explains an empty result (what
  *        Improve found and why none of it was used, never blaming the card options unless they were in
  *        force) and what still blocks an illegal deck (a locked card, a commander); commanders and locked
  *        cards are never cut. `options.only` (a rating part: mana, roles, synergy, quality, curve,
@@ -70,8 +70,10 @@
  *        `heldBy` covers the cards the fix brought in, counted as in a built deck; `cards` covers the deck
  *        and every change.
  *        'replace' takes `options.out` (a deck card's oracleId) and returns swaps for that one card.
- *        'swapin' takes `options.in` (a card not in the deck; 400 without it), `count` 1-10, and returns the deck cards it could replace,
- *        best rating after first; a deck under 100 cards gets the plain add (`out` '') first; an illegal card gives no proposals.
+ *        'swapin' takes `options.in` (a card not in the deck, or a basic land already in it for one more copy;
+ *        400 without it), `count` 1-10, and returns the deck cards it could replace, best rating after
+ *        first; a deck under 100 cards gets the plain add (`out` '') first. It returns [] for an illegal
+ *        or gated card, a card the options rule out, or a non-basic card already in the deck.
  *        `options.ownedOnly` uses the saved collection. `improve` proposals apply in order,
  *        `swaps` and `add` proposals each stand alone.
  *        `options.freeOnly` (with `ownedOnly`; alone it does nothing): only cards with a free copy for
