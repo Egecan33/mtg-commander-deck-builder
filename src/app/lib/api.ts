@@ -217,8 +217,13 @@
  *        All three act on the ACTIVE collection. "Owned" everywhere (green dots, the owned filter,
  *        owned-only builds, Best from collection) means the active collection too.
  * GET  /api/collection/boxes             -> BoxesResponse   boxes of the ACTIVE collection, newest first.
- * POST /api/collection/boxes {productId} -> { box: BoxInfo }   (201) adds a sealed product: every card's total
- *        rises by the product's quantity and the box remembers them. Buying it twice makes two boxes.
+ * GET  /api/products/:id/box-preview    -> BoxPreviewResponse   the product's cards the ACTIVE collection already
+ *        holds free copies of (outside boxes): `{ oracleId, name, boxQty, free, onlyHere }`; `onlyHere` = every
+ *        printing of the card is in the product's own set. 400 for an Arena collection, 404 for an unknown product.
+ * POST /api/collection/boxes {productId, counted?: string[]} -> { box: BoxInfo }   (201) adds a sealed product:
+ *        every card's total rises by the product's quantity and the box remembers them. Buying it twice makes
+ *        two boxes. For each oracle id in `counted`, up to min(free copies, the product's quantity) of the
+ *        copies already owned become the box's own instead (their total does not change). Unknown ids are ignored.
  *        400 when the active collection is an Arena one (boxes only exist in collections kept by
  *        hand), 404 for an unknown product.
  * GET  /api/collection/boxes/:id         -> BoxDetailResponse   the box and the cards still sealed in it. 404 when missing.
@@ -768,6 +773,9 @@ export interface BoxInfo {
   sealed: number; total: number;
 }
 export interface BoxesResponse { boxes: BoxInfo[] }
+/** A card of a product the collection already holds free copies of. `onlyHere`: every printing is in the product's own set. */
+export interface BoxPreviewCard { oracleId: string; name: string; boxQty: number; free: number; onlyHere: boolean }
+export interface BoxPreviewResponse { productId: string; name: string; cards: BoxPreviewCard[] }
 /** A card still sealed in a box; `commander` marks the product's commander slots. */
 export interface BoxCard { oracleId: string; qty: number; commander: boolean }
 export interface BoxDetailResponse { box: BoxInfo; cards: BoxCard[]; lookup: CardLookup }
@@ -977,7 +985,10 @@ export const adjustCollection = (oracleId: string, delta: number, toBoxes?: read
   call<CollectionAdjustResponse>('PATCH', '/api/collection', { oracleId, delta, ...(toBoxes?.length ? { toBoxes } : {}) });
 const boxUrl = (id: string) => `/api/collection/boxes/${encodeURIComponent(id)}`;
 export const getBoxes = (signal?: AbortSignal) => call<BoxesResponse>('GET', '/api/collection/boxes', undefined, signal);
-export const addBox = (productId: string) => call<{ box: BoxInfo }>('POST', '/api/collection/boxes', { productId });
+export const addBox = (productId: string, counted?: readonly string[]) =>
+  call<{ box: BoxInfo }>('POST', '/api/collection/boxes', { productId, ...(counted?.length ? { counted } : {}) });
+export const previewBox = (productId: string, signal?: AbortSignal) =>
+  call<BoxPreviewResponse>('GET', `/api/products/${encodeURIComponent(productId)}/box-preview`, undefined, signal);
 export const getBox = (id: string, signal?: AbortSignal) => call<BoxDetailResponse>('GET', boxUrl(id), undefined, signal);
 export const removeBox = (id: string, mode: 'sold' | 'opened') => call<{ ok: true }>('DELETE', `${boxUrl(id)}${query({ mode })}`);
 export const takeFromBox = (id: string, oracleId: string, take = 1) => call<BoxDetailResponse>('PATCH', boxUrl(id), { oracleId, take });

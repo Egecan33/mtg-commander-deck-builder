@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { BoxCard, BoxDetailResponse, BoxInfo, OpenBoxResponse } from '@/app/lib/api';
+import type { BoxCard, BoxDetailResponse, BoxPreviewCard, BoxPreviewResponse, BoxInfo, OpenBoxResponse } from '@/app/lib/api';
 import type { DeckEntry } from '@/engine/types';
 import { cardLookup } from './cards';
 import { activeCollectionId, forgetOwned } from './collection';
@@ -14,7 +14,7 @@ import { getDb } from './store';
  * collection and card: copies sealed in boxes <= the total.
  */
 
-export type { BoxCard, BoxDetailResponse, BoxInfo, OpenBoxResponse };
+export type { BoxCard, BoxDetailResponse, BoxPreviewCard, BoxPreviewResponse, BoxInfo, OpenBoxResponse };
 
 const SELECT_BOX = `SELECT b.id, b.product_id AS productId, b.name, b.added_at AS addedAt, b.deck_id AS deckId,
   coalesce(sum(x.qty), 0) AS sealed, coalesce(sum(x.total), 0) AS total
@@ -96,17 +96,66 @@ function deleteBox(db: Db, id: string): void {
   db.prepare('DELETE FROM collection_boxes WHERE id = ?').run(id);
 }
 
-/** A sealed product bought: every card's total rises by the product's quantity, and the box remembers them. */
-export function addBox(productId: string): BoxInfo {
+/**
+ * The product's cards the active collection already holds free copies of (outside boxes), for the
+ * "you already have these" question before adding. `onlyHere`: every printing of the card is in the
+ * product's own set, so those copies can only have come from this product. Needs synced printings;
+ * a card with none is never `onlyHere`. 400 for an Arena collection, like adding.
+ */
+export function previewBox(productId: string): BoxPreviewResponse {
   const db = getDb();
   const collectionId = activeCollectionId();
   requireManual(db, collectionId);
   const product = requireProduct(db, productId);
+  const setCode = (db.prepare('SELECT set_code AS s FROM products WHERE id = ?').get(productId) as { s: string }).s.toLowerCase();
+  const boxed = boxedQuantities(collectionId);
+  const totalOf = db.prepare('SELECT qty FROM collection_cards WHERE collection_id = ? AND oracle_id = ?');
+  const nameOf = db.prepare('SELECT name FROM cards WHERE oracle_id = ?');
+  const sets = db.prepare('SELECT DISTINCT lower(set_code) AS s FROM printings WHERE oracle_id = ?');
+  const cards: BoxPreviewCard[] = [];
+  for (const c of product.cards) {
+    const total = (totalOf.get(collectionId, c.oracleId) as { qty: number } | undefined)?.qty ?? 0;
+    const free = total - (boxed.get(c.oracleId) ?? 0);
+    if (free < 1) continue;
+    const printed = (sets.all(c.oracleId) as { s: string }[]).map((r) => r.s);
+    cards.push({
+      oracleId: c.oracleId,
+      name: (nameOf.get(c.oracleId) as { name: string } | undefined)?.name ?? c.oracleId,
+      boxQty: c.qty,
+      free,
+      onlyHere: printed.length > 0 && printed.every((s) => s === setCode),
+    });
+  }
+  cards.sort((a, b) => a.name.localeCompare(b.name));
+  return { productId: product.id, name: product.name, cards };
+}
+
+/**
+ * A sealed product bought: every card's total rises by the product's quantity, and the box remembers
+ * them. `counted`: for those cards, up to min(free copies, the product's quantity) of the copies
+ * already in the collection become the box's instead (no change to their total); the rest is added
+ * on top. The box records its full contents either way. Unknown ids are ignored.
+ */
+export function addBox(productId: string, options: { counted?: readonly string[] } = {}): BoxInfo {
+  const db = getDb();
+  const collectionId = activeCollectionId();
+  requireManual(db, collectionId);
+  const product = requireProduct(db, productId);
+  const counted = new Set(options.counted ?? []);
   const id = db.transaction(() => {
+    const boxed = boxedQuantities(collectionId);
+    const totalOf = db.prepare('SELECT qty FROM collection_cards WHERE collection_id = ? AND oracle_id = ?');
     const add = db.prepare(
       'INSERT INTO collection_cards(collection_id, oracle_id, qty) VALUES (?, ?, ?) ON CONFLICT(collection_id, oracle_id) DO UPDATE SET qty = qty + excluded.qty',
     );
-    for (const c of product.cards) add.run(collectionId, c.oracleId, c.qty);
+    for (const c of product.cards) {
+      let take = c.qty;
+      if (counted.has(c.oracleId)) {
+        const total = (totalOf.get(collectionId, c.oracleId) as { qty: number } | undefined)?.qty ?? 0;
+        take -= Math.max(0, Math.min(total - (boxed.get(c.oracleId) ?? 0), c.qty));
+      }
+      if (take > 0) add.run(collectionId, c.oracleId, take);
+    }
     return insertBox(db, collectionId, product);
   })();
   forgetOwned();

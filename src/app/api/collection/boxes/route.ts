@@ -10,5 +10,7 @@ export const POST = (req: Request) =>
   handle(async () => {
     const body = await readBody(req);
     if (typeof body.productId !== 'string' || !body.productId) throw new HttpError(400, 'productId is required.');
-    return json({ box: addBox(body.productId) } satisfies { box: BoxInfo }, 201);
+    const counted = body.counted;
+    if (counted !== undefined && (!Array.isArray(counted) || counted.some((x) => typeof x !== 'string'))) throw new HttpError(400, 'counted must be a list of oracle ids.');
+    return json({ box: addBox(body.productId, { counted: counted as string[] | undefined }) } satisfies { box: BoxInfo }, 201);
   });

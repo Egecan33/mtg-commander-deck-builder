@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { BoxDetailResponse, BoxInfo, BoxesResponse, CollectionAdjustResponse, CollectionResponse, CollectionsResponse } from '@/app/lib/api';
 import { storeProducts } from '@/ingest/products';
 import {
-  addBox, attachBox, boxCards, boxedQuantities, linkBox, listBoxes, openBoxAsDeck, removeBox, takeFromBox,
+  addBox, attachBox, boxCards, boxedQuantities, linkBox, listBoxes, openBoxAsDeck, previewBox, removeBox, takeFromBox,
 } from '@/server/boxes';
 import { adjustCollection, listCollections, ownedQuantities, replaceCollection, setActiveCollection, setCollectionCards } from '@/server/collection';
 import type { Db } from '@/server/db';
@@ -402,6 +402,86 @@ describe('boxes in a collection', () => {
     for (const c of boxCards(box.id)) takeFromBox(box.id, c.oracleId, c.qty);
     expect(listBoxes().find((b) => b.id === box.id)).toMatchObject({ sealed: 0, total: 9 });
     expect(listCollections().map((c) => [c.id, c.holders])).toEqual([['physical', 1], ['arena', 0]]);
+  });
+});
+
+describe('boxes: singles already owned', () => {
+  const print = (set: string, n: string, oracleId: string) => db.prepare('INSERT OR REPLACE INTO printings VALUES (?, ?, ?)').run(set, n, oracleId);
+  beforeEach(() => {
+    db.exec('DELETE FROM printings');
+    print('trc', '1', krenko); // only in the product's set (lower case vs TRC)
+    print('TRC', '2', solRing);
+    print('c21', '9', solRing); // Sol Ring is also printed elsewhere
+    print('trc', '3', forest);
+    print('lea', '9', forest);
+  });
+
+  it('previews the cards with free copies, and whether they are only in this set', () => {
+    adjustCollection(krenko, 1);
+    adjustCollection(solRing, 2);
+    adjustCollection(cultivate, 1); // no printings at all: never onlyHere
+    expect(previewBox(PRODUCT).cards).toEqual([
+      { oracleId: cultivate, name: 'Cultivate', boxQty: 1, free: 1, onlyHere: false },
+      { oracleId: krenko, name: 'Krenko, Mob Boss', boxQty: 1, free: 1, onlyHere: true },
+      { oracleId: solRing, name: 'Sol Ring', boxQty: 1, free: 2, onlyHere: false },
+    ]);
+  });
+
+  it('copies held by other boxes are not free', () => {
+    addBox(PRODUCT);
+    expect(previewBox(PRODUCT).cards).toEqual([]);
+    adjustCollection(solRing, 1);
+    expect(previewBox(PRODUCT).cards).toMatchObject([{ oracleId: solRing, free: 1 }]);
+  });
+
+  it('preview: 404 for an unknown product, 400 for an Arena collection', () => {
+    expect(status(() => previewBox('nope'))).toBe(404);
+    setActiveCollection('arena');
+    expect(status(() => previewBox(PRODUCT))).toBe(400);
+  });
+
+  it('counted cards use the copies already owned; the rest is added on top', () => {
+    adjustCollection(krenko, 1);
+    adjustCollection(solRing, 1);
+    adjustCollection(cultivate, 1);
+    const box = addBox(PRODUCT, { counted: [krenko, solRing, 'not-a-card', forest] });
+    expect(total(krenko)).toBe(1); // counted
+    expect(total(solRing)).toBe(1); // counted
+    expect(total(cultivate)).toBe(2); // not counted: added on top
+    expect(total(forest)).toBe(4); // counted but none owned: added as usual
+    expect(total(arcaneSignet)).toBe(1);
+    expect(box).toMatchObject({ sealed: 9, total: 9 });
+    expect(boxCards(box.id)).toHaveLength(6);
+    expect(sealedOf(box.id, krenko)).toBe(1);
+    expect(sealedOf(box.id, forest)).toBe(4);
+  });
+
+  it('counts only as many as are free and as the box holds', () => {
+    adjustCollection(forest, 2);
+    const box = addBox(PRODUCT, { counted: [forest] });
+    expect(total(forest)).toBe(4); // 2 owned count, 2 added
+    expect(sealedOf(box.id, forest)).toBe(4);
+    adjustCollection(solRing, 5);
+    addBox(PRODUCT, { counted: [solRing] });
+    expect(total(solRing)).toBe(6);
+  });
+
+  it('removing a box that counted owned copies takes them out with it', () => {
+    adjustCollection(krenko, 1);
+    adjustCollection(cultivate, 1);
+    const box = addBox(PRODUCT, { counted: [krenko] });
+    removeBox(box.id, 'sold');
+    expect(total(krenko)).toBe(0);
+    expect(total(cultivate)).toBe(1);
+    expect(total(forest)).toBe(0);
+  });
+
+  it('opening a box that counted owned copies keeps all of them', () => {
+    adjustCollection(krenko, 1);
+    const box = addBox(PRODUCT, { counted: [krenko] });
+    removeBox(box.id, 'opened');
+    expect(total(krenko)).toBe(1);
+    expect(total(forest)).toBe(4);
   });
 });
 
