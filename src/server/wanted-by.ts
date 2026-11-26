@@ -5,6 +5,7 @@ import type { AxisId, Bracket, CardFeatures, Format } from '@/engine/types';
 import { commanderIndex, commanderShell, toCommanderTile } from './commander-index';
 import { ownedSet } from './collection';
 import { engineContext } from './context';
+import { edhrecArrivals } from './edhrec';
 import { HttpError } from './http';
 import { getSettings } from './settings';
 import { cacheSlot } from './state';
@@ -21,6 +22,15 @@ export function themeFit(weights: Record<AxisId, number>, f: CardFeatures | unde
   return sum;
 }
 
+const ids = new WeakMap<object, number>();
+let lastId = 0;
+/** A short id for an override map; the same object keeps its id until updateSettings replaces it. */
+const overridesId = (o: object): number => {
+  let id = ids.get(o);
+  if (id === undefined) ids.set(o, (id = ++lastId));
+  return id;
+};
+
 const rankOf = (c: { edhrecRank: number | null }) => (typeof c.edhrecRank === 'number' && c.edhrecRank > 0 ? c.edhrecRank : Number.MAX_SAFE_INTEGER);
 
 /** The commanders whose decks want a card most. Cached per card, bracket, format and EDHREC setting. */
@@ -30,7 +40,9 @@ export function commandersWanting(oracleId: string, bracket: Bracket, format: Fo
   if (!card) throw new HttpError(404, 'Unknown card.');
   if (card.legality !== 'legal') return { oracleId, bracket, considered: 0, commanders: [], note: legalityViolation(card, db).message };
   const memo = cacheSlot('wanted-by', () => new Map<string, WantedByResponse>());
-  const key = `${oracleId}|${bracket}|${format}|${getSettings().edhrecEnabled}`;
+  // The scores read EDHREC data and the mana-value and extra-turn overrides: a new cache row or a changed override is a new answer.
+  const settings = getSettings();
+  const key = `${oracleId}|${bracket}|${format}|${settings.edhrecEnabled}|${edhrecArrivals()}|${overridesId(settings.mldOverrides)}|${overridesId(settings.extraTurnOverrides)}`;
   const hit = memo.get(key);
   if (hit) return hit;
 

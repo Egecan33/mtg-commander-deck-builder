@@ -82,7 +82,10 @@ function basePaths(commanders: Card[]): string[] {
 function readRow(path: string): Row | undefined {
   return getDb().prepare('SELECT fetched_at, etag, json FROM edhrec_cache WHERE key = ?').get(path) as Row | undefined;
 }
+/** Counts rows written to the cache, so a result that used EDHREC data can tell when more has arrived. */
+export const edhrecArrivals = (): number => cacheSlot('edhrec-arrivals', () => ({ n: 0 })).n;
 function writeRow(path: string, at: number, etag: string | null, page: Page | null): void {
+  cacheSlot('edhrec-arrivals', () => ({ n: 0 })).n++;
   getDb()
     .prepare(
       'INSERT INTO edhrec_cache(key, fetched_at, etag, json) VALUES (?, ?, ?, ?) ' +

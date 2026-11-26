@@ -45,6 +45,16 @@ describe('commanders that want a card', () => {
     expect(commandersWanting(id, 3)).toBe(commandersWanting(id, 3));
     expect(commandersWanting(id, 2)).not.toBe(commandersWanting(id, 3));
   });
+  it('is worked out again when an override changes', () => {
+    const id = card('Sol Ring').oracleId;
+    const before = commandersWanting(id, 3);
+    updateSettings({ mldOverrides: { [id]: true } });
+    try {
+      expect(commandersWanting(id, 3)).not.toBe(before);
+    } finally {
+      updateSettings({ mldOverrides: {} });
+    }
+  });
   it('fetches nothing with EDHREC on', () => {
     const f = vi.fn(() => Promise.reject(new Error('no')));
     vi.stubGlobal('fetch', f);
