@@ -1,8 +1,9 @@
 import { isLegalIn } from '../format';
+import { wildcardFor, wildcardsLeft, wildcardsNeeded } from '../wildcards';
 import { allowedIdentity, cardFitsDeck, commanderCards, companionViolation, copyLimit, hasType, isBasicLand } from '../rules';
 import { createScorer } from '../scoring';
 import { AXIS_MEMBER, isLandCard, resolveThemeWeights } from '../summary';
-import type { AxisId, BuildOptions, Card, CardDb, CardFeatures, Color, Deck, DeckEntry, EngineContext, Role } from '../types';
+import type { AxisId, BuildOptions, Card, CardDb, CardFeatures, Color, Deck, DeckEntry, EngineContext, Role, Wildcards } from '../types';
 import { kindOf, makePlan } from './plan';
 import type { Kind, Plan } from './plan';
 
@@ -219,6 +220,17 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
   const owned = opts.ownedOnly ? (opts.owned ?? new Set<string>()) : null;
   const maxPrice = typeof opts.maxPriceUsd === 'number' && Number.isFinite(opts.maxPriceUsd) ? opts.maxPriceUsd : null;
   const fitCache = new Map<string, boolean>();
+  // "Only what I can craft": the wildcards left per rarity once the deck's own unowned cards are
+  // paid for. A card that needs a rarity with none left is not allowed, and the candidate lists
+  // below keep at most that many unowned cards of each rarity, so no path through the pool can
+  // spend more than is left.
+  const have = opts.owned ?? new Set<string>();
+  const caps = opts.wildcards && !owned ? wildcardsLeft(opts.wildcards, wildcardsNeeded(deck, db, have)) : null;
+  const craftable = (card: Card): boolean => {
+    if (!caps) return true;
+    const r = wildcardFor(card, have);
+    return r === null || caps[r] > 0;
+  };
 
   // A companion's condition is checked card by card: the card alone in the deck, beside the
   // commanders. The companion itself may not be in the deck. (Umori and Yorion put no condition
@@ -241,6 +253,7 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
     }
     if (owned && !owned.has(card.oracleId)) return false;
     if (maxPrice !== null && !(typeof card.priceUsd === 'number' && card.priceUsd <= maxPrice)) return false;
+    if (!craftable(card)) return false;
     let ok = fitCache.get(card.oracleId);
     if (ok === undefined) fitCache.set(card.oracleId, (ok = isLegalIn(card, db) && fits(card)));
     return ok;
@@ -282,6 +295,22 @@ export function buildPool(deck: Deck, ctx: EngineContext, opts: BuildOptions): P
     (land ? lands : nonland).push(cand);
   }
   const byBase = (a: Candidate, b: Candidate) => b.base + b.jitter + b.adjust - (a.base + a.jitter + a.adjust) || (a.card.oracleId < b.card.oracleId ? -1 : 1);
+  if (caps) {
+    // The best unowned cards of each rarity, up to the wildcards left; the rest leave the pool.
+    const dropped = new Set<Candidate>();
+    const taken: Wildcards = { common: 0, uncommon: 0, rare: 0, mythic: 0 };
+    for (const c of [...nonland, ...lands].sort(byBase)) {
+      const r = wildcardFor(c.card, have);
+      if (r === null) continue;
+      if (taken[r] < caps[r]) taken[r]++;
+      else dropped.add(c);
+    }
+    for (const list of [nonland, lands]) {
+      const kept = list.filter((c) => !dropped.has(c));
+      list.length = 0;
+      list.push(...kept);
+    }
+  }
   nonland.sort(byBase);
   lands.sort(byBase);
 

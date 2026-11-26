@@ -121,6 +121,7 @@ function searched(opts: BuildOptions): string {
   const limits: string[] = [];
   if (opts.ownedOnly) limits.push('owned cards only');
   if (typeof opts.maxPriceUsd === 'number' && Number.isFinite(opts.maxPriceUsd)) limits.push(`up to $${opts.maxPriceUsd}`);
+  if (opts.wildcards && !opts.ownedOnly) limits.push('only what your wildcards can craft');
   return limits.length > 0 ? ` from the cards allowed (${limits.join(', ')})` : '';
 }
 
