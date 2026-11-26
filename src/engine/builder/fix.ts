@@ -4,7 +4,7 @@ import { isBasicLand, validateDeck } from '../rules';
 import { createScorer } from '../scoring';
 import { isLandCard } from '../summary';
 import { ROLE_LABEL } from '../targets';
-import type { AxisId, BuildOptions, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, SwapProposal, Violation } from '../types';
+import type { AxisId, BuildOptions, Deck, DeckRating, EngineContext, FixChange, FixResult, Role, SubScore, Violation } from '../types';
 import { fillRestReport } from './auto';
 import { improveDeck, replaceCardFrom } from './goals';
 import { applySwaps, comboPieces, cuttable, matches, shownRating, swapOne } from './improve';
@@ -128,15 +128,16 @@ interface Stage { deck: Deck; rating: DeckRating; changes: FixChange[]; why: str
 
 /**
  * Step 2 of `fixDeck`, on a deck the legality step is done with. The goals come from the rating's
- * fixes (all parts, or `part` alone). Proposals are applied in order: one the engine objects to is
- * skipped, and the run stops before one that lowers the rating. While every proposal so far has
- * been applied, the run's own check stands and no rating is taken: a directed run's `agrees`, or
- * the plain run's own `ratingBefore -> ratingAfter`.
+ * fixes (all parts, or `part` alone). Proposals are applied in order, skipping one the engine
+ * objects to, and the rating is tracked after each: the run may dip on the way (bracket fit stays 0
+ * until the last offender goes, while each Game Changer cut costs card quality). What is kept is the
+ * prefix that ends at the highest rating reached, when that is above the stage's starting rating;
+ * otherwise nothing. While every proposal so far has been applied, the plain run's own ratings are
+ * for this very deck and are used as they are; any other step is rated.
  *
  * With `part`, a step is taken only for the kind of card that part asks for (its fix filters) and
- * when the part does not fall; the part is judged over the whole run (bracket fit stays 0 until the
- * last offender goes), and the run is kept up to its last step that raised the part. A run that
- * never raises it is dropped.
+ * when the part does not fall, and the prefix kept is the one that ends at the part's highest value
+ * among the points rated at least the stage's start, when that is above the part's starting value.
  */
 function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, opts: BuildOptions, part: SubScore | null): Stage {
   const none = (why: string): Stage => ({ deck: start, rating: startRating, changes: [], why });
@@ -161,58 +162,55 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
     return !card || (!isBasicLand(card) && (d.commanders.includes(id) || d.main.some((e) => e.oracleId === id && qtyOf(e) >= 1)));
   };
   const value = (r: DeckRating): number => (part ? (r.subscores.find((s) => s.key === part.key)?.value ?? 0) : 0);
-  const name = (id: string): string => ctx.db.get(id)?.name ?? 'an unknown card';
+  const startShown = shownRating(startRating);
 
   let deck = start;
-  let known: DeckRating | null = startRating;
+  let current: DeckRating | null = startRating; // null while only the plain run's own number is known
   let synced = true;
   const made: FixChange[] = [];
-  // With a part: the run's best point so far (the part at its highest).
-  let best = { deck: start, count: 0, rating: startRating, value: value(startRating) };
+  /** The best point of the run so far: the prefix of `made` that ends there, and its rating. */
+  let best: { deck: Deck; count: number; shown: number; rating: DeckRating | null; value: number } = { deck: start, count: 0, shown: startShown, rating: startRating, value: value(startRating) };
   let objected = 0;
   let offKind = 0;
   let partFell = 0;
-  let stop: { p: SwapProposal; from: number; to: number } | null = null;
   for (const p of proposals) {
     if (p.agrees === false) { objected++; synced = false; continue; }
     if (!ofKind(p.in)) { offKind++; synced = false; continue; }
     if ((p.out !== '' && !removable(deck, p.out)) || holds(deck, p.in)) { synced = false; continue; }
     const next = applySwaps(deck, [p]);
-    if (synced && !part) {
-      // The plain run gives no verdict: its own ratings are for this very deck.
-      if (p.agrees === undefined && p.ratingAfter < p.ratingBefore) { stop = { p, from: p.ratingBefore, to: p.ratingAfter }; break; }
-      known = null;
+    let after: DeckRating | null = null;
+    let shown: number;
+    if (synced && !part && p.agrees === undefined) {
+      shown = p.ratingAfter; // the plain run rated this very deck
     } else {
-      const before: DeckRating = known ?? rateDeck(deck, ctx);
-      const after: DeckRating = rateDeck(next, ctx);
-      if (shownRating(after) < shownRating(before)) { stop = { p, from: shownRating(before), to: shownRating(after) }; known = before; break; }
-      if (part && value(after) < value(before)) { partFell++; synced = false; known = before; continue; }
-      known = after;
+      after = rateDeck(next, ctx);
+      shown = shownRating(after);
+      if (part) {
+        const before: DeckRating = current ?? rateDeck(deck, ctx);
+        if (value(after) < value(before)) { partFell++; synced = false; current = before; continue; }
+      }
     }
     deck = next;
+    current = after;
     made.push({ out: p.out, in: p.in, reason: p.reason });
-    if (part && known && value(known) > best.value) best = { deck, count: made.length, rating: known, value: value(known) };
+    if (part) {
+      if (after && shown >= startShown && value(after) > best.value) best = { deck, count: made.length, shown, rating: after, value: value(after) };
+    } else if (shown > best.shown) {
+      best = { deck, count: made.length, shown, rating: after, value: 0 };
+    }
   }
 
-  let rating = known ?? rateDeck(deck, ctx);
-  let kept = made;
-  if (part) {
-    deck = best.deck;
-    rating = best.rating;
-    kept = made.slice(0, best.count);
-  } else if (shownRating(rating) < shownRating(startRating)) {
-    deck = start;
-    rating = startRating;
-    kept = [];
-  }
-  if (kept.length > 0) return { deck, rating, changes: kept, why: '' };
+  if (best.count > 0) return { deck: best.deck, rating: best.rating ?? rateDeck(best.deck, ctx), changes: made.slice(0, best.count), why: '' };
 
   const because: string[] = [];
   if (objected > 0) because.push(`the engine objects to ${objected === 1 ? 'one' : objected} of them`);
   if (part && offKind > 0) because.push(`${offKind === 1 ? 'one brings in a card' : `${offKind} bring in cards`} of another kind than ${part.label} asks for`);
   if (part && partFell > 0) because.push(`${partFell === 1 ? 'one lowers' : `${partFell} lower`} ${part.label}`);
-  if (part && made.length > 0) because.push(`the swaps Fix deck could make leave ${part.label} where it was`);
-  if (stop) because.push(`${name(stop.p.out)} for ${name(stop.p.in)} would lower the rating from ${stop.from} to ${stop.to}, and Fix deck stops before a swap that lowers the rating`);
+  if (made.length > 0) {
+    because.push(part
+      ? `the swaps Fix deck could make do not raise ${part.label} while keeping the rating at ${startShown} or more`
+      : `the rating never rises above ${startShown} along the swaps Fix deck could make`);
+  }
   const tail = because.length > 0 ? `, but ${because.join('; ')}` : ', but none of them could be applied to the deck as it is';
   return none(`Improve proposed ${plural(proposals.length, 'swap')}${searched(opts)}${tail}`);
 }
@@ -229,12 +227,13 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
  *    every replacement of the call.
  * 2. Then a directed `improveDeck` run whose goals come from the rating's current fixes (all parts,
  *    or only the part `only` names): role filters are emphasised roles, axis filters emphasised theme
- *    axes, at most 15 swaps, the deck's own target bracket. Proposals are applied in order; one the
- *    engine objects to (`agrees === false`) is skipped, and the run stops before one that would lower
- *    the rating. With `only`, a swap must bring in the kind of card that part asks for and must not
- *    lower the part, and the run is kept up to its last step that raised the part (see `improveStage`).
- * 3. The improve step never ends below the rating the legality step left: if it would, only its own
- *    swaps are dropped.
+ *    axes, at most 15 swaps, the deck's own target bracket. Proposals are applied in order, one the
+ *    engine objects to (`agrees === false`) skipped, and the prefix of the run that ends at its
+ *    highest rating is kept when that is above the rating the legality step left (the run may dip
+ *    on the way). With `only`, a swap must bring in the kind of card that part asks for and must not
+ *    lower the part, and the prefix kept ends at the part's highest value (see `improveStage`).
+ * 3. So the improve step never ends below the rating the legality step left: if no point of the run
+ *    is above it, none of its swaps are kept.
  *
  * Commanders and locked cards are never cut, and the options (owned only, free copies, price) hold
  * for every card brought in. A deck whose commanders break a rule comes back unchanged with a note,

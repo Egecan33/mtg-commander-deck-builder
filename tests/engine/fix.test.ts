@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { autoBuild, fixDeck } from '@/engine/builder';
+import { autoBuild, fixDeck, improveDeck } from '@/engine/builder';
 import { shownRating } from '@/engine/builder/improve';
 import { rateDeck } from '@/engine/rating';
 import { isBasicLand, validateDeck } from '@/engine/rules';
 import { resolveThemeWeights } from '@/engine/summary';
+import { ROLE_LABEL } from '@/engine/targets';
 import { parseDecklist } from '@/engine/text';
 import type { Bracket, BuildOptions, Deck, EngineContext, FixChange, Role } from '@/engine/types';
 import { card, deckText, fixtureDb } from '../helpers/fixture-db';
@@ -63,6 +64,16 @@ function gameChangersFor(deck: Deck, n: number): string[] {
   return gcs;
 }
 const bracketFit = (d: Deck) => rateDeck(d, ctx).subscores.find((s) => s.key === 'bracket')!.value;
+/** The rating (one decimal) after each listed change, applied in order by hand. */
+function ratingsAlong(deck: Deck, changes: FixChange[]): number[] {
+  const out: number[] = [];
+  let d = deck;
+  for (const c of changes) {
+    d = replay(d, c);
+    out.push(shownRating(rateDeck(d, ctx)));
+  }
+  return out;
+}
 
 /** The deck with its first `n` single nonland, unlocked entries (that `pick` accepts) replaced by `ids`. */
 function swapInto(deck: Deck, ids: string[], pick: (id: string) => boolean = () => true): Deck {
@@ -249,21 +260,26 @@ describe('fixDeck', () => {
     expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
   });
 
-  it('every change is listed, and none the engine objects to lowers the rating', () => {
+  it('every change is listed, the run ends at its highest rating, and nothing the engine objects to is applied', () => {
     for (const deck of [precon, upgraded, fixtureDeck('cedh', 5)]) {
       const r = fixDeck(deck, ctx, opts());
       expect(r.changes.length).toBeGreaterThan(0);
-      let d = deck;
-      let prev = shownRating(rateDeck(d, ctx));
-      expect(prev).toBe(r.ratingBefore);
-      for (const c of r.changes) {
-        d = replay(d, c);
-        const now = shownRating(rateDeck(d, ctx));
-        expect(now, `${db.get(c.out)?.name} -> ${db.get(c.in)?.name}`).toBeGreaterThanOrEqual(prev);
-        prev = now;
-      }
-      expect(cards(d)).toEqual(cards(r.deck));
-      expect(prev).toBe(r.ratingAfter);
+      expect(shownRating(rateDeck(deck, ctx))).toBe(r.ratingBefore);
+      const path = ratingsAlong(deck, r.changes);
+      expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+      expect(path[path.length - 1]).toBe(r.ratingAfter);
+      expect(r.ratingAfter).toBe(Math.max(...path));
+      expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+      // The same directed run Fix deck asks for: what the engine objects to never comes in.
+      const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
+      const goals = {
+        maxSwaps: 15,
+        emphasizeRoles: [...new Set(fixes.map((f) => f.filter?.role).filter((x): x is Role => !!x && ROLE_LABEL[x] !== undefined))],
+        emphasizeAxes: [...new Set(fixes.map((f) => f.filter?.axis).filter((x): x is string => !!x))],
+      };
+      const objected = improveDeck(deck, ctx, opts({ goals })).filter((p) => p.agrees === false);
+      expect(objected.length).toBeGreaterThan(0);
+      for (const p of objected) expect(r.changes.some((c) => c.out === p.out && c.in === p.in), `${db.get(p.out)?.name} -> ${db.get(p.in)?.name}`).toBe(false);
     }
   });
 
@@ -342,25 +358,25 @@ describe('fixDeck', () => {
     expect(capped.note).not.toMatch(/cards allowed/);
   });
 
-  it('a run without goals stops before a swap that lowers the rating', () => {
+  it('an improve run may dip on the way: Fix deck keeps the prefix that ends at its highest rating', () => {
     // Talrand at Bracket 2 with three Game Changers: no fix names a role or a theme, so Improve runs
-    // its plain route, whose first repair dips the rating before the last cut lifts it.
+    // its plain route. Bracket fit stays 0 until the last Game Changer goes, so the first cut dips the
+    // rating (a Game Changer is a strong card) before the last one lifts it well above the start.
     const talrand = autoBuild({ id: null, name: 'Talrand', commanders: [card('Talrand, Sky Summoner').oracleId], companion: null, chosenColor: null, main: [], targetBracket: 2, themeWeights: null }, ctx, opts());
-    const deck = swapInto(talrand, gameChangersFor(talrand, 3), (id) => !db.get(id)!.gameChanger);
+    const gcs = gameChangersFor(talrand, 3);
+    const deck = swapInto(talrand, gcs, (id) => !db.get(id)!.gameChanger);
     const fixes = rateDeck(deck, ctx).subscores.flatMap((s) => s.fixes);
     expect(fixes.length).toBeGreaterThan(0);
     expect(fixes.some((f) => f.filter?.role || f.filter?.axis)).toBe(false);
     const r = fixDeck(deck, ctx, opts());
-    let d = deck;
-    let prev = r.ratingBefore;
-    for (const c of r.changes) {
-      d = replay(d, c);
-      const now = shownRating(rateDeck(d, ctx));
-      expect(now, `${db.get(c.out)?.name} -> ${db.get(c.in)?.name}`).toBeGreaterThanOrEqual(prev);
-      prev = now;
-    }
-    expect(r.ratingAfter).toBeGreaterThanOrEqual(r.ratingBefore);
-    if (r.changes.length === 0) expect(r.note).toMatch(/lower the rating/);
+    const path = ratingsAlong(deck, r.changes);
+    expect(path.some((x, i) => x < (i === 0 ? r.ratingBefore : path[i - 1]))).toBe(true); // it dipped
+    expect(r.ratingAfter).toBe(path[path.length - 1]);
+    expect(r.ratingAfter).toBe(Math.max(...path));
+    expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+    for (const id of gcs) expect(qty(r.deck, id), db.get(id)?.name).toBe(0);
+    expect(bracketFit(r.deck)).toBeGreaterThan(bracketFit(deck));
+    expect(r.note).toBeNull();
   });
 
   it('an unknown part of the rating changes nothing', () => {
