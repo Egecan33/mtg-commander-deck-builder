@@ -1,3 +1,4 @@
+import { analyzeBracket } from '../brackets';
 import { ILLEGAL_CAP, RATING_WEIGHTS, rateDeck, ratingCapped } from '../rating';
 import type { RatingKey } from '../rating';
 import { isBasicLand, validateDeck } from '../rules';
@@ -225,15 +226,19 @@ function improveStage(start: Deck, startRating: DeckRating, ctx: EngineContext, 
  *    cards, `only` or not, and it stands even when it costs rating points: a deck that breaks a rule
  *    is capped at 40 and cannot be played (`note` then says what it cost). One card pool serves
  *    every replacement of the call.
- * 2. Then a directed `improveDeck` run whose goals come from the rating's current fixes (all parts,
+ * 2. A deck that breaks its own target bracket's rules (the bracket report's violations of the
+ *    target, such as Game Changers at Bracket 2) is brought inside it next, by the same routine as
+ *    `only = 'bracket'` (judged over the run, best prefix). Only for a full fix: with `only`, the
+ *    part asked for is the whole of step 3.
+ * 3. Then a directed `improveDeck` run whose goals come from the rating's current fixes (all parts,
  *    or only the part `only` names): role filters are emphasised roles, axis filters emphasised theme
  *    axes, at most 15 swaps, the deck's own target bracket. Proposals are applied in order, one the
  *    engine objects to (`agrees === false`) skipped, and the prefix of the run that ends at its
- *    highest rating is kept when that is above the rating the legality step left (the run may dip
+ *    highest rating is kept when that is above the rating the steps before it left (the run may dip
  *    on the way). With `only`, a swap must bring in the kind of card that part asks for and must not
  *    lower the part, and the prefix kept ends at the part's highest value (see `improveStage`).
- * 3. So the improve step never ends below the rating the legality step left: if no point of the run
- *    is above it, none of its swaps are kept.
+ *    So steps 2 and 3 never end below the rating they start from: if no point of a run is above
+ *    it, none of that run's swaps are kept.
  *
  * Commanders and locked cards are never cut, and the options (owned only, free copies, price) hold
  * for every card brought in. A deck whose commanders break a rule comes back unchanged with a note,
@@ -266,9 +271,21 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
     }
   }
   const legalChanges = changes.length;
-  const mid = legalChanges > 0 ? rateDeck(current, ctx) : start;
+  let mid = legalChanges > 0 ? rateDeck(current, ctx) : start;
 
-  // 2. The rating's own fixes, as the goals of a directed improve.
+  // 2. Inside the deck's own bracket next: the Bracket fit routine `only='bracket'` runs, judged
+  // over its run (bracket fit stays 0 until the last offender goes).
+  const outsideBracket = (d: Deck): boolean => analyzeBracket(d, ctx).violationsOfTarget.length > 0;
+  let bracketStage: Stage | null = null;
+  if (!only && !ratingCapped(current, mid.violations) && outsideBracket(current)) {
+    bracketStage = improveStage(current, mid, ctx, opts, mid.subscores.find((s) => s.key === 'bracket') ?? null);
+    current = bracketStage.deck;
+    changes.push(...bracketStage.changes);
+    mid = bracketStage.rating;
+  }
+  const beforeImprove = changes.length;
+
+  // 3. The rating's own fixes, as the goals of a directed improve.
   const part = only ? (mid.subscores.find((s) => s.key === only) ?? null) : null;
   const stage = improveStage(current, mid, ctx, opts, part);
   current = stage.deck;
@@ -285,9 +302,15 @@ export function fixDeck(deck: Deck, ctx: EngineContext, opts: BuildOptions, only
   if (rating.violations.length > 0) {
     const lockedBlock = rating.violations.some((v) => v.oracleIds.some((id) => current.main.some((e) => e.oracleId === id && e.locked)));
     notes.push(`Still not legal: ${rating.violations.map((v) => v.message).join(' ')}${lockedBlock ? ' Locked cards are never cut: unlock them to let Fix deck replace them.' : ''}`);
-  } else if (stage.changes.length === 0 && (legalChanges === 0 || part)) {
-    const said = part && part.fixes.length > 0 ? ` The rating says about ${part.label}: ${part.fixes.map((f) => f.text).join(' ')}` : '';
-    notes.push(`Nothing ${legalChanges > 0 ? 'more ' : ''}to fix${part ? ` in ${part.label}` : ''}: ${stage.why}.${said}`);
+  } else {
+    if (bracketStage && outsideBracket(current)) {
+      const still = analyzeBracket(current, ctx).violationsOfTarget.map((v) => v.message).join(' ');
+      notes.push(`Still outside Bracket ${deck.targetBracket}: ${still}${bracketStage.changes.length === 0 ? ` (${bracketStage.why}.)` : ''}`);
+    }
+    if (stage.changes.length === 0 && (beforeImprove === 0 || part)) {
+      const said = part && part.fixes.length > 0 ? ` The rating says about ${part.label}: ${part.fixes.map((f) => f.text).join(' ')}` : '';
+      notes.push(`Nothing ${beforeImprove > 0 ? 'more ' : ''}to fix${part ? ` in ${part.label}` : ''}: ${stage.why}.${said}`);
+    }
   }
   return { deck: current, changes, ratingBefore, ratingAfter, note: notes.length > 0 ? notes.join(' ') : null };
 }

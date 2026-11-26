@@ -333,6 +333,23 @@ describe('fixDeck', () => {
     }
   });
 
+  it('a full Fix deck brings the deck inside its bracket first, then improves it', () => {
+    // The upgraded list at Bracket 2 holds two Game Changers of its own; three more make five.
+    const deck = swapInto({ ...upgraded, targetBracket: 2 }, gameChangersFor(upgraded, 3), (id) => !db.get(id)!.gameChanger);
+    const gcs = deck.main.filter((e) => db.get(e.oracleId)!.gameChanger).map((e) => e.oracleId);
+    expect(gcs.length).toBe(5);
+    expect(bracketFit(deck)).toBe(0);
+    const alone = fixDeck(deck, ctx, opts(), 'bracket');
+    const r = fixDeck(deck, ctx, opts());
+    for (const id of gcs) expect(qty(r.deck, id), db.get(id)?.name).toBe(0);
+    expect(bracketFit(r.deck)).toBeGreaterThan(0);
+    expect(r.ratingAfter).toBeGreaterThanOrEqual(alone.ratingAfter);
+    expect(r.ratingAfter).toBeGreaterThan(r.ratingBefore);
+    expect(validateDeck(r.deck, db)).toEqual([]);
+    expect(cards(r.changes.reduce(replay, deck))).toEqual(cards(r.deck));
+    expect(r.note).toBeNull();
+  });
+
   it("only='synergy' adds on-theme cards to a deck short of them, and says why it cannot when the rating caps the theme", () => {
     // Lathril's elves deck with 30 of its on-theme cards swapped for off-theme cards that fill no role.
     const weights = resolveThemeWeights(upgraded, ctx);
