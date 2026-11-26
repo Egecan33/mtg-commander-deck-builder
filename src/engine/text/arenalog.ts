@@ -27,8 +27,11 @@ export interface ArenaLogData {
    * Arena leaves out a rarity the player has none of); null when the log has none.
    */
   wildcards: Wildcards | null;
-  /** Full inventories read so far (a reader fed several logs can tell which one held the last). */
-  inventories: number;
+  /**
+   * When Arena wrote that inventory (ms since the epoch, local time), from the
+   * `[UnityCrossThreadLogger]M/D/YYYY h:mm:ss AM` line before it; null when there is none it can read.
+   */
+  wildcardsAt: number | null;
 }
 
 export interface ArenaLogReader {
@@ -73,10 +76,28 @@ function wildcardsOf(inventory: unknown): Wildcards | null {
   return out;
 }
 
+/** Arena's logger header in the US form it writes here: "[UnityCrossThreadLogger]11/25/2026 9:22:02 PM". */
+const LOGGER_TIME = /^\[UnityCrossThreadLogger\](\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)\s*$/;
+
+/**
+ * The local time of a logger header, or null for anything else. Other locales write other forms
+ * ("25.11.2026 21:22:02", day and month either way round); those are not guessed at.
+ */
+function loggerTime(text: string): number | null {
+  const m = LOGGER_TIME.exec(text);
+  if (!m) return null;
+  const [month, day, year, hour12, minute, second] = m.slice(1, 7).map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour12 < 1 || hour12 > 12 || minute > 59 || second > 59) return null;
+  const hour = (hour12 % 12) + (m[7] === 'PM' ? 12 : 0);
+  return new Date(year, month - 1, day, hour, minute, second).getTime();
+}
+
 export function createArenaLogReader(): ArenaLogReader {
   let detailedLogs: boolean | null = null;
   let wildcards: Wildcards | null = null;
-  let inventories = 0;
+  let wildcardsAt: number | null = null;
+  // The time of the last logger header: the time of the messages that follow it.
+  let headerAt: number | null = null;
   const cards = new Map<number, number>();
   const deckSeen = new Set<string>();
   const poolSeen = new Set<string>();
@@ -112,7 +133,7 @@ export function createArenaLogReader(): ArenaLogReader {
     const inventory = wildcardsOf(obj.InventoryInfo);
     if (inventory) {
       wildcards = inventory;
-      inventories++;
+      wildcardsAt = headerAt;
     }
 
     // A deck with its summary beside it: skip the deck when the summary says it is ready-made.
@@ -171,6 +192,8 @@ export function createArenaLogReader(): ArenaLogReader {
         const m = /^DETAILED LOGS: (ENABLED|DISABLED)/.exec(text);
         if (m) detailedLogs = m[1] === 'ENABLED';
       }
+      // A logger header dates the lines after it; one whose time cannot be read leaves them undated.
+      if (text.startsWith('[UnityCrossThreadLogger]')) headerAt = loggerTime(text);
       const at = text.indexOf('{');
       if (at < 0) return;
       // Cheap filter: only lines that can hold a deck, a pool or the inventory are worth parsing.
@@ -182,7 +205,7 @@ export function createArenaLogReader(): ArenaLogReader {
       }
     },
     result: () => ({
-      detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size, wildcards: wildcards ? { ...wildcards } : null, inventories,
+      detailedLogs, cards: new Map(cards), decks: deckSeen.size, pools: poolSeen.size, wildcards: wildcards ? { ...wildcards } : null, wildcardsAt,
     }),
   };
 }

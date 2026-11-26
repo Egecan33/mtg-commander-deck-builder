@@ -113,18 +113,14 @@ const stampOf = (found: Found): string =>
     return [f, s.size, s.mtimeMs];
   })]);
 
-/** The logs read, plus when the log that held the last inventory was written (ms; null without one). */
-async function readLogs(files: string[]): Promise<ArenaLogData & { wildcardsAt: number | null }> {
+async function readLogs(files: string[]): Promise<ArenaLogData> {
   const reader = createArenaLogReader();
-  let wildcardsAt: number | null = null;
-  // Oldest first, so the newest log has the last word on the detailed-logging switch.
+  // Oldest first, so the newest log has the last word on the detailed-logging switch (and the inventory).
   for (const file of [...files].reverse()) {
-    const before = reader.result().inventories;
     const lines = createInterface({ input: createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
     for await (const line of lines) reader.line(line);
-    if (reader.result().inventories > before) wildcardsAt = statSync(file).mtimeMs;
   }
-  return { ...reader.result(), wildcardsAt };
+  return reader.result();
 }
 
 /** Arena card ids -> this app's cards, through Arena's own card database (name first, then set and number). */
@@ -282,12 +278,15 @@ export async function syncArenaCollection(options: { auto?: boolean } = {}): Pro
 
     const log = await readLogs(found.logs);
     m.detailedLogs = log.detailedLogs;
-    // The wildcards are in the log whether or not it holds decks: kept from every sync that finds them,
-    // unless they were typed in after that log was written (an older Player-prev.log never undoes them).
+    // The wildcards are in the log whether or not it holds decks: kept from every sync that finds them.
+    // Counts typed in by hand give way only to an inventory line dated after they were typed (a live
+    // Player.log is rewritten all the time, so the file's own time says nothing about the line); a line
+    // with no readable time never replaces them here. "Read from Arena" always reads.
     if (log.wildcards) {
       const stored = getWildcards(ARENA_COLLECTION);
-      const typedLater = stored.source === 'hand' && stored.readAt !== null && Date.parse(stored.readAt) >= (log.wildcardsAt ?? 0);
-      if (!typedLater) setWildcards(log.wildcards, 'log', at, ARENA_COLLECTION);
+      const typed = stored.source === 'hand' ? Date.parse(stored.readAt ?? '') : Number.NaN;
+      const keepTyped = stored.source === 'hand' && (log.wildcardsAt === null || !Number.isFinite(typed) || log.wildcardsAt <= typed);
+      if (!keepTyped) setWildcards(log.wildcards, 'log', at, ARENA_COLLECTION);
     }
     if (log.cards.size === 0) {
       if (log.detailedLogs === false) {

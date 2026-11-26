@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -101,21 +101,25 @@ describe('wildcards of the MTG Arena collection', () => {
     expect(none.wildcards).toEqual({ common: 12, uncommon: 12, rare: 1, mythic: 0 });
   });
 
-  it('keep what was typed in when a sync reads an older log, and take a newer log', async () => {
+  it('keep what was typed in unless the inventory line itself is newer, however recently the log was written', async () => {
     mkdirSync(logDir(), { recursive: true });
-    const prev = path.join(logDir(), 'Player-prev.log');
     const log = path.join(logDir(), 'Player.log');
-    writeFileSync(prev, `DETAILED LOGS: ENABLED\n${INVENTORY.replace('"WildCardRares": 1', '"WildCardRares": 7')}\n`);
-    writeFileSync(log, 'DETAILED LOGS: ENABLED\nno inventory in the newest log\n');
-    const hour = 3600;
-    const now = Date.now() / 1000;
-    utimesSync(prev, now - 2 * hour, now - 2 * hour);
-    utimesSync(log, now - hour, now - hour);
-    setWildcards({ common: 1, uncommon: 2, rare: 3, mythic: 4 }, 'hand');
-    // The inventory is in Player-prev.log, written before the counts were typed in.
-    expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'hand', wildcards: { common: 1, uncommon: 2, rare: 3, mythic: 4 } });
-    // A log written after them wins.
-    utimesSync(prev, now + 60, now + 60);
+    const inventory = INVENTORY.replace('"WildCardRares": 1', '"WildCardRares": 7');
+    // A live Player.log: the file was just written (mtime now), but its inventory line is from 9:22 PM.
+    const write = (header: string | null) =>
+      writeFileSync(log, ['DETAILED LOGS: ENABLED', ...(header ? [`[UnityCrossThreadLogger]${header}`, '<== StartHook(abc)'] : []), inventory, '[UnityCrossThreadLogger]11/25/2026 11:59:59 PM', 'later lines'].join('\n'));
+    const typed = { common: 1, uncommon: 2, rare: 3, mythic: 4 };
+    setWildcards(typed, 'hand', new Date(2026, 10, 25, 22, 0, 0).toISOString());
+    write('11/25/2026 9:22:02 PM');
+    expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'hand', wildcards: typed });
+    // An inventory line with no time it can read never replaces typed counts on a sync.
+    write(null);
+    expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'hand', wildcards: typed });
+    // "Read from Arena" always reads.
+    expect((await ok<WildcardsReadResponse>(send(wildcardsRoute.POST, 'POST', '/api/arena/wildcards'))).wildcards.rare).toBe(7);
+    // An inventory line dated after the counts were typed wins.
+    setWildcards(typed, 'hand', new Date(2026, 10, 25, 22, 0, 0).toISOString());
+    write('11/25/2026 10:30:00 PM');
     expect((await syncArenaCollection()).wildcards).toMatchObject({ source: 'log', wildcards: { rare: 7 } });
   });
 

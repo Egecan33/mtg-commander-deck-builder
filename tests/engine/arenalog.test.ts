@@ -67,6 +67,17 @@ describe('parseArenaLog', () => {
       expect(parseArenaLog([noMythic, full].join('\n')).wildcards?.mythic).toBe(3);
     });
 
+    it('dates the inventory by the logger line Arena writes before it (local time), null when there is none it can read', () => {
+      const stamped = (stamp: string) => [`[UnityCrossThreadLogger]${stamp}`, '<== StartHook(abc)', full].join('\n');
+      expect(parseArenaLog(stamped('11/25/2026 9:22:02 PM')).wildcardsAt).toBe(new Date(2026, 10, 25, 21, 22, 2).getTime());
+      expect(parseArenaLog(stamped('11/25/2026 12:05:09 AM')).wildcardsAt).toBe(new Date(2026, 10, 25, 0, 5, 9).getTime());
+      // The last inventory's own header, not a later one.
+      const later = [stamped('11/25/2026 9:22:02 PM'), '[UnityCrossThreadLogger]11/25/2026 11:00:00 PM', 'other'].join('\n');
+      expect(parseArenaLog(later).wildcardsAt).toBe(new Date(2026, 10, 25, 21, 22, 2).getTime());
+      expect(parseArenaLog(full).wildcardsAt).toBeNull();
+      expect(parseArenaLog(stamped('25.11.2026 21:22:02')).wildcardsAt).toBeNull(); // a format it cannot be sure of
+    });
+
     it('ignores an InventoryInfo that is not a full inventory, and is null without one', () => {
       expect(parseArenaLog([full, '{"InventoryInfo":{"SeqId":40,"Changes":[{"Source":"X"}]}}'].join('\n')).wildcards?.mythic).toBe(3);
       expect(parseArenaLog('{"InventoryInfo":{"SeqId":40}}').wildcards).toBeNull();
